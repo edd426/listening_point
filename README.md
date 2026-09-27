@@ -79,3 +79,7 @@ STATUS.md                                 current state, lessons, and next ideas
 
 New styles (a painterly pass, a Blender scene) belong in `renderers/` next to `procedural/`
 and should write the same `HH.jpg` frames, so packing and installing stay shared.
+
+## License
+
+MIT; see [LICENSE](LICENSE). This covers the code and the rendered images.
