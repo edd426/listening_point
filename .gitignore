@@ -1,0 +1,8 @@
+venv/
+out/
+__pycache__/
+*.pyc
+.DS_Store
+*.heic
+*.png
+backups/
