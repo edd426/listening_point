@@ -7,8 +7,8 @@
 // same day, which shows on the lock screen, in Mission Control, while switching Spaces, and
 // whenever this isn't running. Each hour this also deletes the agent's bitmaps of older versions of
 // our wallpaper files (it needs Full Disk Access for that; the result is in ROOT/.cache-clean).
-// Without access macOS shows a "data access blocked" notice, so after a refusal it waits a week
-// before trying again (delete ROOT/.cache-clean and restart it after granting access).
+// Without access macOS shows a "data access blocked" notice, so after a refusal it stops trying;
+// after granting access, delete ROOT/.cache-clean and restart it (launchctl kickstart -k ...live).
 //
 // usage: live_wallpaper [ROOT]   frames are ROOT/days/YYYY-MM-DD/HHMM.jpg (local clock time);
 //        when today's frame is missing it uses the same minute from the newest earlier day,
@@ -38,9 +38,7 @@ final class Live {
     func cleanCache() {
         lastClean = Date()
         let note = root.appendingPathComponent(".cache-clean")
-        if let s = try? String(contentsOf: note, encoding: .utf8), s.hasPrefix("denied"),
-           let when = (try? FileManager.default.attributesOfItem(atPath: note.path))?[.modificationDate] as? Date,
-           Date().timeIntervalSince(when) < 7 * 86400 {
+        if let s = try? String(contentsOf: note, encoding: .utf8), s.hasPrefix("denied") {
             return
         }
         let ours = ["The Listening Point.heic", "The Listening Point.jpg"].map { root.appendingPathComponent($0).path }

@@ -80,8 +80,10 @@ The installed copy runs from Application Support because launchd jobs may not re
 Re-run `tools/install.sh` after changing the renderer. The log is `~/Library/Logs/listening-point.log`.
 
 Optional: System Settings > Privacy & Security > Full Disk Access > add
-`~/Library/Application Support/The Listening Point/live_wallpaper`, so the lock-screen wallpaper
-follows each day's weather (see above).
+`~/Library/Application Support/The Listening Point/live_wallpaper`, then
+`rm ~/Pictures/Wallpapers/The\ Listening\ Point/.cache-clean && launchctl kickstart -k gui/$(id -u)/com.edd426.listening-point.live`,
+so the lock-screen wallpaper follows each day's weather (see above). Without it, macOS shows one
+"data access blocked" notice when the helper first tries, and the helper doesn't try again.
 
 ## Build
 
