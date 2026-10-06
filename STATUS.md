@@ -1,12 +1,12 @@
 # Status
 
-_Last updated 2026-10-05._
+_Last updated 2026-10-06._
 
 ## Current state
 
-- **v2 (per-minute, real sky, weather, seasons) is built and being installed on 2026-10-05.**
-  The renderer lives in `renderers/procedural/` (about 5,200 lines, split by subject). Nothing is
-  committed yet; v1.0 is the last commit and the `v1.0` release.
+- **v2.0 (per-minute, real sky, weather, seasons) is installed and released** (tag `v2.0`; the
+  GitHub release carries the hourly HEIC). The renderer lives in `renderers/procedural/` (about
+  5,200 lines, split by subject).
 - Installed pieces (`tools/install.sh`):
   - `~/Library/Application Support/The Listening Point/`: a copy of the renderer and tools, its own venv, and the
     `live_wallpaper` helper binary.
@@ -113,6 +113,4 @@ self-contained. Tests (offline): `./venv/bin/python tests/test_astro.py` and `te
 
 - **Painterly pass:** a post-process over the frames (Kuwahara or brush strokes, paper texture).
 - **Blender renderer:** rebuild the scene in 3D, reusing `astro.py`, `weather.py` and `day.py`.
-- **Wallpaper-cache janitor:** delete stale BMPs for old versions of our files, which would let the
-  system wallpaper be an hourly HEIC again; it needs access to another app's container.
 - **Location from the system:** follow the Mac when it travels (sky and weather) instead of Budapest.
