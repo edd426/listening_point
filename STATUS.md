@@ -16,7 +16,7 @@ _Last updated 2026-10-05._
     log in `~/Library/Logs/listening-point.log`; weather cache in `~/Library/Caches/listening-point`.
   - System wallpaper: `~/Pictures/Wallpapers/The Listening Point/The Listening Point.heic`, today's
     24 on-the-hour frames, rebuilt daily if the helper has Full Disk Access (`.cache-clean` says
-    `ok`), else monthly. FDA was not granted as of 2026-10-06.
+    `ok`), else monthly. Full Disk Access was granted to the helper on 2026-10-06, so it's daily.
 - Verified 2026-10-06 05:24 after a night on battery: the render job kept three hours ahead, the
   helper showed the right minute (16 MB, no CPU, no log errors), and the system wallpaper showed
   today's 05:00 frame. Disk: about 1 GB a day of frames (3 days kept), 135 MB in Application Support.
