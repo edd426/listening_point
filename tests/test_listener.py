@@ -516,6 +516,11 @@ class ConfigTest(ListenerTestCase):
         self.assertEqual(r["result"], "refused")
         self.assertEqual(self.gh.requests, [])
 
+    def test_example_config_is_valid_and_names_no_one(self):
+        with open(os.path.join(ROOT, "tools", "listener.example.json"), "rb") as f:
+            cfg = listener.parse_config(f.read())
+        self.assertEqual([r["label"] for r in cfg["recipients"]], ["World A", "World B"])
+
     def test_status_lists_recipients(self):
         code, r = self.cli("status")
         self.assertEqual(r["status"]["recipients"], CONFIG["recipients"])

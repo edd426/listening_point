@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-10-06._
+_Last updated 2026-10-31._
 
 ## Current state
 
@@ -17,6 +17,12 @@ _Last updated 2026-10-06._
   - System wallpaper: `~/Pictures/Wallpapers/The Listening Point/The Listening Point.heic`, today's
     24 on-the-hour frames, rebuilt daily if the helper has Full Disk Access (`.cache-clean` says
     `ok`), else monthly. Full Disk Access was granted to the helper on 2026-10-06, so it's daily.
+- **Owner controls (branch `shore/controls`, 2026-10-31; not installed yet).** A menu-bar item on
+  the helper (Light the lamp, Leave a note…) backed by `tools/listener.py`, with an outbox that
+  `nightly.py` drains first on every run. Spec and setup: `docs/LISTENER.md`. Before it does
+  anything the owner must make the fine-grained key, store it in the Keychain and write the
+  untracked `listener.json` (steps in that doc), then run `tools/install.sh`. The renderer does not
+  read `listener/lamp.json` yet; the boat's window glow is a later phase.
 - Verified 2026-10-06 05:24 after a night on battery: the render job kept three hours ahead, the
   helper showed the right minute (16 MB, no CPU, no log errors), and the system wallpaper showed
   today's 05:00 frame. Disk: about 1 GB a day of frames (3 days kept), 135 MB in Application Support.
@@ -60,7 +66,8 @@ _Last updated 2026-10-06._
 `renderers/procedural/` holds mixins on one `Frame`: `sky`, `sea`, `land`, `tree`, `tower`, `props`,
 `life`, `distant`, `weatherfx`, `mystery`. `day.py` builds one date's per-minute astronomy, weather,
 season (`season.py`), schedule (`events.py`) and mysteries. `astro.py` and `weather.py` are
-self-contained. Tests (offline): `./venv/bin/python tests/test_astro.py` and `tests/test_weather.py`.
+self-contained. Tests (offline): `./venv/bin/python tests/test_astro.py` and `tests/test_weather.py`;
+the owner controls: `/usr/bin/python3 -m unittest tests.test_listener` (mock API on 127.0.0.1).
 
 - `astro.py` matches Skyfield/DE421 to 0.01 deg or better (sun, topocentric moon, VSOP87-truncated
   planets, precessed stars) and sun events to 1 s; it assumes UT1 = UTC and a fixed delta-T. The

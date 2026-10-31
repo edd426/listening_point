@@ -1,0 +1,7 @@
+{
+  "_about": "Copy to ~/Library/Application Support/The Listening Point/listener.json and replace the placeholders. Never commit the real file. See docs/LISTENER.md.",
+  "recipients": [
+    {"key": "world-a", "label": "World A"},
+    {"key": "world-b", "label": "World B"}
+  ]
+}
