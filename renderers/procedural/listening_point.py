@@ -7,11 +7,17 @@ are over Budapest at that minute, the weather follows the forecast, and the seas
 calendar; the clock on the tower says the time plainly.
 
 usage: listening_point.py OUT_DIR [--date 2026-10-06] [--scale 0.75] [--minutes 0-1439 | --hours 0,6 | --times 06:30,21:15]
-                          [--every N] [--jobs 3] [--step 10] [--weather auto|fair|synthetic|offline] [--sheet]
+                          [--every N] [--jobs 3] [--step 10] [--weather auto|fair|synthetic|offline|clear|fog] [--sheet]
+                          [--shore DIR] [--lamp FILE] [--reference]
 
 Writes HHMM.jpg (local clock time) for each requested minute at 3840x2400 * scale.
 The slow-changing near scenery (grass, tree, pier, bench, lamp) is rendered every --step minutes
 and cross-faded; everything that moves is rendered fresh each minute.
+
+--shore DIR draws the objects of a local shore cache (shorekit's layout: ledger.json, objects/,
+reference/<id>/); --lamp FILE reads the listener's lamp state. --reference holds the scene still for
+the shore kit's reference frames (see tools/shore_reference.py): no creatures, no rare events, no
+grain, the tide at high water, and the same clear weather all day unless --weather fog.
 """
 import argparse
 import datetime as dt
@@ -34,11 +40,12 @@ from sky import SkyMixin
 from tower import TowerMixin
 from tree import TreeMixin
 from mystery import MysteryMixin
+from shore import ShoreMixin
 from weatherfx import WeatherFxMixin
 
 
 class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, TowerMixin, TreeMixin, PropsMixin, LifeMixin,
-            WeatherFxMixin, MysteryMixin):
+            WeatherFxMixin, MysteryMixin, ShoreMixin):
     def background(self):
         """Everything behind the near scenery, rendered every minute."""
         self.sky()
@@ -76,23 +83,27 @@ class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, TowerMixin, 
         self.c = np.zeros_like(base)
         self.a = np.zeros(base.shape[:2], np.float32)
         self.tower()
-        self.door_light()
-        self.pier_gulls()
-        self.footprints()
-        self.bottle()
-        self.book()
-        self.sheep()
-        self.critters()
-        self.cat()
-        self.heron()
-        self.owl()
+        self.shore()
+        if not self.reference:      # creatures and rare events, in front of the shore's objects
+            self.door_light()
+            self.pier_gulls()
+            self.footprints()
+            self.bottle()
+            self.book()
+            self.sheep()
+            self.critters()
+            self.cat()
+            self.heron()
+            self.owl()
         C, A = self.fog_near(self.c, self.a), self.a
         self.c, self.a = base * (1 - A[..., None]) + C, None
         if getattr(self, "backlit", None):
             x, y, R, k = self.backlit
             self.glow(x, y, R * 1.3, (255, 240, 210), 0.5 * k, tail=0.5)
         self.night_lights()
-        self.falling_leaves()
+        self.listener_glow()
+        if not self.reference:
+            self.falling_leaves()
         self.precipitation()
 
     def grade(self):
@@ -100,15 +111,9 @@ class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, TowerMixin, 
         vig, grain = grade_maps(W, H)
         c = self.c
         c *= vig[..., None]
-        # day for night: lift the shadows so the dark scene still reads, and cool it a little
-        if self.night > 0:
-            np.maximum(c, 0, out=c)
-            c /= 255
-            np.power(c, 1 / (1 + 0.28 * self.night), out=c)
-            c *= 255 * (1 - self.night * np.array([0.06, 0.02, -0.04], np.float32))
-        hi = c > 200      # roll the highlights off softly
-        c[hi] = 200 + 55 * np.tanh((c[hi] - 200) / 55)
-        c += np.roll(grain, (int(self.rng.integers(H)), int(self.rng.integers(W))), (0, 1))[..., None]
+        tone(c, self.night)
+        if not self.reference:
+            c += np.roll(grain, (int(self.rng.integers(H)), int(self.rng.integers(W))), (0, 1))[..., None]
         c += 0.5
         np.clip(c, 0, 255, out=c)
         return c.astype(np.uint8)
@@ -127,6 +132,18 @@ class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, TowerMixin, 
         self.light_shafts(A)
         self.front()
         return Image.fromarray(self.grade())
+
+
+def tone(c, night):
+    """The tone curve of grade(), in place on float32 colour c: between the vignette and the grain."""
+    # day for night: lift the shadows so the dark scene still reads, and cool it a little
+    if night > 0:
+        np.maximum(c, 0, out=c)
+        c /= 255
+        np.power(c, 1 / (1 + 0.28 * night), out=c)
+        c *= 255 * (1 - night * np.array([0.06, 0.02, -0.04], np.float32))
+    hi = c > 200      # roll the highlights off softly
+    c[hi] = 200 + 55 * np.tanh((c[hi] - 200) / 55)
 
 
 @functools.lru_cache(None)
@@ -175,24 +192,30 @@ def keyframe(m):
     return keys[m]
 
 
+def frame_image(m):
+    """The finished frame for minute m (a PIL image), from this worker's day, scale and keyframe step."""
+    step = W_["step"]
+    k0 = (m // step) * step
+    f = (m - k0) / step
+    C0, A0, S0 = keyframe(k0)
+    f32 = lambda a: a.astype(np.float32)
+    if f > 0:
+        C1, A1, S1 = keyframe(k0 + step)
+        S = None if S0 is None and S1 is None else \
+            f32(C0 if S0 is None else S0) * (1 - f) + f32(C1 if S1 is None else S1) * f
+        fg = (f32(C0) * (1 - f) + f32(C1) * f, f32(A0) * (1 - f) + f32(A1) * f, S)
+    else:
+        fg = (f32(C0), f32(A0), None if S0 is None else f32(S0))
+    return Frame(W_["day"], m, W_["scale"]).render(fg)
+
+
 def render_chunk(minutes):
-    step, out = W_["step"], W_["out"]
+    out = W_["out"]
     done = []
     for m in minutes:
-        k0 = (m // step) * step
-        f = (m - k0) / step
-        C0, A0, S0 = keyframe(k0)
-        f32 = lambda a: a.astype(np.float32)
-        if f > 0:
-            C1, A1, S1 = keyframe(k0 + step)
-            S = None if S0 is None and S1 is None else \
-                f32(C0 if S0 is None else S0) * (1 - f) + f32(C1 if S1 is None else S1) * f
-            fg = (f32(C0) * (1 - f) + f32(C1) * f, f32(A0) * (1 - f) + f32(A1) * f, S)
-        else:
-            fg = (f32(C0), f32(A0), None if S0 is None else f32(S0))
         path = os.path.join(out, f"{m // 60:02d}{m % 60:02d}.jpg")
         tmp = path + ".tmp.jpg"
-        Frame(W_["day"], m, W_["scale"]).render(fg).save(tmp, quality=W_["quality"])
+        frame_image(m).save(tmp, quality=W_["quality"])
         os.replace(tmp, path)
         done.append(path)
     return done
@@ -237,12 +260,18 @@ def main():
     ap.add_argument("--times", default=None)
     ap.add_argument("--jobs", type=int, default=2)
     ap.add_argument("--step", type=int, default=10, help="minutes between near-scenery keyframes")
-    ap.add_argument("--weather", default="auto", choices=["auto", "fair", "synthetic", "offline"])
+    ap.add_argument("--weather", default="auto", choices=["auto", "fair", "synthetic", "offline", "clear", "fog"])
     ap.add_argument("--cache", default=os.path.expanduser("~/Library/Caches/listening-point"))
     ap.add_argument("--sheet", action="store_true")
     ap.add_argument("--quality", type=int, default=92)
     ap.add_argument("--skip-existing", action="store_true", help="leave frames that are already rendered (to resume)")
+    ap.add_argument("--shore", default=None, help="a local shore cache whose objects are drawn (default: none)")
+    ap.add_argument("--lamp", default=None, help="the listener's lamp-state file (default: none, never lit)")
+    ap.add_argument("--reference", action="store_true",
+                    help="hold the scene still (no creatures, rare events or grain) as for the shore kit's reference frames")
     a = ap.parse_args()
+    if a.reference and a.weather == "auto":
+        a.weather = "clear"
     date = dt.date.fromisoformat(a.date) if a.date else dt.date.today()
     minutes = parse_minutes(a)
     os.makedirs(a.out, exist_ok=True)
@@ -252,7 +281,7 @@ def main():
             print("nothing to do", flush=True)
             return
     t0 = time.time()
-    day = Day(date, weather=a.weather, cache_dir=a.cache)
+    day = Day(date, weather=a.weather, cache_dir=a.cache, reference=a.reference, shore=a.shore, lamp=a.lamp)
     print(f"{date}: weather {day.wx.source}; sunrise {day.events.sunrise:.2f} sunset {day.events.sunset:.2f}; "
           f"moon {day.moon_frac[720]:.0%} lit", flush=True)
     # scattered minutes each get their own near-scenery; runs of minutes share keyframes

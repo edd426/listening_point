@@ -249,7 +249,7 @@ class MysteryMixin:
         L.line([(x + 3.5 * s, y - 1 * s), (x + 7 * s, y - 2.2 * s)], glass * 1.2, 1.4 * s)
         L.ellipse(x + 7.3 * s, y - 2.3 * s, 0.9 * s, 0.9 * s, self.lit((150, 110, 70), [0, 0.6, 0.8]))
         L.line([(x - 4 * s, y + 0.5 * s), (x + 1 * s, y - 1 * s)], self.lit((236, 230, 210), [0, 0.6, 0.8]), 1.0 * s)
-        L.composite()
+        L.composite(allow=self.shore_allow(L, y + 2 * s))   # hidden by anything standing nearer on the shore
         if self.sun_str > 0.3:
             self.glow(x - 1 * s, y - 1 * s, 1.2 * s, (255, 255, 240), 0.8 * self.sun_str * (0.5 + 0.5 * math.sin(self.m)))
 

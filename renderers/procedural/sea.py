@@ -36,6 +36,7 @@ class SeaMixin:
             sz = 170 * s
             if self.night > 0:
                 self.emitters.append((bx + 0.05 * sz, by - 1.22 * sz, np.array([230, 235, 255], np.float32), 0.5 * self.night, by + 0.1 * sz))
+            self.listener_emitter()
 
     def pier_lantern(self):
         x, y = self.pproj(*self.pier_pt(1.0, 0.06, PIER3["deck"] + 0.112))
