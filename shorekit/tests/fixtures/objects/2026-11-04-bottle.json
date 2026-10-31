@@ -1,0 +1,22 @@
+{
+  "anchor": [1, 8],
+  "id": "2026-11-04-bottle",
+  "kit": "1.0.0",
+  "maker": "maker-a",
+  "palette": {"a": [170, 180, 190], "b": [150, 128, 98]},
+  "place": {"on": "shingle", "x": 1800, "y": 1388},
+  "reference": "r1",
+  "rows": [
+    ".bb.",
+    ".aa.",
+    ".aa.",
+    "aaaa",
+    "aaaa",
+    "aaaa",
+    "aaaa",
+    "aaaa",
+    "aaaa"
+  ],
+  "scale": 2,
+  "shore": 1
+}

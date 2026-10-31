@@ -6,3 +6,4 @@ __pycache__/
 *.heic
 *.png
 backups/
+dist/

@@ -1,0 +1,19 @@
+{
+  "anchor": [13, 4],
+  "id": "2026-11-03-log",
+  "kit": "1.0.0",
+  "label": {"side": "right", "text": "SEEN AT DAWN"},
+  "maker": "maker-b",
+  "palette": {"a": [96, 80, 64], "b": [118, 112, 102]},
+  "place": {"on": "shingle", "x": 2400, "y": 1636},
+  "reference": "r1",
+  "rows": [
+    "...aaaaaaaaaaaaaaaaaaaaaa...",
+    ".aabbbbbbbbbbbbbbbbbbbbbbaa.",
+    "aabbbbbbbbbbbbbbbbbbbbbbbbaa",
+    ".aabbbbbbbbbbbbbbbbbbbbbbaa.",
+    "...aaaaaaaaaaaaaaaaaaaaaa..."
+  ],
+  "scale": 1,
+  "shore": 1
+}

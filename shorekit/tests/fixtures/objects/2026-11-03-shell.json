@@ -1,0 +1,17 @@
+{
+  "anchor": [2, 3],
+  "id": "2026-11-03-shell",
+  "kit": "1.0.0",
+  "maker": "maker-a",
+  "palette": {"d": [228, 226, 220], "e": [196, 156, 70]},
+  "place": {"on": "2026-11-02-cairn", "x": 2600, "y": 1637},
+  "reference": "r1",
+  "rows": [
+    ".dddd.",
+    "deeeed",
+    "deeeed",
+    ".dddd."
+  ],
+  "scale": 1,
+  "shore": 1
+}

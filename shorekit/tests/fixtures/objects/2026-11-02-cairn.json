@@ -1,0 +1,31 @@
+{
+  "anchor": [8, 17],
+  "id": "2026-11-02-cairn",
+  "kit": "1.0.0",
+  "maker": "maker-a",
+  "palette": {"a": [122, 118, 110], "b": [134, 130, 122], "c": [196, 132, 46]},
+  "place": {"on": "shingle", "x": 2600, "y": 1655},
+  "reference": "r1",
+  "rows": [
+    ".......aaaa.......",
+    "......abbbba......",
+    "......abbbba......",
+    ".......aaaa.......",
+    ".....aaaaaaaa.....",
+    "....abbbbbbbba....",
+    "....abbbbbbbba....",
+    ".....aaaaaaaa.....",
+    "...aaaaaaaaaaaa...",
+    "..abbbbbbbbbbbba..",
+    "..abbbbcbbbbbbba..",
+    "..abbbbbbbbbbbba..",
+    "...aaaaaaaaaaaa...",
+    ".aaaaaaaaaaaaaaaa.",
+    "abbbbbbbbbbbbbbbba",
+    "abbbbbbbbbbbcbbbba",
+    "abbbbbbbbbbbbbbbba",
+    ".aaaaaaaaaaaaaaaa."
+  ],
+  "scale": 1,
+  "shore": 1
+}
