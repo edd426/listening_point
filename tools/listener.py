@@ -857,7 +857,10 @@ def main(argv=None, stdin=None):
         except Exception:       # noqa: BLE001
             reply["status"] = None
         print(json.dumps(reply))
-    elif a.cmd != "drain" or result not in ("empty", "busy"):
+    elif a.cmd == "drain":
+        if result not in ("empty", "busy"):
+            log("drain: " + msg)        # timestamped, as nightly.py appends it to the render log
+    else:
         print(msg, file=sys.stderr if code else sys.stdout)
     return code
 
