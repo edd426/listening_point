@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-10-06._
+_Last updated 2026-10-31._
 
 ## Current state
 
@@ -24,6 +24,32 @@ _Last updated 2026-10-06._
   a full day is about 40 minutes with 2 workers. Each worker peaks around 1.2 GB, so
   `nightly.py` drops to 1 worker when `kern.memorystatus_level` is under 45%. Three workers pushed
   this Mac into heavy swap; don't go back to 3.
+
+## The shore (branch work, not installed)
+
+Small objects that makers far away leave on the beach and the pier, judged by `shorekit/` (see
+`shorekit/README.md` and `SCHEMA.md`), plus a lamp the owner can light. Phases 2 and 3 are built:
+
+- **Reference frames.** `tools/shore_reference.py OUT_DIR` renders four fixed minutes of 2027-03-21
+  (noon 11:50, golden 17:20, night 22:30 under a full moon, fog 10:00) with `--reference` (no
+  creatures, rare events or grain; tide at high water; fixed `clear`/`fog` weather) and writes the
+  kit's reference set: the crops, `keepout.png`, `surfaces.json`, `palette.json` (the renderer's own
+  albedos, D = 40), `conditions.json`. Two runs give the same bytes. Never write one inside the repo.
+- **Drawing.** `renderers/procedural/shore.py`: `--shore DIR` (a cache in the kit's layout:
+  `ledger.json`, `objects/`, `reference/<id>/`) draws the kit's own pixels in `front()` after the
+  tower: lit by `lit()` with one camera-facing normal (the bench's), a contact shadow that takes 45% of
+  the ground's light, veiled by the fog, shown from `lands` until a storm or a veto. Creatures and rare
+  events draw after them; the heron and anything washed up are hidden by objects standing nearer.
+  Without `--shore`, or with an empty ledger, frames are byte-identical to before.
+- **The lamp.** `--lamp FILE` (the lamp-state file, `docs/LISTENER.md` on the controls branch) lights
+  two panes in the moored boat's deckhouse from dusk (with the other lamps) on a lit day, from the
+  moment it was lit, with a glow and a reflection. The boat is always moored by then (every sailing
+  trip ends half an hour before sunset).
+- **Tests.** `tests/test_shore_reference.py` and `tests/test_shore_render.py` (a few minutes each;
+  `SHORE_REFERENCE=DIR` reuses a built set). At the reference minutes the frame matches the kit's
+  preview inside each footprint to mean |d| < 1 and p99 <= 8 (fog), and changes nothing outside it.
+- **Still to do (phase 5).** `tools/install.sh` must copy `shorekit/` beside `renderers/` (the renderer
+  imports it from there), and `tools/nightly.py` must pass `--shore` and `--lamp`.
 
 ## Decisions
 
@@ -58,7 +84,7 @@ _Last updated 2026-10-06._
 ## Modules
 
 `renderers/procedural/` holds mixins on one `Frame`: `sky`, `sea`, `land`, `tree`, `tower`, `props`,
-`life`, `distant`, `weatherfx`, `mystery`. `day.py` builds one date's per-minute astronomy, weather,
+`life`, `distant`, `weatherfx`, `mystery`, `shore`. `day.py` builds one date's per-minute astronomy, weather,
 season (`season.py`), schedule (`events.py`) and mysteries. `astro.py` and `weather.py` are
 self-contained. Tests (offline): `./venv/bin/python tests/test_astro.py` and `tests/test_weather.py`.
 
