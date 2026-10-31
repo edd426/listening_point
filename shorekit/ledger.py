@@ -116,8 +116,15 @@ def check_event(ev, n):
     return ev
 
 
+def _loads(data, limit, what, code):
+    try:
+        return loads(data, limit, 4, what)
+    except ShoreError as e:
+        raise ShoreError(code, e.text)
+
+
 def parse_ledger(data):
-    obj = loads(data, LEDGER_MAX_BYTES, 4, "ledger")
+    obj = _loads(data, LEDGER_MAX_BYTES, "ledger", "E_LEDGER")
     if sorted(obj) != ["events", "shore_ledger"] or not is_int(obj["shore_ledger"]) or obj["shore_ledger"] != 1:
         raise _bad('the ledger must be {"shore_ledger": 1, "events": [...]}')
     evs = obj["events"]
@@ -366,7 +373,7 @@ def load_shore(ref, ledger_path, objects_dir):
 
 # --------------------------------------------------------------------- queue --
 def parse_queue(data):
-    q = loads(data, QUEUE_MAX_BYTES, 4, "queue")
+    q = _loads(data, QUEUE_MAX_BYTES, "queue", "E_QUEUE")
     if sorted(q) != ["at", "candidates", "lands", "shore_queue"] or not is_int(q["shore_queue"]) or q["shore_queue"] != 1:
         raise ShoreError("E_QUEUE", 'the queue must be {"shore_queue": 1, "at", "lands", "candidates"}')
     try:

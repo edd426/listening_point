@@ -60,7 +60,10 @@ def read_lock(shore_dir):
     p = os.path.join(shore_dir, LOCK)
     if not os.path.exists(p):
         return None
-    lock = loads(read_bounded(p, 4096, "E_LOCK", LOCK), 4096, 2, LOCK)
+    try:
+        lock = loads(read_bounded(p, 4096, "E_LOCK", LOCK), 4096, 2, LOCK)
+    except ShoreError as e:
+        raise ShoreError("E_LOCK", e.text)
     keys = ["commit", "kit", "pyz_sha256", "reference", "shore_kit_lock"]
     if sorted(lock) != keys or not is_int(lock["shore_kit_lock"]) or lock["shore_kit_lock"] != 1 or \
             not all(is_str(lock[k]) for k in keys[:4]) or not REF_RE.fullmatch(lock["reference"]):
@@ -92,6 +95,8 @@ def open_shore(args):
 
 
 def read_manifest(path):
+    if not os.path.isfile(path):
+        raise Usage("no manifest at %s" % path)
     return parse_manifest(read_bounded(path, 16384, "E_PARSE", os.path.basename(path)))
 
 
@@ -337,7 +342,7 @@ def main(argv=None):
         out(e.line())
         if e.code == "E_LEDGER":
             return 3
-        if args.cmd == "check" and e.code in ("E_PARSE", "E_SCHEMA", "E_ID"):
+        if args.cmd in ("check", "preview") and e.code in ("E_PARSE", "E_SCHEMA", "E_ID"):
             out("FAIL: the manifest does not parse")
             return 1
         return 2

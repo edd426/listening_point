@@ -82,9 +82,7 @@ class Reference:
         blobs = {}
         for name in JSON_FILES:
             blobs[name] = self._read(name, LIMITS[name])
-        surf = loads(blobs["surfaces.json"], LIMITS["surfaces.json"], 5, "surfaces.json")
-        pal = loads(blobs["palette.json"], LIMITS["palette.json"], 5, "palette.json")
-        cond = loads(blobs["conditions.json"], LIMITS["conditions.json"], 5, "conditions.json")
+        surf, pal, cond = (self._json(n, blobs) for n in ("surfaces.json", "palette.json", "conditions.json"))
         self._surfaces(surf)
         self._palette(pal)
         self._conditions(cond)
@@ -104,6 +102,12 @@ class Reference:
             h.update(("%s %s\n" % (name, hashlib.sha256(blobs[name]).hexdigest())).encode("ascii"))
         self.digest = h.hexdigest()
         self._deck_mask()
+
+    def _json(self, name, blobs):
+        try:
+            return loads(blobs[name], LIMITS[name], 5, name)
+        except ShoreError as e:
+            raise ShoreError(ERR, e.text)
 
     def _read(self, name, limit):
         p = os.path.join(self.path, name)
