@@ -292,6 +292,26 @@ def new_shore(tmp, rid_dir=None):
     return root
 
 
+def crowd(shore, n, day="2026-11-02", at="2026-11-02T04:30:00Z", world="world-1"):
+    """Accept n small stones along the dry band onto `shore` (a Shore), one maker each, all at `at`, the
+    way a carrier pass would. Returns their objects in seq order."""
+    from shorekit.manifest import manifest_from_obj
+    ref = shore.ref
+    objs = []
+    x = 1700
+    while len(objs) < n:
+        d = ref.dry(x)
+        if d:
+            obj = make_object("%s-s%02d" % (day, len(objs)), "maker-%02d" % len(objs), block(4, 4), STONE, "shingle",
+                              x, (d[0] + d[1]) >> 1)
+            m = manifest_from_obj(obj)
+            if not shore.judge(m, day)[0]:
+                shore.accept(m, at, at, world, "0" * 40)
+                objs.append(obj)
+        x += 9
+    return objs
+
+
 def write_queue(qdir, at, cands, lands=None):
     """cands: [(world, obj)]. Writes qdir/<world>/<id>.json and qdir/queue.json."""
     os.makedirs(qdir, exist_ok=True)

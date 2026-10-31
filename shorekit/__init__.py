@@ -4,10 +4,11 @@ Standard library only, integer arithmetic only, so every platform and every Pyth
 reaches the same verdict, the same footprint pixels and the same preview pixels.
 """
 
-KIT_VERSION = "1.0.0"
+KIT_VERSION = "1.1.0"
 
 # The limits the rules are written in (BUILD section 2 and the 2026-10-31 decisions).
-MAX_LIVE = 48            # objects drawn at once; a storm takes the oldest when room is needed
+MAX_LIVE = 48            # objects drawn at once; when this many are live and one more comes, a storm
+STORM_TO = 40            # takes the oldest (with whatever rests on them) until at most this many remain
 MAX_CELLS_SIDE = 64      # a bitmap is at most 64 x 64 cells
 MAX_KEYS = 16            # palette keys, plus "." for transparent
 MIN_OPAQUE = 16

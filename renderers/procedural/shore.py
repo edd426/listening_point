@@ -90,7 +90,8 @@ def reference_dir(path):
 
 def replay(path):
     """Replay a shore cache event by event. Returns (ref, shore, adds, gone): adds maps id -> (lands,
-    Placed) in seq order; gone maps id -> the time a storm or a veto took it."""
+    Placed) in seq order; gone maps id -> the time the sea took it (a storm or the owner's veto: the
+    ledger never says which)."""
     sk = kit()
     ref = sk.reference.load_reference(reference_dir(path))
     shore = sk.ledger.Shore(ref, os.path.join(path, "objects"))

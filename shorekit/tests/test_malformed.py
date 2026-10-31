@@ -13,7 +13,7 @@ import pngmake as P
 import support as S
 from shorekit.errors import ShoreError
 from shorekit.importer import png_to_manifest
-from shorekit.ledger import Shore, ledger_bytes, parse_ledger, parse_queue
+from shorekit.ledger import Shore, ledger_bytes, parse_ledger, parse_queue, parse_reasons
 from shorekit.manifest import manifest_from_obj, parse_manifest
 from shorekit.png import read_reference_png, write_png
 from shorekit.reference import load_reference
@@ -222,6 +222,10 @@ def ledger_base():
     return _LEDGER
 
 
+def sea(takes):
+    return {"seq": 4, "event": "sea", "at": "2026-11-04T00:00:00Z", "takes": takes}
+
+
 def ledger_cases():
     b = ledger_base()
 
@@ -248,22 +252,42 @@ def ledger_cases():
         lambda e: e[0].update(maker="Maker"), lambda e: e[0].update(world=""), lambda e: e[0].update(commit="abc"),
         lambda e: e[0].update(commit="A" * 40), lambda e: e[0].update(sha256="0" * 63), lambda e: e[0].update(reference="r0"),
         lambda e: e[0].update(kit="1"), lambda e: e[0].update(sha256="f" * 64), lambda e: e[1].update(at="2026-11-01T00:00:00Z"),
-        lambda e: e.append({"seq": 4, "event": "storm", "at": "2026-11-04T00:00:00Z", "for": "2026-11-04-x", "takes": []}),
-        lambda e: e.append({"seq": 4, "event": "storm", "at": "2026-11-04T00:00:00Z", "for": "2026-11-04-x",
-                            "takes": ["2026-11-02-cairn", "2026-11-02-cairn"]}),
-        lambda e: e.append({"seq": 4, "event": "storm", "at": "2026-11-04T00:00:00Z", "for": "2026-11-04-x",
-                            "takes": ["2026-11-02-cairn"]}),
-        lambda e: e.append({"seq": 4, "event": "veto", "at": "2026-11-04T00:00:00Z", "id": "2026-11-09-x",
-                            "takes": ["2026-11-09-x"]}),
-        lambda e: e.append({"seq": 4, "event": "veto", "at": "2026-11-04T00:00:00Z", "id": "2026-11-02-cairn",
-                            "takes": ["2026-11-02-cairn"]}),
-        lambda e: e.append({"seq": 4, "event": "veto", "at": "2026-11-04T00:00:00Z", "id": "2026-11-02-cairn",
-                            "takes": "2026-11-02-cairn"}),
+        lambda e: e.append(sea([])), lambda e: e.append(sea(["2026-11-02-cairn", "2026-11-02-cairn"])),
+        lambda e: e.append(sea(["2026-11-02-cairn"])), lambda e: e.append(sea(["2026-11-09-x"])),
+        lambda e: e.append(sea("2026-11-02-cairn")), lambda e: e.append(sea(["2026-11-03-shell", "2026-11-02-cairn"])),
+        lambda e: e.append(sea(["2026-11-02-flag"] * 49)), lambda e: e.append(sea(["2026-11-02-Flag"])),
+        lambda e: e.append(dict(sea(["2026-11-02-flag"]), why="veto")),
+        lambda e: e.append(dict(sea(["2026-11-02-flag"]), event="storm", **{"for": "2026-11-04-x"})),
+        lambda e: e.append(dict(sea(["2026-11-02-flag"]), event="veto", id="2026-11-02-flag")),
+        lambda e: e.append(dict(sea(["2026-11-02-flag"]), at="2026-11-03T00:00:00Z")),
         lambda e: e.append(dict(e[0], seq=4, at="2026-11-04T04:30:00Z", lands="2026-11-04T04:30:00Z")), lambda e: e[2].update(maker="maker-b"),
         lambda e: e[1].update(id="2026-11-02-gone"), lambda e: e.insert(0, e.pop(2)),
     ]
     cases = [("ledger bytes %d" % i, replay, d) for i, d in enumerate(raw)]
     cases += [("ledger event %d" % i, replay, mutated(f)) for i, f in enumerate(muts)]
+
+    # the carrier's reasons, against a good ledger ending in a veto of the flag
+    shore = Shore(S.reference(), b["objects"])
+    for ev in b["events"]:
+        shore.apply(ev)
+    vetoed = b["events"] + [shore.veto("2026-11-02-flag", "2026-11-04T00:00:00Z")]
+    good_why = {"seq": 4, "why": "veto", "id": "2026-11-02-flag"}
+
+    def strict(d):
+        s = Shore(S.reference(), b["objects"], parse_reasons(d))
+        for ev in vetoed:
+            s.apply(ev)
+        s.finish()
+
+    def why(**kw):
+        return canonical({"shore_sea": 1, "sea": [dict(good_why, **kw)]})
+    reasons = [b"", b"{}", b'{"sea":[]}', b'{"sea":[],"shore_sea":1,"x":1}', b'{"sea":{},"shore_sea":1}',
+               b'{"sea":[],"shore_sea":true}', b" " * (4 * 1024 * 1024 + 1), b'{"sea":[],"shore_sea":1}',
+               why(why="storm"), why(why="tide"), why(seq="4"), why(seq=True), why(seq=3), why(seq=5),
+               why(id="2026-11-02-cairn"), why(id="../x"), why(id=["2026-11-02-flag"]), why(x=1),
+               canonical({"shore_sea": 1, "sea": [good_why, good_why]}),
+               canonical({"shore_sea": 1, "sea": [{"seq": 4, "why": "storm", "for": "2026-11-02-flag"}]})]
+    cases += [("sea reasons %d" % i, strict, d) for i, d in enumerate(reasons)]
     return cases
 
 

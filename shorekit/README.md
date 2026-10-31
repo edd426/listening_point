@@ -37,9 +37,11 @@ they never land in a repository by accident.
    quarter of any one of them, and no label is ever covered. The newcomer is at least half visible.
 6. **Label.** Up to 12 capital letters, digits, spaces and `.'-`, carved on a driftwood plank in the
    kit's own pixel font. There is no way to write a web address or a look-alike letter.
-7. **Quota.** One object per maker per day, and at most 48 on the shore. When room is needed, a
-   storm takes the oldest, with anything built on it. They stay in the record; they are just not
-   drawn. The owner may also take any object away ("the sea took it").
+7. **Quota.** One object per maker per day, and at most 48 on the shore. When the shore is full
+   and one more comes, a storm takes the oldest until 40 remain, with anything built on them. The
+   owner may also take any object away, with whatever rests on it. Either way the record says only
+   that the sea took them: a storm and the owner look the same. They stay in the record; they are
+   just not drawn.
 
 ## What it promises
 
@@ -56,7 +58,7 @@ they never land in a repository by accident.
 Objects are text, not images, so nothing on the Mac ever decodes a maker's picture. Every input
 is size-checked before it is read; JSON with fractions, duplicate keys, escapes or non-ASCII is
 refused; `import` checks a PNG's header before inflating a byte and never inflates more than the
-header allows. The test suite throws 283 malformed inputs at it.
+header allows. The test suite throws 310 malformed inputs at it.
 
 ## For developers
 

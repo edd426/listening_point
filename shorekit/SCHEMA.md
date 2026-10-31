@@ -1,4 +1,4 @@
-# shorekit schema (kit 1.0.0)
+# shorekit schema (kit 1.1.0)
 
 This file is the contract for everything that reads or writes shore data: the kit itself, the
 reference builder that renders reference sets on the Mac, the carrier that judges and publishes
@@ -28,6 +28,7 @@ Every JSON file the kit reads is parsed strictly:
 | manifest (`objects/<id>.json`, an author's file) | 16384 | 4 |
 | `ledger.json` | 16 MiB | 4 |
 | `queue.json` | 65536 | 4 |
+| reasons (`replay --reasons`, section 6.6) | 4 MiB | 4 |
 | `kit.lock` | 4096 | 2 |
 | `surfaces.json` | 262144 | 5 |
 | `palette.json` | 65536 | 5 |
@@ -67,6 +68,8 @@ lamp.json                 carrier-owned; the kit ignores it
 returned/<id>.json        carrier-owned; the kit ignores it
 ```
 
+The reasons file of section 6.6 is never part of this directory.
+
 `shorekit` finds this directory from `--shore DIR`; else, when run as `<root>/kit/shorekit.pyz`
 with `<root>/kit.lock` present, from `<root>`; else from the working directory if it holds
 `kit.lock` or `ledger.json`.
@@ -74,7 +77,7 @@ with `<root>/kit.lock` present, from `<root>`; else from the working directory i
 ## 3. `kit.lock`
 
 ```json
-{"shore_kit_lock": 1, "kit": "1.0.0", "commit": "<listening_point commit>",
+{"shore_kit_lock": 1, "kit": "1.1.0", "commit": "<listening_point commit>",
  "pyz_sha256": "<sha256 of kit/shorekit.pyz>", "reference": "r1"}
 ```
 
@@ -89,7 +92,7 @@ Exactly these keys. `shorekit status` prints `KIT OK` when the running archive's
 ### 4.1 Manifest
 
 ```json
-{"shore": 1, "id": "2026-11-02-cairn", "maker": "maker-a", "kit": "1.0.0", "reference": "r1",
+{"shore": 1, "id": "2026-11-02-cairn", "maker": "maker-a", "kit": "1.1.0", "reference": "r1",
  "palette": {"a": [122, 118, 110], "b": [134, 130, 122]},
  "rows": ["..aa..", ".abba.", "aabbaa"],
  "scale": 1, "anchor": [3, 2],
@@ -304,9 +307,9 @@ over `conditions.json`, `keepout.png`, `palette.json`, `surfaces.json` and the f
 
 ```
 {"events":[
-{"at":"2026-11-02T04:30:00Z","commit":"<hex>","event":"add","id":"2026-11-02-cairn","kit":"1.0.0","lands":"2026-11-02T04:30:00Z","maker":"maker-a","reference":"r1","seq":1,"sha256":"<hex>","world":"world-1"},
-{"at":"2026-12-20T04:30:00Z","event":"storm","for":"2026-12-20-gate","seq":51,"takes":["2026-11-02-cairn","2026-11-03-shell"]},
-{"at":"2026-12-21T09:12:00Z","event":"veto","id":"2026-11-09-mast","seq":52,"takes":["2026-11-09-mast"]}
+{"at":"2026-11-02T04:30:00Z","commit":"<hex>","event":"add","id":"2026-11-02-cairn","kit":"1.1.0","lands":"2026-11-02T04:30:00Z","maker":"maker-a","reference":"r1","seq":1,"sha256":"<hex>","world":"world-1"},
+{"at":"2026-12-20T04:30:00Z","event":"sea","seq":51,"takes":["2026-11-02-cairn","2026-11-03-shell","2026-11-04-gull"]},
+{"at":"2026-12-21T09:12:00Z","event":"sea","seq":53,"takes":["2026-11-09-mast"]}
 ],"shore_ledger":1}
 ```
 
@@ -319,8 +322,12 @@ LF, the events' canonical JSON joined by `,` LF, LF, `],"shore_ledger":1}`, LF (
 | Event | Keys (exactly) |
 |---|---|
 | `add` | `seq, event, at, lands, id, maker, world, commit, sha256, reference, kit` |
-| `storm` | `seq, event, at, for, takes` |
-| `veto` | `seq, event, at, id, takes` |
+| `sea` | `seq, event, at, takes` |
+
+There are two kinds of event and no more. The sea takes things off the shore for two reasons, a
+storm (rule 7: the shore is full) and the owner's veto, and **a `sea` event never says which**: the
+two are written alike, so nobody who reads the ledger can tell them apart from the event itself.
+The reasons are kept apart (section 6.6).
 
 - `seq`: 1, 2, 3, ... with no gaps.
 - `at`: when the carrier recorded the event; never earlier than the previous event's `at`.
@@ -329,38 +336,40 @@ LF, the events' canonical JSON joined by `,` LF, LF, `],"shore_ledger":1}`, LF (
 - `world`, `commit`: where the object came from (stamped by the carrier from the source repo).
 - `sha256`: the object's identity; `objects/<id>.json` must parse to the same canonical bytes.
 - `reference`, `kit`: the reference set and kit version that accepted it.
-- `takes` (storm, veto): 1-48 distinct ids, in seq order.
-- `for` (storm): the id of the add that the storm made room for; that add must be the next event.
+- `takes` (sea): 1-48 distinct ids, in seq order: everything this event took, including whatever
+  rested on what it took.
 
 ### 6.3 Replay
 
 Replay applies the events in order to an empty shore. An inconsistency is `E_LEDGER` (exit 3);
 the Mac must then keep its last good ledger.
 
-- **add**: the id was never used; fewer than 48 objects are live; no earlier add has the same
+- **add**: the id was never used; fewer than 48 objects are live (else the sea must make room first); no earlier add has the same
   maker on the same UTC date of `at`; the id's date is not after `at`'s date; `objects/<id>.json`
   exists (at most 16384 bytes), parses, has the event's sha256, id, maker and reference; then the
   object is judged by rules 1-6 against the live objects, with sequence number `seq`. If it fails
   and the event's `reference` and `kit` equal the current reference id and running kit version,
   the ledger is inconsistent. If it fails under a *different* reference or kit, it is a **misfit**:
   reported, still live, never removed automatically.
-- **storm**: `need = live + 1 - 48` must be positive; `takes` must equal `storm_takes(need)`; those
-  objects stop being live. The next event must be the add named by `for`.
-- **veto**: `id` is live; `takes` must equal `pile(id)`; those objects stop being live.
+- **sea**: every id in `takes` is live, `takes` is in seq order, and no live object it leaves rests
+  on one it takes (nothing is left floating); those objects stop being live. That is all a reader
+  without the reasons can check, and it is enough for the shore it rebuilds to be exact.
 
 `pile(id)`: the object and every live object resting on it, directly or through others, in seq
-order. `storm_takes(need)`: walk the live objects in seq order, adding each one's pile (skipping
-objects already taken), until at least `need` are taken; return them in seq order. So the sea
-takes the oldest first, and what was built on a thing goes with it; nothing is ever left floating.
+order. `storm_takes()`: walk the live objects in seq order, adding each one's pile (skipping
+objects already taken), until at most 40 of them remain; return the taken in seq order. So a
+storm comes only when the shore is full (48 live), takes the oldest first until 40 remain (fewer
+when the last one taken had things built on it, which go with it), and leaves nothing floating.
 
 Taken objects stay in the ledger and in `objects/`; they are simply no longer drawn.
 
 ### 6.4 Judging a candidate
 
 Against the replayed shore, with `day` = the UTC date of the pass (in a sandbox `check`, the id's
-own date unless `--day` is given). If 48 objects are live, the storm that would make room is
-computed first and the candidate is judged against the shore without them; if the candidate's
-support is among them, `E_ON`. The candidate's sequence number is the next seq, after the storm's.
+own date unless `--day` is given). If 48 objects are live, the storm that would make room
+(`storm_takes()`) is computed first and the candidate is judged against the shore without them; if
+the candidate's support is among them, `E_ON`. The candidate's sequence number is the next seq,
+after the sea event's.
 
 ### 6.5 The carrier's pass: `queue.json`
 
@@ -375,7 +384,7 @@ support is among them, `E_ON`. The candidate's sequence number is the next seq, 
   `days_since_1970_01_01(date of at) mod number_of_worlds`; candidates follow their world's rank,
   then their id. With two worlds this alternates first place with the parity of the UTC date.
 - Each candidate in turn is judged against the ledger plus everything accepted earlier in this pass.
-  Accepted: a storm event (if room is needed) then an add event with this pass's `at` and `lands`,
+  Accepted: a sea event (the storm, if room is needed) then an add event with this pass's `at` and `lands`,
   the queue's `world` and `commit`, and the running kit. Returned: with its messages. A returned
   candidate is a **race** (`"race": true`, plus an `E_RACE` message) when another world's object
   was accepted earlier in the pass, none of its errors is `E_QUOTA`, and it passes against the
@@ -388,18 +397,48 @@ support is among them, `E_ON`. The candidate's sequence number is the next seq, 
 - `OUT/result.json` (canonical, then LF):
 
 ```json
-{"shore_replay": 1, "kit": "1.0.0", "reference": "r1", "reference_digest": "<hex>",
+{"shore_replay": 1, "kit": "1.1.0", "reference": "r1", "reference_digest": "<hex>",
  "ledger_in": {"events": 34, "sha256": "<hex>"}, "ledger_out": {"events": 36, "sha256": "<hex>"},
  "append": [<events appended, as in the ledger>],
+ "sea": [<the reason for each sea event appended, section 6.6>],
  "returned": [{"world": "...", "id": "...", "commit": "...", "maker": "...|null", "sha256": "...|null",
                "race": false, "messages": ["E_..."]}],
  "misfits": [{"seq": 12, "id": "...", "messages": ["E_..."]}],
  "live": [<ids in seq order>], "draw_order": [<ids>], "plan_sha256": "<hex>"}
 ```
 
-`replay --veto ID --at TIME --out OUT` appends the veto event the same way. `replay --previous
-FILE` additionally requires the ledger to extend `FILE` event for event (the Mac's append-only
-cache: a ledger that drops or changes a known event is refused, exit 3).
+`result.json` goes to whoever ran the pass and holds the reasons; it is never published with the
+ledger.
+
+`replay --veto ID --at TIME --out OUT` appends the sea event for the owner's veto of `ID` the same
+way (it takes `pile(ID)`). `replay --previous FILE` additionally requires the ledger to extend `FILE`
+event for event (the Mac's append-only cache: a ledger that drops or changes a known event is
+refused, exit 3; a sea event is an append like any other).
+
+### 6.6 The reasons: `--reasons FILE`
+
+Whoever makes sea events (the carrier) keeps why, privately, and may hand it back to replay:
+
+```json
+{"shore_sea": 1, "sea": [
+ {"seq": 51, "why": "storm", "for": "2026-12-20-gate"},
+ {"seq": 53, "why": "veto", "id": "2026-11-09-mast"}]}
+```
+
+- One entry per sea event of the ledger, in seq order, and none for anything else. Keys exactly
+  `seq, why, for` (a storm) or `seq, why, id` (a veto). Strict JSON, at most 4 MiB.
+- With it, replay also holds each sea event to its reason:
+  - **storm**: exactly 48 objects are live; `takes` equals `storm_takes()`; the next event is the
+    add of `for` (the storm made room for it, and for nothing else).
+  - **veto**: `id` is live; `takes` equals `pile(id)`.
+
+  A ledger that breaks either is `E_LEDGER`, and so is a sea event with no reason, or a reason for
+  an event that is not a sea event or that the ledger does not reach. `replay` then prints
+  `REASONS OK`.
+- The kit never writes a sea event it could not give a reason for: `replay --queue` makes only the
+  storm above, and `replay --veto` only the pile. Each run reports the reasons of the sea events it
+  appended in `result.json` `sea`, so the keeper can add them to its file.
+- The reasons file, and `result.json`, never go on a shore branch or into a world.
 
 ---
 
@@ -449,4 +488,12 @@ exactly. The kit is importable straight from the zipapp (`sys.path.insert(0, "sh
 | 0 | pass, OK, or a pass whose candidates were returned (that is a normal outcome) |
 | 1 | the object fails a rule or does not parse (`check`, `preview`); `KIT MISMATCH` (`status`) |
 | 2 | a usage, file or reference-data problem |
-| 3 | the ledger is inconsistent (`E_LEDGER`) |
+| 3 | the ledger is inconsistent (`E_LEDGER`), or does not square with `--reasons` |
+
+## 10. Changes
+
+- **1.1.0.** The ledger has two event kinds, `add` and `sea`; `storm` and `veto` are gone, and a
+  sea event no longer carries `for` or `id`. Storms are batched: one comes only at 48 live and takes
+  the oldest (with their piles) until at most 40 remain, where 1.0.0 took just enough to make room.
+  Replay takes the reasons (`--reasons`, section 6.6), and `result.json` reports them. Manifests are
+  unchanged, so an object made for 1.0.0 still passes (`E_KIT` compares the major version).

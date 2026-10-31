@@ -14,8 +14,8 @@ from .compose import pixels_sha256, plan_sha256, sheet, write, zoom
 from .errors import ShoreError
 from .geometry import SURFACE_PIER, SURFACE_SHINGLE, place
 from .importer import png_to_manifest, pretty
-from .ledger import (Shore, check_ts, ledger_bytes, ledger_sha256, load_shore, parse_ledger, parse_queue,
-                     read_bounded, run_queue)
+from .ledger import (REASONS_MAX_BYTES, Shore, check_ts, ledger_bytes, ledger_sha256, load_shore, parse_ledger,
+                     parse_queue, parse_reasons, read_bounded, reason_line, run_queue)
 from .manifest import REF_RE, check_id, parse_manifest
 from .reference import load_reference
 from .strictjson import canonical, is_int, is_str, loads
@@ -91,7 +91,10 @@ def open_shore(args):
     ref = load_reference(reference_dir(args, shore_dir, lock))
     ledger = getattr(args, "ledger", None) or (os.path.join(shore_dir, "ledger.json") if shore_dir else None)
     objects = getattr(args, "objects", None) or (os.path.join(shore_dir, "objects") if shore_dir else None)
-    return shore_dir, lock, ref, load_shore(ref, ledger, objects)
+    reasons = None
+    if getattr(args, "reasons", None):
+        reasons = parse_reasons(read_bounded(args.reasons, REASONS_MAX_BYTES, "E_LEDGER", "sea reasons"))
+    return shore_dir, lock, ref, load_shore(ref, ledger, objects, reasons)
 
 
 def read_manifest(path):
@@ -136,7 +139,7 @@ def cmd_status(args):
 def judge_and_report(shore, m, day):
     errs, takes, p = shore.judge(m, day)
     if takes:
-        out("NOTE the shore holds %d objects: to make room a storm will take %s" % (len(shore.live), ", ".join(takes)))
+        out("NOTE the shore holds %d objects: to make room the sea will take %s" % (len(shore.live), ", ".join(takes)))
     for e in errs:
         out(e.line())
     if errs:
@@ -232,6 +235,8 @@ def cmd_replay(args):
     before = list(shore.events)
     out("LEDGER OK %d events, %d/%d live, %d taken by the sea, %d misfits; sha256=%s"
         % (len(before), len(shore.live), MAX_LIVE, len(shore.taken), len(shore.misfits), ledger_sha256(before)))
+    if shore.reasons is not None:
+        out("REASONS OK %d sea event%s, each held to its rule" % (len(shore.why), "" if len(shore.why) == 1 else "s"))
     for mf in shore.misfits:
         out("MISFIT seq %d %s: %s" % (mf["seq"], mf["id"], "; ".join(mf["messages"])))
     if args.previous:
@@ -252,10 +257,8 @@ def cmd_replay(args):
     for ev in appended:
         if ev["event"] == "add":
             out("ACCEPT %s/%s seq %d" % (ev["world"], ev["id"], ev["seq"]))
-        elif ev["event"] == "storm":
-            out("STORM seq %d takes %s (room for %s)" % (ev["seq"], ", ".join(ev["takes"]), ev["for"]))
         else:
-            out("VETO seq %d takes %s" % (ev["seq"], ", ".join(ev["takes"])))
+            out("SEA seq %d takes %s (%s)" % (ev["seq"], ", ".join(ev["takes"]), reason_line(shore.why[ev["seq"]])))
     for r in returned:
         out("RETURN %s/%s%s: %s" % (r["world"], r["id"], " (race)" if r["race"] else "", "; ".join(r["messages"])))
     if args.out:
@@ -268,7 +271,8 @@ def cmd_replay(args):
         result = {"shore_replay": 1, "kit": KIT_VERSION, "reference": ref.id, "reference_digest": ref.digest,
                   "ledger_in": {"events": len(before), "sha256": ledger_sha256(before)},
                   "ledger_out": {"events": len(shore.events), "sha256": ledger_sha256(shore.events)},
-                  "append": appended, "returned": returned, "misfits": shore.misfits,
+                  "append": appended, "sea": [shore.why[ev["seq"]] for ev in appended if ev["event"] == "sea"],
+                  "returned": returned, "misfits": shore.misfits,
                   "live": [a.id for a in shore.live], "draw_order": [a.id for a in shore.ordered()],
                   "plan_sha256": plan_sha256(ref, shore.live)}
         with open(os.path.join(args.out, "result.json"), "wb") as f:
@@ -312,7 +316,7 @@ def parser():
     s.add_argument("--side", choices=("left", "right"), default="right")
     s.add_argument("--ref-id", help="reference id, e.g. r1 (default: from kit.lock)")
     s.add_argument("--shore")
-    s = sub.add_parser("replay", help="replay the ledger; optionally judge a queue or add a veto")
+    s = sub.add_parser("replay", help="replay the ledger; optionally judge a queue or add the owner's veto")
     common(s)
     s.add_argument("--ledger", help="ledger file (default: SHORE/ledger.json)")
     s.add_argument("--objects", help="objects directory (default: SHORE/objects)")
@@ -320,6 +324,8 @@ def parser():
     s.add_argument("--veto", help="id to take off the shore (owner)")
     s.add_argument("--at", help="UTC time of the veto")
     s.add_argument("--previous", help="a previous ledger this one must extend")
+    s.add_argument("--reasons", help="why the sea took what each sea event took (carrier only): replay then holds "
+                                     "every storm and veto to its rule")
     s.add_argument("--out", help="write ledger.json, result.json and objects/ here")
     return p
 
