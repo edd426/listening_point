@@ -349,7 +349,9 @@ class GitHub:
     def __repr__(self):
         return f"GitHub({self.api}, {self.repo})"
 
-    def _request(self, method, url, data=None, accept="application/vnd.github+json"):
+    def _request(self, method, url, data=None, accept="application/vnd.github+json", headers=None, limit=1 << 20):
+        """(status, headers, body). The body is read up to `limit` + 1 bytes, so a caller can tell an answer
+        that is too long from one that just fits."""
         left = self.deadline - time.monotonic()
         if left < 1.0:
             raise Transient("out of time")
@@ -358,11 +360,13 @@ class GitHub:
         req.add_header("Accept", accept)
         req.add_header("X-GitHub-Api-Version", API_VERSION)
         req.add_header("User-Agent", "listening-point-listener")
+        for k, v in (headers or {}).items():
+            req.add_header(k, v)
         if data is not None:
             req.add_header("Content-Type", "application/json")
         try:
             with self._opener.open(req, timeout=min(REQUEST_TIMEOUT, left)) as r:
-                status, headers, body = r.status, r.headers, r.read(1 << 20)
+                status, headers, body = r.status, r.headers, r.read(limit + 1)
         except urllib.error.HTTPError as e:
             status, headers = e.code, e.headers
             try:
@@ -386,10 +390,17 @@ class GitHub:
         status, headers, _ = self._request("PUT", self.contents_url(path), body)
         return status, headers
 
-    def get_raw(self, path):
+    def get_raw(self, path, etag=None, limit=1 << 20):
+        """A file's bytes. With `etag` (from an earlier answer's ETag) an unchanged file answers 304."""
         url = self.contents_url(path) + "?" + urllib.parse.urlencode({"ref": self.branch})
-        status, headers, body = self._request("GET", url, accept="application/vnd.github.raw+json")
+        status, headers, body = self._request("GET", url, accept="application/vnd.github.raw+json",
+                                              headers={"If-None-Match": etag} if etag else None, limit=limit)
         return status, headers, body
+
+    def get_listing(self, path, etag=None, limit=1 << 20):
+        """A folder's entries, as the contents API's JSON. With `etag`, an unchanged folder answers 304."""
+        url = self.contents_url(path) + "?" + urllib.parse.urlencode({"ref": self.branch})
+        return self._request("GET", url, headers={"If-None-Match": etag} if etag else None, limit=limit)
 
     def repo_info(self):
         status, headers, _ = self._request("GET", f"{self.api}/repos/{self.repo}")
