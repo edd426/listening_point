@@ -7,6 +7,7 @@ the renderer's own constants. None of it is real shore data.
 
     python3 -m shorekit.tests.support OUTDIR      # write the set for a look (from the repo root)
 """
+import atexit
 import hashlib
 import json
 import os
@@ -237,6 +238,7 @@ def reference_dir():
     """A synthetic r1, made once per test process."""
     if "r1" not in _CACHE:
         d = tempfile.mkdtemp(prefix="shorekit-ref-")
+        atexit.register(shutil.rmtree, d, True)
         _CACHE["r1"] = make_reference(os.path.join(d, "r1"))
     return _CACHE["r1"]
 

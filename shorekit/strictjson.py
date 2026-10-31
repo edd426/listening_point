@@ -74,7 +74,7 @@ def loads(data, limit, max_depth, what="document"):
     except ShoreError:
         raise
     except json.JSONDecodeError as e:
-        raise ShoreError("E_PARSE", "%s: %s at line %d column %d" % (what, e.msg, e.lineno, e.colno))
+        raise ShoreError("E_PARSE", "%s: %s (line %d, column %d)" % (what, e.msg, e.lineno, e.colno))
     except (ValueError, RecursionError) as e:
         raise ShoreError("E_PARSE", "%s: %s" % (what, str(e)[:80]))
     if type(obj) is not dict:

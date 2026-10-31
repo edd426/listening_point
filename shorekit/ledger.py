@@ -19,7 +19,7 @@ from .strictjson import canonical, is_int, is_str, loads
 LEDGER_MAX_BYTES = 16 * 1024 * 1024
 LEDGER_MAX_EVENTS = 200000
 QUEUE_MAX_BYTES = 65536
-QUEUE_MAX = 16
+QUEUE_MAX = 64
 OBJECT_MAX_BYTES = 16384
 
 TS_RE = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z", re.ASCII)
@@ -431,13 +431,11 @@ def run_queue(shore, q, qdir):
         errs, takes, _ = shore.judge(m, q["at"][:10])
         if errs:
             rec["messages"] = [e.line() for e in errs]
-            if appended:
-                e2, _, _ = start.judge(m, q["at"][:10])
-                if not e2:
-                    rec["race"] = True
-                    ids = [ev["id"] for ev in appended if ev["event"] == "add"]
-                    rec["messages"].append("E_RACE it passes against yesterday's ledger, but %s landed first in this pass"
-                                           % ", ".join(ids))
+            others = [ev["id"] for ev in appended if ev["event"] == "add" and ev["world"] != c["world"]]
+            if others and not any(e.code == "E_QUOTA" for e in errs) and not start.judge(m, q["at"][:10])[0]:
+                rec["race"] = True
+                rec["messages"].append("E_RACE it passes against yesterday's ledger, but %s landed first in this pass"
+                                       % ", ".join(others))
             returned.append(rec)
             continue
         appended += shore.accept(m, q["at"], q["lands"], c["world"], c["commit"])
