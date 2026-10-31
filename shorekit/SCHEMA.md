@@ -269,8 +269,8 @@ required. The kit refuses a set that breaks any rule below (`E_REFDATA`).
   of the renderer without local pools.
 - `lut`: per channel, 512 values 0-255: the tone curve of `grade()` without grain or vignette,
   indexed by linear value 0-511.
-- `veil`: the fog veil: colour (linear 0-255) and alpha x256 (0-256) per crop row (640 values).
-  All-zero alpha means no veil.
+- `veil`: the fog veil: colour (linear 0-511, the tone curve's domain: daylight fog is brighter
+  than 255) and alpha x256 (0-256) per crop row (640 values). All-zero alpha means no veil.
 - `shadow`: the contact shadow's display-space colour and alpha x256.
 
 ### 5.4 Images

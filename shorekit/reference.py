@@ -233,7 +233,7 @@ class Reference:
                 _fail(w, "lut must be 3 lists of 512")
             q.lut = tuple(tuple(_ints(t, 512, 0, 255, w + ".lut")) for t in lut)
             _keys(k["veil"], ("rgb", "alpha"), w + ".veil")
-            q.veil_rgb = _rgb(k["veil"]["rgb"], w + ".veil.rgb")
+            q.veil_rgb = tuple(_ints(k["veil"]["rgb"], 3, 0, 511, w + ".veil.rgb"))   # linear, like the lut's index
             q.veil_alpha = tuple(_ints(k["veil"]["alpha"], REF_H, 0, 256, w + ".veil.alpha"))
             _keys(k["shadow"], ("rgb", "alpha"), w + ".shadow")
             q.shadow_rgb = _rgb(k["shadow"]["rgb"], w + ".shadow.rgb")

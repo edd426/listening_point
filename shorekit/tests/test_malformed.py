@@ -311,6 +311,7 @@ def refjson_cases():
         edit("conditions.json", lambda o: o["conditions"][0]["lut"][0].pop()),
         edit("conditions.json", lambda o: o["vignette"].pop()),
         edit("conditions.json", lambda o: o["conditions"][1]["veil"]["alpha"].__setitem__(3, 257)),
+        edit("conditions.json", lambda o: o["conditions"][3]["veil"].update(rgb=[300, 512, 300])),
         edit("conditions.json", lambda o: o["conditions"][2].update(name="noon")),
         edit("conditions.json", lambda o: o.update(cell=8)),
     ]
@@ -327,6 +328,27 @@ def refjson_cases():
         finally:
             shutil.rmtree(d)
     return [("reference json %d" % i, run, item) for i, item in enumerate(datas)]
+
+
+class TestVeil(unittest.TestCase):
+    def test_a_veil_brighter_than_255_is_linear_and_allowed(self):
+        """Daylight fog is brighter than 255 in the renderer's linear light; the tone curve takes 0-511."""
+        src = S.reference_dir()
+        d = tempfile.mkdtemp(prefix="shorekit-ref-veil-")
+        try:
+            dst = os.path.join(d, "r1")
+            shutil.copytree(src, dst)
+            p = os.path.join(dst, "conditions.json")
+            import json
+            with open(p, "rb") as f:
+                o = json.loads(f.read())
+            o["conditions"][3]["veil"]["rgb"] = [300, 511, 0]
+            with open(p, "wb") as f:
+                f.write(canonical(o))
+            ref = load_reference(dst)
+            self.assertEqual(ref.conditions[3].veil_rgb, (300, 511, 0))
+        finally:
+            shutil.rmtree(d)
 
 
 class TestMalformed(unittest.TestCase):
