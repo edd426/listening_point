@@ -28,7 +28,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: ubuntu-latest, python: "3.9"}
+          # setup-python ships 3.9 only up to Ubuntu 24.04 (ubuntu-latest is 26.04 and has none).
+          - {os: ubuntu-24.04, python: "3.9"}
           - {os: ubuntu-latest, python: "3.12"}
           # setup-python has no arm64 build of 3.9 for macOS; the runner's own /usr/bin/python3
           # is the Command Line Tools' 3.9, the same interpreter the Mac runs the kit with.
