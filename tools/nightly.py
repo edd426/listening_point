@@ -2,6 +2,7 @@
 """Keep the live wallpaper's frames ready on a laptop that sleeps a lot. launchd runs this every
 15 minutes while the Mac is awake, and the helper starts it on wake when frames are missing.
 
+- First, every run: sends whatever the menu-bar controls queued while offline (`listener.py drain`).
 - On power: the rest of today (from the current minute on), then all of tomorrow.
 - On battery with at least half a charge: when less than an hour is ready, the next three hours,
   with one worker.
@@ -196,6 +197,20 @@ def refresh_hourly(days, root, today, force=False):
     log(f"hourly wallpaper rebuilt for {today}")
 
 
+def drain_listener():
+    """Send whatever the menu-bar controls left queued (the lamp, notes) while the Mac was offline.
+    listener.py keeps its own lock and time budget; this never holds up or breaks a render."""
+    listener = os.path.join(HERE, "listener.py")
+    if not os.path.exists(listener):
+        return
+    try:
+        with open(LOG, "a") as f:
+            subprocess.run([sys.executable, "-I", listener, "drain"], stdin=subprocess.DEVNULL, stdout=f,
+                           stderr=subprocess.STDOUT, timeout=90)
+    except Exception as e:
+        log(f"listener drain failed: {e}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=ROOT)
@@ -206,6 +221,7 @@ def main():
     a = ap.parse_args()
     days = os.path.join(a.root, "days")
     os.makedirs(days, exist_ok=True)
+    drain_listener()    # first, and on every run, even one that finds another render under way
     lock = open(os.path.join(a.root, ".render.lock"), "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

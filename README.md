@@ -62,9 +62,13 @@ the disk. Instead:
   show the right hour. It's rebuilt daily if the helper has Full Disk Access, which it uses only to
   delete the wallpaper agent's old bitmaps of our own files; otherwise monthly, and
   `tools/clean_wallpaper_cache.py` (run from Terminal) clears what builds up.
+- **Owner controls** (optional). The helper's menu-bar item can light a lamp for the evening and
+  leave a short note, sent to a private repository with a key kept in the Keychain. Set up and
+  described in [docs/LISTENER.md](docs/LISTENER.md); without that setup it does nothing.
 
 No AI is involved after installation: everything is computed from the date by the code here, and the
-only network request is the weather forecast (Budapest's coordinates only).
+only network request is the weather forecast (Budapest's coordinates only), plus, if you set up the
+owner controls, the lamp and notes you send.
 
 ## Install
 
