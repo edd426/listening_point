@@ -255,6 +255,57 @@ def test_the_lamp_lights_the_boat_window_from_dusk_on_a_lit_day():
             assert day.events.trip[1] * 60 < dusk, (day.date, day.events.trip, dusk)
 
 
+# ------------------------------------------------------- what nightly renders again --
+def test_nightly_renders_again_only_what_the_shore_and_the_lamp_changed():
+    import nightly
+    import shore_sync
+    cache, shore = fixture_cache("nightly")
+    days = os.path.join(TMP, "days")
+    date = D(2027, 3, 19)          # the flag and the log land at 04:30 and 04:31 UTC: 05:30 in Budapest
+    folder = os.path.join(days, date.isoformat())
+    names = [f"{m // 60:02d}{m % 60:02d}.jpg" for m in range(1440)]
+
+    def frames():
+        os.makedirs(folder, exist_ok=True)
+        for n in names:
+            open(os.path.join(folder, n), "w").close()
+
+    def kept():
+        return [m for m, n in enumerate(names) if os.path.exists(os.path.join(folder, n))]
+    lamp = os.path.join(TMP, "nightly-lamp.json")
+    saved = nightly.SHORE, nightly.LAMP, nightly.LOG
+    nightly.SHORE, nightly.LAMP, nightly.LOG = cache, lamp, os.path.join(TMP, "nightly.log")
+    try:
+        # frames made when only the first two objects had landed: the two of that morning show from 05:30
+        frames()
+        shore_sync.write_record(os.path.join(folder, "shore.json"), shore_sync.day_record(shore.events[:2], None))
+        nightly.refresh_shore(days, date)
+        assert kept() == list(range(330)), (kept()[:3], len(kept()))
+        assert shore_sync.read_record(os.path.join(folder, "shore.json")) == shore_sync.day_record(shore.events, None)
+        frames()
+        nightly.refresh_shore(days, date)
+        assert len(kept()) == 1440, "nothing changed since"
+        # the lamp lit at 10:00: only the minutes from dusk on (the window follows the scene's lamps)
+        with open(lamp, "w") as f:
+            json.dump({"version": 1, "lit": {"2027-03-19": "2027-03-19T10:00:00+01:00"}}, f)
+        nightly.refresh_shore(days, date)
+        gone = sorted(set(range(1440)) - set(kept()))
+        day = Day(date, weather="clear")
+        dusk = next(m for m in range(600, 1440) if day.sun_alt[m] < 3)
+        assert gone == list(range(dusk, 1440)), (gone[:3], dusk)
+        assert 17 * 60 < dusk < 18 * 60 + 30, dusk
+        # a shore that is gone (no cache): frames made with it cannot be trusted, so all of the day
+        frames()
+        nightly.SHORE = os.path.join(TMP, "no-cache")
+        nightly.refresh_shore(days, date)
+        assert kept() == [], len(kept())
+        assert nightly.shore_args() == ["--lamp", lamp]
+        nightly.SHORE = cache
+        assert nightly.shore_args() == ["--shore", cache, "--lamp", lamp]
+    finally:
+        nightly.SHORE, nightly.LAMP, nightly.LOG = saved
+
+
 def main():
     pick = sys.argv[1:]
     tests = [(n, f) for n, f in globals().items() if n.startswith("test_") and callable(f) and (not pick or n in pick)]

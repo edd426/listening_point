@@ -3,8 +3,8 @@
 The live wallpaper helper puts a small table lamp in the menu bar with two controls:
 
 - **Light the lamp.** One bit per local day. Once lit, the item reads *The lamp is lit tonight ✓*.
-  A later renderer change lights a window on the boat moored at the end of the pier from dusk on lit
-  days, reading the lamp-state file below. The lamp shows on this Mac at once, even when offline.
+  The renderer lights a window on the boat moored at the end of the pier from dusk on lit days,
+  reading the lamp-state file below. The lamp shows on this Mac at once, even when offline.
 - **Leave a note…** A short note to one or all of the recipients named in your local config: at most
   500 characters, 12 lines and 3 notes a local day. Notes are informational: they are read as news,
   not as requests. They go with the evening post (22:17 and 23:17 UTC) and are read the next morning;
@@ -131,6 +131,42 @@ tools/listener.py drain                     # send whatever is queued (nightly.p
 (the tests). Exit status: 0 done or queued, 1 refused (nothing stored), 2 stored but not sent,
 3 failed.
 
+## The shore on this Mac
+
+The same key also lets this Mac read the shore that the carrier keeps in the private repo's `ledger/`
+folder. `tools/shore_sync.py` (standard library and `shorekit/` only) keeps a checked copy, and the
+renderer draws from that copy, never from the network.
+
+- **When.** `tools/nightly.py` runs it on every pass once the key is in the Keychain, after the drain and
+  under the render lock; it does nothing if it reached the repo less than an hour ago, and after a failed
+  try it waits ten minutes. On wake the helper starts the render job when the last try was more than an
+  hour ago. `tools/shore_sync.py --force` syncs now.
+- **Fetch.** `GET …/contents/ledger/ledger.json` (raw, `If-None-Match`: usually a 304), then each object
+  the copy lacks, `ledger/objects/<id>.json`, whose bytes must hash to the sha256 the ledger names.
+- **Verify.** The new ledger must extend the copy event for event, and the kit must replay all of it
+  against this Mac's own reference set. A ledger that drops or changes a known event, an object that does
+  not match, or anything the kit refuses is turned away: the copy is kept, the reason is logged and stored
+  in `shore/sync.json`, and one notification is sent for each ledger refused. What the sea takes arrives
+  as a new `sea` event, an append like any other.
+- **Offline**, or a key or server error: the last good copy stays in use.
+- **The lamp.** Any `listener/lamp/<date>.json` in the repo means that day is lit, however it got there
+  (the menu, or a file made on GitHub). A lit day missing from `listener/lamp.json` is added, from the
+  moment sync saw it (or from noon, for an earlier day), so the window shows from dusk. None is removed.
+- **Rendering again.** Sync never renders. Each day folder holds `shore.json`, the ledger (its length and
+  sha256) and the lamp time its frames were made with; when they differ, `nightly.py` deletes the frames
+  from the first moment the change shows (an object's `lands`, the moment the sea took one) and, for the
+  lamp, the minutes from the moment it was lit when the scene's lamps can be on; then it renders them.
+
+| Path (under `~/Library/Application Support/The Listening Point/`) | What |
+|---|---|
+| `shore/ledger.json`, `shore/objects/<id>.json` | the last good shore, in the kit's layout (`--shore`) |
+| `shore/reference/r1/` | this Mac's own reference set: `nightly.py` builds it once with `tools/shore_reference.py` (about a minute) |
+| `shore/sync.json` | the last try and the last success (also as `*_unix`, read by the helper), the ETags, the ledger held, any trouble |
+
+`tools/shore_sync.py status` prints `sync.json`. Exit status: 0 done, unchanged or not due; 1 a problem
+with the local setup; 2 kept the last good copy (offline, the key, the server, no reference set yet);
+3 refused the repo's ledger.
+
 ## Text rules
 
 A note is normalised to NFC. Control characters (Unicode Cc, except line breaks), bidirectional
@@ -142,7 +178,7 @@ at most 12 lines. The fourth note of a local day is refused; queued notes count.
 ## Tests
 
 ```sh
-/usr/bin/python3 -m unittest tests.test_listener
+/usr/bin/python3 -m unittest tests.test_listener tests.test_shore_sync
 ```
 
 Offline: a mock of the contents API runs on 127.0.0.1 in a thread, and the Keychain and notifications

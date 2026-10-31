@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-10-31._
+_Last updated 2026-11-01._
 
 ## Current state
 
@@ -21,8 +21,8 @@ _Last updated 2026-10-31._
   the helper (Light the lamp, Leave a note…) backed by `tools/listener.py`, with an outbox that
   `nightly.py` drains first on every run. Spec and setup: `docs/LISTENER.md`. Before it does
   anything the owner must make the fine-grained key, store it in the Keychain and write the
-  untracked `listener.json` (steps in that doc), then run `tools/install.sh`. The renderer does not
-  read `listener/lamp.json` yet; the boat's window glow is a later phase.
+  untracked `listener.json` (steps in that doc), then run `tools/install.sh`. The renderer reads
+  `listener/lamp.json` (`--lamp`, below).
 - Verified 2026-10-06 05:24 after a night on battery: the render job kept three hours ahead, the
   helper showed the right minute (16 MB, no CPU, no log errors), and the system wallpaper showed
   today's 05:00 frame. Disk: about 1 GB a day of frames (3 days kept), 135 MB in Application Support.
@@ -34,7 +34,8 @@ _Last updated 2026-10-31._
 ## The shore (branch work, not installed)
 
 Small objects that makers far away leave on the beach and the pier, judged by `shorekit/` (see
-`shorekit/README.md` and `SCHEMA.md`), plus a lamp the owner can light. Phases 2 and 3 are built:
+`shorekit/README.md` and `SCHEMA.md`), plus a lamp the owner can light. Built on branches, wired
+together on `shore/sync` (2026-11-01), not installed:
 
 - **Reference frames.** `tools/shore_reference.py OUT_DIR` renders four fixed minutes of 2027-03-21
   (noon 11:50, golden 17:20, night 22:30 under a full moon, fog 10:00) with `--reference` (no
@@ -44,7 +45,7 @@ Small objects that makers far away leave on the beach and the pier, judged by `s
 - **Drawing.** `renderers/procedural/shore.py`: `--shore DIR` (a cache in the kit's layout:
   `ledger.json`, `objects/`, `reference/<id>/`) draws the kit's own pixels in `front()` after the
   tower: lit by `lit()` with one camera-facing normal (the bench's), a contact shadow that takes 45% of
-  the ground's light, veiled by the fog, shown from `lands` until a storm or a veto. Creatures and rare
+  the ground's light, veiled by the fog, shown from `lands` until the sea takes it. Creatures and rare
   events draw after them; the heron and anything washed up are hidden by objects standing nearer.
   Without `--shore`, or with an empty ledger, frames are byte-identical to before.
 - **The lamp.** `--lamp FILE` (the lamp-state file, `docs/LISTENER.md` on the controls branch) lights
@@ -54,8 +55,20 @@ Small objects that makers far away leave on the beach and the pier, judged by `s
 - **Tests.** `tests/test_shore_reference.py` and `tests/test_shore_render.py` (a few minutes each;
   `SHORE_REFERENCE=DIR` reuses a built set). At the reference minutes the frame matches the kit's
   preview inside each footprint to mean |d| < 1 and p99 <= 8 (fog), and changes nothing outside it.
-- **Still to do (phase 5).** `tools/install.sh` must copy `shorekit/` beside `renderers/` (the renderer
-  imports it from there), and `tools/nightly.py` must pass `--shore` and `--lamp`.
+- **The sea (kit 1.1.0).** A storm comes only at 48 live objects and takes the oldest, with whatever
+  rests on them, until 40 remain; the owner's veto takes an object and its pile. In the ledger both are
+  one `sea` event that never says why; the carrier keeps the reasons privately and can hand them to
+  `replay --reasons`, which then holds each storm and veto to its exact rule.
+- **Sync (`tools/shore_sync.py`, `docs/LISTENER.md` "The shore on this Mac").** `nightly.py` drains the
+  outbox, takes the render lock, builds this Mac's own reference set once (`shore/reference/r1`), syncs at
+  most hourly (ETag, so mostly a 304), deletes the frames the shore or the lamp has changed (from an
+  object's `lands`, or the moment the sea took one; for the lamp, the dark minutes from the moment it was
+  lit) and renders with `--shore` and `--lamp`. Sync refuses a ledger that drops or changes a known event,
+  an object that does not hash to its sha256, or anything the kit will not replay, and keeps the last good
+  one, offline too. The helper kicks the job on wake when the last sync try was over an hour ago. Nothing
+  shore-related runs until the controls' key is in the Keychain. `install.sh` copies `shorekit/`.
+- **Tests.** `/usr/bin/python3 -m unittest tests.test_shore_sync` (mock API on 127.0.0.1; also the
+  re-render records); `tests/test_shore_render.py` also checks what `nightly.py` renders again.
 
 ## Decisions
 
@@ -93,7 +106,8 @@ Small objects that makers far away leave on the beach and the pier, judged by `s
 `life`, `distant`, `weatherfx`, `mystery`, `shore`. `day.py` builds one date's per-minute astronomy, weather,
 season (`season.py`), schedule (`events.py`) and mysteries. `astro.py` and `weather.py` are
 self-contained. Tests (offline): `./venv/bin/python tests/test_astro.py` and `tests/test_weather.py`;
-the owner controls: `/usr/bin/python3 -m unittest tests.test_listener` (mock API on 127.0.0.1).
+the owner controls and the shore sync: `/usr/bin/python3 -m unittest tests.test_listener tests.test_shore_sync`
+(mock API on 127.0.0.1).
 
 - `astro.py` matches Skyfield/DE421 to 0.01 deg or better (sun, topocentric moon, VSOP87-truncated
   planets, precessed stars) and sun events to 1 s; it assumes UT1 = UTC and a fixed delta-T. The

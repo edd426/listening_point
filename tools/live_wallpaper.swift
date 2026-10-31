@@ -13,7 +13,8 @@
 // usage: live_wallpaper [ROOT]   frames are ROOT/days/YYYY-MM-DD/HHMM.jpg (local clock time);
 //        when today's frame is missing it uses the same minute from the newest earlier day,
 //        and with nothing at all it hides and lets the system wallpaper show. It also starts the
-//        render job (a LaunchAgent) at once when today's frames are missing, e.g. after a long sleep.
+//        render job (a LaunchAgent) at once when today's frames are missing, e.g. after a long sleep,
+//        and on waking when the shore was last synced more than an hour ago (the job syncs it first).
 //
 // It also puts the owner's controls in the menu bar: Light the lamp, and Leave a note… (a small
 // panel). The work is done by tools/listener.py (installed beside this binary in src/tools/), run off
@@ -25,6 +26,17 @@ import QuartzCore
 
 let wallpaperCache = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
     "Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches/com.apple.wallpaper.caches/extension-com.apple.wallpaper.extension.image")
+/// tools/shore_sync.py's record, written on every try once the shore is set up (no file: not set up).
+let shoreSyncState = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
+    "Library/Application Support/The Listening Point/shore/sync.json")
+
+/// Whether the shore was last synced (tried, online or not) more than an hour ago.
+func shoreSyncStale(_ now: Date = Date()) -> Bool {
+    guard let data = try? Data(contentsOf: shoreSyncState),
+          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+    let last = (obj["last_attempt_unix"] as? NSNumber)?.doubleValue ?? 0
+    return now.timeIntervalSince1970 - last > 3600
+}
 
 final class Live {
     let root: URL
@@ -643,6 +655,10 @@ nc.addObserver(forName: .NSCalendarDayChanged, object: nil, queue: .main) { _ in
 wc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
     live.tick()
     controls.wake()
+    // after the network has had a moment, as for the drain: the job syncs the shore before it renders
+    DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+        if shoreSyncStale() { live.kick() }
+    }
 }
 wc.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { _ in live.tick() }
 live.rebuild()
