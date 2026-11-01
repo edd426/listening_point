@@ -105,3 +105,11 @@ phases are their order. Every step gets a look test before it is installed.
   Phases 2-5 are built, reviewed against their look test and probes, and installed without waiting
   for him. Each look test is still rendered and left for him, and he can veto after the fact. A
   reference change (rN) follows the waypost README's "Changing the reference set".
+- **2026-11-01: phase 2 (sky) started.** Two parallel parts from `main` `4192c35`:
+  - `v3/clouds` (`~/Documents/Projects/lp-v3-clouds`): shaped clouds, sunbeams, sunrise/sunset on clouds.
+  - `v3/air` (`~/Documents/Projects/lp-v3-air`): geese, starlings, gulls, aircraft and contrails, a
+    balloon, a kite.
+
+  Probes: the tests pass; renders are deterministic; the reference r2 digest stays `7cbee1f4…`
+  (bit-identical reference renders, so no r3); time ratio ≤1.25 for clouds and ≤1.15 for air.
+  Each part writes `docs/v3/phase2-<part>.md`.
