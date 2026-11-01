@@ -8,19 +8,24 @@ An object pixel of albedo A (per channel c) at crop pixel (x, y) under a conditi
     out_c = LUT_c[min(w, 511)]
 
 and a contact-shadow pixel over the crop's own colour G is (G_c * (256 - s) + S_c * s) >> 8.
+
+Look B: L is the light on the pixel's face (front, top, east or west, see geometry.cell_face), and a
+pixel of the manifest's glow key also emits t += (A_c * EMIT * lamps) >> 8, with the condition's
+lamps (x256) and EMIT = 410 (1.6 x256): lamplight that comes on with the scene's own lamps.
 """
 import hashlib
 
 from .png import write_png
 from .rules import draw_order, paint
 
+EMIT = 410          # look B: a glow pixel emits 1.6 x its albedo when the lamps are fully lit
 ZOOM = 4
 ZOOM_MARGIN = 24
 ZOOM_MAX_W, ZOOM_MAX_H = 400, 250
 
 
-def shade(alb, light, lut, a, veil, vig):
-    t = alb * light
+def shade(alb, light, lut, a, veil, vig, lamps=0):
+    t = alb * light + ((alb * EMIT * lamps) >> 8)
     u = t * (256 - a) + veil * 256 * a
     w = (u * vig) >> 24
     return lut[w if w < 512 else 511]
@@ -41,19 +46,23 @@ def compose(ref, objs, cond):
                 for c in range(3):
                     out[j + c] = (out[j + c] * (256 - sa) + sr[c] * sa) >> 8
     cw = ref.cw
-    L, lut, V = cond.light, cond.lut, cond.veil_rgb
+    Ls, lut, V = cond.lights, cond.lut, cond.veil_rgb
     va, vig = cond.veil_alpha, ref.vignette
     cache = {}
     for k, o in enumerate(order, 1):
+        face, glow = o.face, o.glow
         for i, rgb in o.solid.items():
             if owner[i] != k:
                 continue
             y = i // cw
             x = i - y * cw
-            key = (rgb, va[y], vig[y >> 4][x >> 4])
+            f = face.get(i, 0)
+            e = cond.lamps if i in glow else 0
+            key = (rgb, f, e, va[y], vig[y >> 4][x >> 4])
             px = cache.get(key)
             if px is None:
-                px = bytes(shade(rgb[c], L[c], lut[c], key[1], V[c], key[2]) for c in range(3))
+                L = Ls[f]
+                px = bytes(shade(rgb[c], L[c], lut[c], key[3], V[c], key[4], e) for c in range(3))
                 cache[key] = px
             out[3 * i:3 * i + 3] = px
     return out
@@ -135,13 +144,14 @@ def write(path, width, height, pixels):
 
 def plan(ref, objs):
     """What the Mac draws, in order: for each live object its solid pixels (frame x, y, albedo,
-    is_label, shown) and the shadow pixels it casts (frame x, y, shown)."""
+    is_label, shown, face, glows) and the shadow pixels it casts (frame x, y, shown)."""
     order = draw_order(objs)
     owner, drawn = paint(order, ref.cw * ref.ch)
     cw = ref.cw
     out = []
     for k, o in enumerate(order, 1):
-        solid = [(i % cw + ref.cx, i // cw + ref.cy, o.solid[i], i in o.label, owner[i] == k) for i in sorted(o.solid)]
+        solid = [(i % cw + ref.cx, i // cw + ref.cy, o.solid[i], i in o.label, owner[i] == k, o.face.get(i, 0), i in o.glow)
+                 for i in sorted(o.solid)]
         shadow = [(i % cw + ref.cx, i // cw + ref.cy, owner[i] == 0) for i in drawn[k - 1]]
         out.append({"id": o.id, "seq": o.seq, "ground_y": o.ground_y, "solid": solid, "shadow": shadow})
     return out
@@ -152,8 +162,8 @@ def plan_sha256(ref, objs):
     h = hashlib.sha256()
     for o in plan(ref, objs):
         h.update(("%s %d %d\n" % (o["id"], o["seq"], o["ground_y"])).encode("ascii"))
-        for x, y, rgb, lab, shown in o["solid"]:
-            h.update(("%d %d %d %d %d %d %d\n" % (x, y, rgb[0], rgb[1], rgb[2], lab, shown)).encode("ascii"))
+        for x, y, rgb, lab, shown, face, glow in o["solid"]:
+            h.update(("%d %d %d %d %d %d %d %d %d\n" % (x, y, rgb[0], rgb[1], rgb[2], lab, shown, face, glow)).encode("ascii"))
         for x, y, shown in o["shadow"]:
             h.update(("s %d %d %d\n" % (x, y, shown)).encode("ascii"))
     return h.hexdigest()

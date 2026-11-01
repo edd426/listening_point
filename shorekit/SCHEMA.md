@@ -1,4 +1,11 @@
-# shorekit schema (kit 1.0.0)
+# shorekit schema (kit 1.0.0, look B)
+
+**Look B (experiment, branch `shore/look-b`).** Variant A's objects were specks at desktop size, its
+label plaque read as a UI chip, nothing glowed at night and objects were lit as one flat face. Look B
+changes: `scale` 1-4 and a perspective floor on size, `min_h`, beside the ceiling `max_h` (rule 1); a label is
+at most 8 characters cut 1 px per font pixel into a small pale driftwood board (4.3); an optional
+`glow` key lit at night, at most 64 px (rule 2, section 7); every pixel is lit by the face it shows,
+read off the bitmap's silhouette (4.4). The sections below describe look B.
 
 This file is the contract for everything that reads or writes shore data: the kit itself, the
 reference builder that renders reference sets on the Mac, the carrier that judges and publishes
@@ -92,9 +99,9 @@ Exactly these keys. `shorekit status` prints `KIT OK` when the running archive's
 {"shore": 1, "id": "2026-11-02-cairn", "maker": "maker-a", "kit": "1.0.0", "reference": "r1",
  "palette": {"a": [122, 118, 110], "b": [134, 130, 122]},
  "rows": ["..aa..", ".abba.", "aabbaa"],
- "scale": 1, "anchor": [3, 2],
+ "scale": 3, "anchor": [3, 2],
  "place": {"on": "shingle", "x": 2600, "y": 1655},
- "label": {"text": "FIRST STONE", "side": "right"}}
+ "label": {"text": "STONE", "side": "right"}, "glow": "b"}
 ```
 
 | Key | Rule |
@@ -103,11 +110,12 @@ Exactly these keys. `shorekit status` prints `KIT OK` when the running archive's
 | `id`, `maker`, `kit`, `reference` | section 1.2 |
 | `palette` | 1-16 keys, each one letter `a`-`z`; each value `[r, g, b]`, integers 0-255. Colours are **albedo** (unlit paint). Every key must be used. |
 | `rows` | 1-64 strings, all the same length 1-64. Each character is a palette key or `.` (transparent). The grid must be trimmed: the first and last rows and the first and last columns each hold an opaque cell. Row 0 is the top. |
-| `scale` | 1 or 2: pixels per cell side. |
+| `scale` | 1-4: pixels per cell side. |
 | `anchor` | `[column, row]` of a cell in the grid (it may be transparent). |
 | `place.on` | `"shingle"`, `"pier"`, or the id of a live object to build onto (not its own id). |
 | `place.x`, `place.y` | 0-9999. |
 | `label` | optional; exactly `{"text", "side"}`; `side` is `"left"` or `"right"`. `text` is checked by rule 6. |
+| `glow` | optional; one palette key whose cells are lit from within at night. Checked by rule 2. |
 
 No other keys, at any level.
 
@@ -128,27 +136,36 @@ So the anchor cell's bottom pixel row is row `y`, and its columns are `x - s//2 
 
 **Foot pixels** are the bottom pixel row (`foot_y`) under the opaque cells of the grid's last row.
 
-### 4.3 The label plaque
+### 4.3 The label board
 
-A label of `n` characters is carved on a driftwood plaque standing on the same foot row:
+A label of `n` characters (at most 8) is cut into a small driftwood board standing on the same foot
+row, one frame pixel per font pixel, so at desktop size it reads as a scrap of pale wood and the name
+only reads close up:
 
 ```
-pw = 12*n + 6, ph = 20
+pw = 6*n + 5, ph = 11
 side "right": px0 = right + 3        side "left": px0 = left - 2 - pw
-py0 = foot_y - 19
+py0 = foot_y - 10
 ```
 
-Plaque row `r` (0 at the top), column `c`:
-- transparent where `c < inset` or `c >= pw - inset`, with inset 2 on rows 0 and 19, 1 on rows 1 and 18, else 0;
-- **ink** where a glyph pixel falls: character `i` starts at `(px0 + 4 + 12*i, py0 + 3)` and each
-  pixel of its 5 x 7 glyph (`shorekit/font.py`) is a 2 x 2 block;
-- otherwise **grain** on row 2 where `c % 7 < 4` and on row 17 where `(c + 3) % 9 < 5`;
+Board row `r` (0 at the top), column `c`:
+- transparent where `c < inset` or `c >= pw - inset`, with inset 2 on rows 0 and 10, 1 on rows 1 and 9, else 0;
+- **ink** (the cut letters) where a glyph pixel falls: character `i` starts at `(px0 + 3 + 6*i, py0 + 2)`
+  and each pixel of its 5 x 7 glyph (`shorekit/font.py`) is one pixel;
+- otherwise **grain** on row 1 where `c % 7 < 4` and on row 9 where `(c + 3) % 9 < 5`;
 - otherwise **wood**.
 
-Wood, grain and ink albedos come from `palette.json` (`plaque`). The plaque's **foot pixels** are its
-row-19 pixels. Plaque pixels are part of the object's solid pixels and are its **label pixels**.
+Wood, grain and ink albedos come from `palette.json` (`plaque`). The board's **foot pixels** are its
+row-10 pixels. Board pixels are part of the object's solid pixels and are its **label pixels**. Every
+board pixel faces TOP (4.4): the board leans back and takes the light the beach does.
 
-### 4.4 Footprint, contact shadow, draw order
+### 4.4 Footprint, contact shadow, draw order, faces
+
+**Faces.** Every opaque cell (c, r) has a face, read off the grid: **TOP** (1) if r = 0 or cell
+(c, r-1) is `.`; else **EAST** (2) if exactly its left side is open (c = 0 or (c-1, r) is `.`, and
+(c+1, r) is opaque); else **WEST** (3) if exactly its right side is open; else **FRONT** (0). All of a
+cell's pixels share its face. The viewer looks south, so the left of the frame is east. A cell of the
+`glow` key is a **glow pixel**.
 
 An object's **solid pixels** are its opaque grid pixels plus its plaque pixels.
 
@@ -182,12 +199,16 @@ A candidate is judged in this order; a stage with errors stops the judging.
 2. **Local rules.** Rule 1 count: 16-2500 opaque cells (`E_SIZE`). Rule 2 (`E_PALETTE`): every
    palette channel is at most 240, and some entry `P` of `palette.json` satisfies
    `(1024 + R+Rp)*dR^2 + 2048*dG^2 + (1534 - R-Rp)*dB^2 <= 512*D^2` (exactly 512 times the squared
-   redmean distance). Rule 6 (`E_LABEL`): text matches `[A-Z0-9 .'-]{1,12}`, does not start or end
-   with a space, holds no two spaces in a row, and a `.` is followed only by a space, another `.`,
-   or the end (so no domain names).
+   redmean distance). The `glow` key instead (`E_GLOW`): within D of one of `palette.json`'s `glow`
+   colours, and its cells cover at most 64 px (`cells * scale^2`). Rule 6 (`E_LABEL`): text matches
+   `[A-Z0-9 .'-]{1,8}`, does not start or end with a space, holds no two spaces in a row, and a `.`
+   is followed only by a space, another `.`, or the end (so no domain names).
 3. **Support**: `on` names a live object, else `E_ON`.
 4. **Placement.** Rule 3 (`E_REGION`): every solid pixel is inside the region and not on keep-out.
-   Rule 1 height (`E_SIZE`): `h*s <= max_h[ground y]` (when the ground y is inside the region).
+   Rule 1 height (`E_SIZE`): `h*s <= max_h[ground y]` (when the ground y is inside the region), and
+   for objects `on` `shingle` or `pier`, `w*s + h*s >= 2*min_h[ground y]`: its sides average at
+   least `min_h`, big enough to notice (a long low log passes where a sliver fails; a thing built
+   onto another may be smaller).
    Rule 4 (`E_REST`), nothing floats: on `shingle`, every foot pixel's column has a dry band with
    `top <= foot_y <= bottom`, and the same for every plaque foot pixel; on `pier`, every foot pixel
    and plaque foot pixel is on the deck; built onto object `S`, at least half of the foot pixels
@@ -233,7 +254,10 @@ required. The kit refuses a set that breaks any rule below (`E_REFDATA`).
   on the deck if the integer point `(x, y)` is inside the polygon or on its boundary (even-odd
   crossing test plus an exact on-segment test, integers only; `reference.point_in_polygon`).
 - `max_h`: the tallest object, in pixels, that may stand with ground y = `max_h.y0 + j`; one value
-  per region row, each 1-1000. The plan's value is `round(64 * persp(y))`.
+  per region row, each 1-1000. Look B's value is `round(44 * persp(y))`.
+- `min_h`: likewise the size (the average of width and height) below which nothing may stand on the
+  shingle or the pier, never above `max_h`.
+  Look B's value is `round(18 * persp(y))` (`persp` in `tools/shore_reference.py`).
 
 ### 5.2 `palette.json`
 
@@ -246,7 +270,8 @@ required. The kit refuses a set that breaks any rule below (`E_REFDATA`).
 - `d`: the redmean distance D of rule 2, 1-765.
 - `entries`: 1-256 albedos the renderer uses on the shore (rock, shingle, wrack, timber, iron, sail,
   glass, seasonal grass, ...); names unique, `[a-z][a-z0-9-]{0,31}`; channels 0-255.
-- `plaque`: the plaque's three albedos.
+- `glow`: 0-16 light colours (same shape as `entries`, names unique across both) a glow key may take.
+- `plaque`: the label board's three albedos.
 
 ### 5.3 `conditions.json`
 
@@ -254,7 +279,7 @@ required. The kit refuses a set that breaks any rule below (`E_REFDATA`).
 {"shore_conditions": 1, "reference": "r1", "cell": 16,
  "vignette": [[ ...80 ints ], ... 40 rows],
  "conditions": [
-   {"name": "noon", "light": [300, 296, 288],
+   {"name": "noon", "light": [300, 296, 288], "top": [...], "east": [...], "west": [...], "lamps": 0,
     "lut": [[ ...512 ints ], [ ...512 ], [ ...512 ]],
     "veil": {"rgb": [0, 0, 0], "alpha": [ ...640 ints ]},
     "shadow": {"rgb": [22, 24, 30], "alpha": 110}},
@@ -265,8 +290,10 @@ required. The kit refuses a set that breaks any rule below (`E_REFDATA`).
   `16i .. 16i+15` by `16j .. 16j+15`.
 - `conditions`: exactly four, names unique `[a-z]{1,16}`; their order is the sheet's order. Each
   condition's crop is `<name>.png`.
-- `light`: the light x256 (0-4096) per channel on an upright surface at that minute, the `light()`
-  of the renderer without local pools.
+- `light`, `top`, `east`, `west`: the light x256 (0-4096) per channel on a FRONT, TOP, EAST and WEST
+  face at that minute, the `light()` of the renderer without local pools, for the normals in
+  `renderers/procedural/shore.py` (`FACES`).
+- `lamps`: how far the scene's lamps are lit, x256 (0-256): glow pixels emit then.
 - `lut`: per channel, 512 values 0-255: the tone curve of `grade()` without grain or vignette,
   indexed by linear value 0-511.
 - `veil`: the fog veil: colour (linear 0-511, the tone curve's domain: daylight fog is brighter
@@ -405,10 +432,11 @@ cache: a ledger that drops or changes a known event is refused, exit 3).
 
 ## 7. The compositor
 
-For an object pixel of albedo `A` (per channel `c`) at crop pixel `(x, y)` under a condition:
+For an object pixel of albedo `A` (per channel `c`) at crop pixel `(x, y)` under a condition, with
+`L` the light of the pixel's face (4.4) and `g` 1 for a glow pixel, else 0:
 
 ```
-t = A_c * light_c
+t = A_c * L_c + g * ((A_c * 410 * lamps) >> 8)
 u = t * (256 - alpha_y) + veil_c * 256 * alpha_y       alpha_y = veil.alpha[y]
 w = (u * vignette[y >> 4][x >> 4]) >> 24
 out_c = lut_c[min(w, 511)]
@@ -435,12 +463,13 @@ ref = load_reference(".../reference/r1")
 shore = load_shore(ref, ".../ledger.json", ".../objects")       # raises ShoreError E_LEDGER
 for o in plan(ref, shore.live):          # draw order
     o["id"], o["seq"], shore.info[o["id"]]["lands"]
-    o["solid"]    # [(x, y, (r, g, b) albedo, is_label, shown)], frame pixels
+    o["solid"]    # [(x, y, (r, g, b) albedo, is_label, shown, face, glow)], frame pixels
     o["shadow"]   # [(x, y, shown)]: the shadow pixels it casts
 ```
 
 Drawing each object's solid pixels in this order, lit by the frame, reproduces the kit's coverage
-exactly. The kit is importable straight from the zipapp (`sys.path.insert(0, "shorekit.pyz")`).
+exactly. The renderer also gives each lit area a halo, a pool of light on the ground and, on the
+pier, a streak on the water; the kit's preview draws only the pixels. The kit is importable straight from the zipapp (`sys.path.insert(0, "shorekit.pyz")`).
 
 ## 9. Exit codes
 

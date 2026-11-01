@@ -71,7 +71,7 @@ def point_in_polygon(x, y, poly):
 
 
 class Condition:
-    __slots__ = ("name", "light", "lut", "veil_rgb", "veil_alpha", "shadow_rgb", "shadow_alpha")
+    __slots__ = ("name", "light", "lights", "lamps", "lut", "veil_rgb", "veil_alpha", "shadow_rgb", "shadow_alpha")
 
 
 class Reference:
@@ -123,7 +123,7 @@ class Reference:
     # ---------------------------------------------------------------- surfaces --
     def _surfaces(self, s):
         what = "surfaces.json"
-        _keys(s, ("shore_surfaces", "reference", "frame", "crop", "region", "dry", "deck", "max_h"), what)
+        _keys(s, ("shore_surfaces", "reference", "frame", "crop", "region", "dry", "deck", "max_h", "min_h"), what)
         if not _is_one(s["shore_surfaces"]) or not is_str(s["reference"]) or not REF_RE.fullmatch(s["reference"]):
             _fail(what, "shore_surfaces must be 1 and reference like r1")
         _keys(s["frame"], ("w", "h"), what + " frame")
@@ -168,6 +168,13 @@ class Reference:
         if not is_int(m["y0"]) or m["y0"] != self.ry0:
             _fail(what, "max_h.y0 must equal region.y0")
         self.max_h = _ints(m["h"], ny, 1, 1000, what + " max_h.h")
+        m = s["min_h"]
+        _keys(m, ("y0", "h"), what + " min_h")
+        if not is_int(m["y0"]) or m["y0"] != self.ry0:
+            _fail(what, "min_h.y0 must equal region.y0")
+        self.min_h = _ints(m["h"], ny, 1, 1000, what + " min_h.h")
+        if any(lo > hi for lo, hi in zip(self.min_h, self.max_h)):
+            _fail(what, "min_h must not exceed max_h on any row")
 
     def _deck_mask(self):
         mask = bytearray(self.cw * self.ch)
@@ -183,7 +190,7 @@ class Reference:
     # ----------------------------------------------------------------- palette --
     def _palette(self, p):
         what = "palette.json"
-        _keys(p, ("shore_palette", "reference", "d", "entries", "plaque"), what)
+        _keys(p, ("shore_palette", "reference", "d", "entries", "glow", "plaque"), what)
         if not _is_one(p["shore_palette"]) or not is_str(p["reference"]) or not REF_RE.fullmatch(p["reference"]):
             _fail(what, "shore_palette must be 1 and reference like r1")
         self.d = _int(p["d"], 1, 765, what + " d")
@@ -198,6 +205,16 @@ class Reference:
                 _fail(what, "entry names must be unique and match [a-z][a-z0-9-]{0,31}")
             names.add(e["name"])
             self.palette.append((e["name"], _rgb(e["rgb"], what + " " + e["name"])))
+        lights = p["glow"]
+        if type(lights) is not list or len(lights) > 16:
+            _fail(what, "glow must be a list of 0-16 light colours")
+        self.glow = []
+        for e in lights:
+            _keys(e, ("name", "rgb"), what + " glow entry")
+            if not is_str(e["name"]) or not NAME_RE.fullmatch(e["name"]) or e["name"] in names:
+                _fail(what, "entry names must be unique and match [a-z][a-z0-9-]{0,31}")
+            names.add(e["name"])
+            self.glow.append((e["name"], _rgb(e["rgb"], what + " " + e["name"])))
         _keys(p["plaque"], ("wood", "grain", "ink"), what + " plaque")
         self.plaque = {k: _rgb(p["plaque"][k], what + " plaque." + k) for k in ("wood", "grain", "ink")}
 
@@ -220,7 +237,7 @@ class Reference:
         self.conditions = []
         seen = set()
         for k in conds:
-            _keys(k, ("name", "light", "lut", "veil", "shadow"), what + " condition")
+            _keys(k, ("name", "light", "top", "east", "west", "lamps", "lut", "veil", "shadow"), what + " condition")
             if not is_str(k["name"]) or not COND_RE.fullmatch(k["name"]) or k["name"] in seen:
                 _fail(what, "condition names must be unique and match [a-z]{1,16}")
             seen.add(k["name"])
@@ -228,6 +245,10 @@ class Reference:
             q.name = k["name"]
             w = what + " " + q.name
             q.light = tuple(_ints(k["light"], 3, 0, 4096, w + ".light"))
+            # look B: the light on each face (geometry.FACE_*: front, top, east, west), and how far the
+            # lamps are lit (x256): a glow key's cells emit then
+            q.lights = (q.light,) + tuple(tuple(_ints(k[f], 3, 0, 4096, w + "." + f)) for f in ("top", "east", "west"))
+            q.lamps = _int(k["lamps"], 0, 256, w + ".lamps")
             lut = k["lut"]
             if type(lut) is not list or len(lut) != 3:
                 _fail(w, "lut must be 3 lists of 512")
@@ -265,6 +286,11 @@ class Reference:
         if not self.ry0 <= y <= self.ry1:
             return None
         return self.max_h[y - self.ry0]
+
+    def height_min(self, y):
+        if not self.ry0 <= y <= self.ry1:
+            return None
+        return self.min_h[y - self.ry0]
 
 
 def load_reference(path):

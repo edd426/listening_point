@@ -1,4 +1,4 @@
-"""Labels: 1-12 characters of [A-Z0-9 .'-], drawn in the kit's own 5x7 font. No homoglyphs,
+"""Labels: 1-8 characters of [A-Z0-9 .'-] (look B), cut in the kit's own 5x7 font. No homoglyphs,
 no bidi controls, no URLs."""
 import unittest
 
@@ -18,11 +18,11 @@ def with_label(text):
 
 class TestLabelText(unittest.TestCase):
     def test_good(self):
-        for t in ("A", "FIRST STONE", "SEEN AT DAWN", "NO. 5", "IT'S HERE", "X-1", "WAIT...", "0O0O", "123456789012"):
+        for t in ("A", "FIRST", "AT DAWN", "NO. 5", "IT'S", "X-1", "WAIT...", "0O0O", "12345678"):
             self.assertEqual(check_label(t), t)
 
     def test_bad_text(self):
-        for t in ("", "lowercase", "Hello", "THIRTEEN CHAR", " LEAD", "TRAIL ", "TWO  SPACES", "WWW.EXAMPLE",
+        for t in ("", "lowercase", "Hello", "NINE CHAR", "FIRST STONE", " LEAD", "TRAIL ", "TWO  SPACES", "WWW.EXAMPLE",
                   "A.B", "HTTP://X", "A/B", "A:B", "A_B", "A,B", "A!", "A?", "A\"B", "A@B", "#1", "A+B", "(A)"):
             with self.assertRaises(ShoreError, msg=t) as cm:
                 check_label(t)
@@ -62,15 +62,16 @@ class TestFont(unittest.TestCase):
         self.assertNotEqual(GLYPHS["1"], GLYPHS["I"])
 
     def test_plaque(self):
-        rows = plaque_cells("SEEN AT DAWN")
+        rows = plaque_cells("AT DAWN")
         self.assertEqual(len(rows), PLAQUE_H)
-        self.assertEqual(len(rows[0]), plaque_width(12))
-        self.assertEqual(plaque_width(12), 150)
+        self.assertEqual(PLAQUE_H, 11)
+        self.assertEqual(len(rows[0]), plaque_width(7))
+        self.assertEqual(plaque_width(8), 53)
         self.assertEqual(rows[0][:3], "..w")
         self.assertEqual(rows[-1][:3], "..w")
         ink = sum(r.count("i") for r in rows)
-        dots = sum(GLYPHS[c][y].count("#") for c in "SEEN AT DAWN" for y in range(7))
-        self.assertEqual(ink, 4 * dots)
+        dots = sum(GLYPHS[c][y].count("#") for c in "AT DAWN" for y in range(7))
+        self.assertEqual(ink, dots)              # look B: one pixel per font pixel
 
 
 if __name__ == "__main__":

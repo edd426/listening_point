@@ -1,7 +1,11 @@
-"""The kit's 5x7 bitmap font and the driftwood plaque a label is carved on.
+"""The kit's 5x7 bitmap font and the driftwood board a label is carved into.
 
 Only [A-Z0-9 .'-] exist, so a label cannot carry a homoglyph, a bidi control or a URL. The zero
 is slashed so it never reads as O.
+
+Look B: the letters are cut one frame pixel per font pixel, a shade darker than the wood, into a
+board 11 px tall leaning back at the object's foot, lit like the beach. From the desk it reads as a
+scrap of driftwood; the name only reads when you lean in.
 """
 import re
 
@@ -9,9 +13,9 @@ from . import MAX_LABEL
 from .errors import ShoreError
 
 GLYPH_W, GLYPH_H = 5, 7
-SCALE = 2                    # glyphs are drawn at x2
+SCALE = 1                    # glyphs are cut at x1 (look B)
 ADVANCE = (GLYPH_W + 1) * SCALE
-PAD_X, PAD_Y = 4, 3          # wood around the text, in pixels
+PAD_X, PAD_Y = 3, 2          # wood around the text, in pixels
 PLAQUE_H = GLYPH_H * SCALE + 2 * PAD_Y
 GAP = 2                      # pixels of clear ground between the object and its plaque
 
@@ -87,10 +91,10 @@ def plaque_width(n):
 
 
 def plaque_cells(text):
-    """The plaque as rows of pixels: 'w' wood, 'g' grain, 'i' ink, '.' none.
+    """The board as rows of pixels: 'w' wood, 'g' grain, 'i' the cut letters, '.' none.
 
-    Row 0 is the top; the last row is the plaque's foot. The ends are rounded off by one and two
-    pixels on the top and bottom two rows, like a worn plank."""
+    Row 0 is the top; the last row is the board's foot. The ends are rounded off by one and two
+    pixels on the top and bottom two rows, like a worn plank; grain runs along rows 1 and h-2."""
     pw = plaque_width(len(text))
     ph = PLAQUE_H
     rows = []
@@ -100,7 +104,7 @@ def plaque_cells(text):
         for c in range(pw):
             if c < inset or c >= pw - inset:
                 row.append(".")
-            elif (r == 2 and c % 7 < 4) or (r == ph - 3 and (c + 3) % 9 < 5):
+            elif (r == 1 and c % 7 < 4) or (r == ph - 2 and (c + 3) % 9 < 5):
                 row.append("g")
             else:
                 row.append("w")

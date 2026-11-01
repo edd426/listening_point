@@ -4,7 +4,7 @@ Every comparison is between integers; a percentage threshold t is tested as 100*
 """
 from array import array
 
-from . import MAX_CHANNEL, MAX_OPAQUE, MIN_OPAQUE
+from . import GLOW_MAX_PX, MAX_CHANNEL, MAX_OPAQUE, MIN_OPAQUE
 from .errors import ShoreError
 from .font import check_label
 from .geometry import SURFACE_PIER, SURFACE_SHINGLE, check_height, check_resting, place
@@ -33,8 +33,18 @@ def redmean512(c1, c2):
     return (1024 + rs) * dr * dr + 2048 * dg * dg + (1534 - rs) * db * db
 
 
+def _nearest(c, entries):
+    best = None
+    for name, rgb in entries:
+        d = redmean512(c, rgb)
+        if best is None or d < best[0]:
+            best = (d, name, rgb)
+    return best
+
+
 def check_local(m, ref):
-    """Rules 1 (cell count), 2 (palette) and 6 (label text): the ones that need no placement."""
+    """Rules 1 (cell count), 2 (palette, and look B's glow) and 6 (label text): the ones that need no
+    placement."""
     errs = []
     n = m.opaque_cells()
     if not MIN_OPAQUE <= n <= MAX_OPAQUE:
@@ -45,6 +55,20 @@ def check_local(m, ref):
         hi = max(c)
         if hi > MAX_CHANNEL:
             errs.append(ShoreError("E_PALETTE", "'%s' (%d,%d,%d) has a channel of %d, max %d" % (k, c[0], c[1], c[2], hi, MAX_CHANNEL)))
+            continue
+        if k == m.glow:
+            # the lit key is judged against the reference's light colours only
+            best = _nearest(c, ref.glow)
+            if best is None or best[0] > lim:
+                if best is None:
+                    errs.append(ShoreError("E_GLOW", "this reference set has no light colours: nothing may glow"))
+                else:
+                    d, name, rgb = best
+                    errs.append(ShoreError("E_GLOW", "glow '%s' (%d,%d,%d) is %d from the nearest light colour %s (%d,%d,%d), max %d"
+                                           % (k, c[0], c[1], c[2], isqrt(d // 512), name, rgb[0], rgb[1], rgb[2], ref.d)))
+            px = sum(row.count(k) for row in m.rows) * m.scale * m.scale
+            if px > GLOW_MAX_PX:
+                errs.append(ShoreError("E_GLOW", "glow '%s' lights %d px, max %d" % (k, px, GLOW_MAX_PX)))
             continue
         best = None
         for name, rgb in ref.palette:
