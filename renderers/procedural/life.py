@@ -152,12 +152,12 @@ class LifeMixin:
         L.ellipse(nx, ny, 0.22 * k, 0.17 * k, white)
         L.line([(nx - f * 0.1 * k, ny - 0.1 * k), (nx - f * 0.55 * k, ny - 0.02 * k)], dark, 0.06 * k)
         L.line([(nx + f * 0.18 * k, ny), (nx + f * 0.85 * k, ny + (0.25 if hunting else 0.05) * k)], bill, 0.08 * k)
-        L.composite()
+        L.composite(allow=self.shore_allow(L, y))      # it stands in the water: whatever stands on the shore is nearer
         # its reflection, broken by the ripples
         R = Layer(self, x - 3 * k, y, x + 3 * k, y + 4 * k)
         R.line([(x, y), (x + f * 0.2 * k, y + 1.4 * k)], grey * 0.5, 0.4 * k, a=0.35)
         R.ellipse(x, y + 1.9 * k, 0.6 * k, 0.35 * k, grey * 0.5, a=0.3)
-        R.composite()
+        R.composite(allow=self.shore_allow(R, y))
 
     # ------------------------------------------------------------------ owl --
     def owl(self):
@@ -249,14 +249,15 @@ class LifeMixin:
         self.glow(px, py, 4 * s, (255, 226, 170), 1.3 * on)
         self.glow(px, py, 40 * s, (255, 176, 96), 0.25 * on, tail=0.3)
         r = self.rng
-        for _ in range(3 if 100 < self.season.doy < 290 and self.wx.temp_c > 8 else 0):   # moths around the lamp
+        for _ in range(3 if 100 < self.season.doy < 290 and self.wx.temp_c > 8 and not self.reference else 0):   # moths around the lamp
             mx, my = lx + r.normal(0, 22 * s), ly + r.normal(0, 18 * s)
             self.glow(mx, my, 1.6 * s, (255, 230, 190), 0.9 * on)
         if self.observing:
             cx, cy, R = self.tw["cx"], self.tw["yt"] - 16 * s, self.tw["r"]
             th = self.scope_theta
             self.glow(cx + math.cos(th) * R * 0.6, cy - math.sin(th) * R * 0.6, 20 * s, (200, 50, 36), 0.25)
-        if self.dark > 0.5 and self.season.fireflies > 0.05 and self.wx.temp_c > 14 and self.wx.rain < 0.05:   # fireflies
+        if self.dark > 0.5 and self.season.fireflies > 0.05 and self.wx.temp_c > 14 and self.wx.rain < 0.05 \
+                and not self.reference:   # fireflies
             for _ in range(int(22 * self.season.fireflies)):
                 fx, fy = r.uniform(0.36, 0.64), r.uniform(0.66, 0.84)
                 if fy < self.edge(fx) + 0.01:

@@ -220,6 +220,7 @@ class Layer:
 class FrameBase:
     def __init__(self, day, minute, scale=1.0, sun=None):
         self.day, self.m = day, int(minute)
+        self.reference = getattr(day, "reference", False)    # holding still for the shore kit's reference frames
         self.t = self.m / 60.0                  # local clock time in hours
         self.h = (self.m // 60) % 24
         self.season = day.season
@@ -277,6 +278,8 @@ class FrameBase:
                 for sv in (-0.52, 0.52):
                     wx_ = self.tw["cx"] + sv * self.tw["r"] * 1.3
                     self.pools.append((wx_, 0.548 * self.H, self.tw["yb"] + 40 * s, WARM, 90 * s, 0.22 * self.windows_lit))
+            if hasattr(self, "shore_pools"):
+                self.shore_pools()          # lamplight from the shore's objects (shore.py)
         self._edge = hill_edge()
         self.lamp_pos = (LAMP[0] * self.W, LAMP[1] * self.H - LAMP[2] * s - 15 * s)
 
@@ -356,8 +359,8 @@ class FrameBase:
             out = out + np.exp(-d2)[..., None] * col * k
         return out
 
-    def lit(self, albedo, nrm, x=None, y=None, ao=1.0):
-        L = self.light(normalize(nrm)) * ao
+    def lit(self, albedo, nrm, x=None, y=None, ao=1.0, shade=None):
+        L = self.light(normalize(nrm), shade) * ao
         if x is not None and self.pools:
             L = L + self.local(np.float32(x), np.float32(y))
         return np.asarray(albedo, np.float32) * L

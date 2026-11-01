@@ -666,6 +666,35 @@ def fair_day(date, tz_name=TZ):
     return _build(date, tz_name, LAT, LON, th, hv, "fair", "fair weather for previews and release builds")
 
 
+FIXED = {
+    # cloudless, dry and calm, mild
+    "clear": dict(temp_c=12.0, rh=0.55, dew_c=3.4, cloud_low=0.0, cloud_mid=0.0, cloud_high=0.0, cloud_total=0.0,
+                  visibility_m=40000.0, wind_ms=2.5, gust_ms=4.0, wind_dir_deg=250.0, code=0, fog=0.0),
+    # a still fog: 400 m visibility, about three quarters of the way to the densest fog the renderer draws
+    "fog": dict(temp_c=8.0, rh=0.98, dew_c=7.7, cloud_low=0.0, cloud_mid=0.0, cloud_high=0.0, cloud_total=0.0,
+                visibility_m=400.0, wind_ms=1.0, gust_ms=2.0, wind_dir_deg=250.0, code=45,
+                fog=float(np.log(1e4 / 400) / np.log(1e4 / 150))),
+}
+
+
+def fixed_day(date, kind, tz_name=TZ):
+    """The same weather all day long, "clear" or "fog", for frames that must not depend on a forecast
+    (the shore kit's reference frames). Nothing falls and nothing lies on the ground."""
+    v = FIXED[kind]
+    t = _minutes(date, tz_name)
+
+    def const(x, kind=np.float32):
+        return np.full(len(t), x, kind)
+
+    keys = ("temp_c", "rh", "dew_c", "cloud_low", "cloud_mid", "cloud_high", "cloud_total", "visibility_m",
+            "wind_ms", "gust_ms", "wind_dir_deg", "fog")
+    none = ("precip_mmph", "rain_mmph", "snowfall_cmph", "snow_depth_m", "rain", "snow", "drizzle", "thunder", "wet",
+            "snow_cover", "frost")
+    return DayWeather(date=date, tz_name=tz_name, source=kind, reason=f"the same {kind} weather all day", fetched_at=None,
+                      utc=t, code=const(v["code"], np.int16), **{k: const(v[k]) for k in keys},
+                      **{k: const(0.0) for k in none})
+
+
 # ------------------------------------------------------------------ public ---
 def day_weather(date, tz_name=TZ, lat=LAT, lon=LON, cache_dir=CACHE, offline=False, forecast=None):
     """Weather for one local day: the live Open-Meteo forecast (or the forecast dict passed in), else the

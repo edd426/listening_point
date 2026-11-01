@@ -51,6 +51,7 @@ class PropsMixin:
         s = self.s
         cx, cy, size = MOORED[0] * self.W, MOORED[1] * self.H, 170 * s
         self.boat(cx, cy, size, -1, False, masthead=True)
+        self.listener_window(cx, cy, size)      # the listener lives aboard: a lamp in the deckhouse on a lit evening
         # the bow line, slack, to the post at the end of the pier
         px, py = self.pproj(*self.pier_pt(1.0, 0.06, PIER3["deck"] + 0.008))
         bx, by = cx - 0.52 * size, cy - 0.04 * size

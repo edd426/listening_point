@@ -6,3 +6,5 @@ __pycache__/
 *.heic
 *.png
 backups/
+dist/
+listener.json

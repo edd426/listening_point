@@ -31,11 +31,13 @@ class SeaMixin:
         if self.lights_on > 0:
             px, py = self.pier_lantern()
             self.emitters.append((px, py, np.array([255, 196, 120], np.float32), 1.2 * self.lights_on, self.pier_water_y()))
+            self.shore_emitters()
         if self.day.events.boat(self.t) is None:
             bx, by = MOORED[0] * W, MOORED[1] * H
             sz = 170 * s
             if self.night > 0:
                 self.emitters.append((bx + 0.05 * sz, by - 1.22 * sz, np.array([230, 235, 255], np.float32), 0.5 * self.night, by + 0.1 * sz))
+            self.listener_emitter()
 
     def pier_lantern(self):
         x, y = self.pproj(*self.pier_pt(1.0, 0.06, PIER3["deck"] + 0.112))

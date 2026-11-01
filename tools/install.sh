@@ -4,7 +4,8 @@
 #    because launchd jobs may not read ~/Documents, where this repo lives
 #  - the live wallpaper helper: a window at desktop level showing the frame for the current minute
 #  - two LaunchAgents: one keeps the helper running, one renders frames whenever the Mac is awake
-#    (every 15 minutes, and at once on wake: the helper starts it when today's frames are missing)
+#    (every 15 minutes, and at once on wake: the helper starts it when today's frames are missing, or
+#    when the shore was last synced more than an hour ago); that job also syncs the shore (shore_sync.py)
 #  - an hourly HEIC of today as the system wallpaper (lock screen, Mission Control, Space switches, fallback);
 #    rebuilt daily once the helper has Full Disk Access to clear the wallpaper cache, else monthly
 # usage: tools/install.sh            undo with tools/uninstall.sh
@@ -17,7 +18,8 @@ LIVE=com.edd426.listening-point.live
 RENDER=com.edd426.listening-point.render
 mkdir -p "$APP/src" "$ROOT/days" "$AGENTS" "$HOME/Library/Logs"
 
-rsync -a --delete --exclude __pycache__ renderers tools requirements.txt "$APP/src/"
+# shorekit/ goes beside renderers/: the renderer draws the shore with it, and tools/shore_sync.py checks the ledger with it
+rsync -a --delete --exclude __pycache__ renderers tools shorekit requirements.txt "$APP/src/"
 if [ ! -x "$APP/venv/bin/python" ]; then
   /usr/bin/python3 -m venv "$APP/venv"
   "$APP/venv/bin/pip" install -q --upgrade pip

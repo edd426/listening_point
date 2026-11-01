@@ -13,6 +13,7 @@ import numpy as np
 
 import astro
 import events
+import shore as shore_mod
 import weather as wxmod
 from mystery import Mysteries
 from season import Season
@@ -23,7 +24,12 @@ PLANETS = ("Mercury", "Venus", "Mars", "Jupiter", "Saturn")
 
 class Day:
     def __init__(self, date, lat=BUDAPEST["lat"], lon=BUDAPEST["lon"], tz=BUDAPEST["tz"],
-                 weather="auto", cache_dir=None):
+                 weather="auto", cache_dir=None, reference=False, shore=None, lamp=None):
+        """weather: auto | fair | synthetic | offline | clear | fog (the last two are the same all day).
+        reference: hold the scene still for the shore kit's reference frames: no creatures, no rare
+        events, no sailing trip, no grain, and the tide at high water.
+        shore: a local shore cache directory (shorekit's layout) whose objects are drawn; lamp: the
+        listener's lamp-state file. Both are optional; without them the scene is as it always was."""
         self.date, self.lat, self.lon, self.tzname = date, lat, lon, tz
         self.tz = ZoneInfo(tz)
         mid = dt.datetime.combine(date, dt.time(0, 0), self.tz)
@@ -67,8 +73,26 @@ class Day:
         self.drift_n = np.concatenate([[0.0], np.cumsum(-v * np.cos(th)) * 0.06])
         self.events = events.Schedule(self)
         self.mysteries = Mysteries(self)
+        self.reference = bool(reference)
+        if self.reference:
+            self._hold_still()
+        self.shore = shore_mod.load_shore(shore, self) if shore else None
+        self.lamp_lit = shore_mod.lamp_lit(lamp, date, self.tz) if lamp else None
+
+    def _hold_still(self):
+        """The reference mode: nothing that comes and goes, so the shore kit sees the bare scene."""
+        ev, my = self.events, self.mysteries
+        ev.trip, ev.gulls, ev.geese, ev.meteors = None, [], [], {}
+        ev.heron, ev.owl = False, False
+        ev.cat = [(0, "inside", 0.0, 0.0)]
+        for k in ("comet", "ghost", "cottage", "lantern", "prints", "whale", "bottle", "book"):
+            setattr(my, k, None)
+        my.clock_stopped, my.door = False, False
+        self.tide = np.ones_like(self.tide)
 
     def _weather(self, mode, cache_dir):
+        if mode in wxmod.FIXED:
+            return wxmod.fixed_day(self.date, mode, self.tzname)
         if mode == "fair":
             return wxmod.fair_day(self.date, self.tzname)
         if mode == "synthetic":

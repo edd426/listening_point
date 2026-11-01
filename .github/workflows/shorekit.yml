@@ -1,0 +1,82 @@
+name: shorekit
+
+# The shore kit must reach identical verdicts, footprints and preview pixels on every machine
+# that runs it. This runs the tests (golden values included) on x86_64 Linux and arm64 macOS
+# under Python 3.9 and 3.12, checks that the zipapp builds to the same bytes everywhere, and
+# refuses any commit that carries real shore data.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  no-shore-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Refuse committed shore data
+        run: python3 .github/scripts/no_shore_data.py
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # setup-python ships 3.9 only up to Ubuntu 24.04 (ubuntu-latest is 26.04 and has none).
+          - {os: ubuntu-24.04, python: "3.9"}
+          - {os: ubuntu-latest, python: "3.12"}
+          # setup-python has no arm64 build of 3.9 for macOS; the runner's own /usr/bin/python3
+          # is the Command Line Tools' 3.9, the same interpreter the Mac runs the kit with.
+          - {os: macos-latest, python: "3.9", system: true}
+          - {os: macos-latest, python: "3.12"}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        if: ${{ !matrix.system }}
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Choose the interpreter
+        run: |
+          if [ "${{ matrix.system }}" = "true" ]; then PY=/usr/bin/python3; else PY=python; fi
+          "$PY" -c "import sys, platform; v = '%d.%d' % sys.version_info[:2]; print(sys.version, platform.machine()); assert v == '${{ matrix.python }}', v"
+          echo "PY=$PY" >> "$GITHUB_ENV"
+      - name: Tests, golden values included
+        run: $PY -m unittest discover -s shorekit/tests -v
+      - name: Build the zipapp twice; the bytes must match
+        run: |
+          $PY -m shorekit.build
+          shasum -a 256 dist/shorekit.pyz | cut -d' ' -f1 > first.txt
+          $PY -m shorekit.build
+          shasum -a 256 dist/shorekit.pyz | cut -d' ' -f1 > second.txt
+          cmp first.txt second.txt
+          $PY -I dist/shorekit.pyz status
+          mkdir -p pyz-hash
+          cp first.txt "pyz-hash/${{ matrix.os }}-${{ matrix.python }}.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: pyz-hash-${{ matrix.os }}-${{ matrix.python }}
+          path: pyz-hash/
+
+  same-bytes-everywhere:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          pattern: pyz-hash-*
+          merge-multiple: true
+          path: pyz-hash
+      - name: Every platform built the same shorekit.pyz
+        run: |
+          for f in pyz-hash/*.txt; do echo "$(cat "$f")  $f"; done
+          test "$(ls pyz-hash/*.txt | wc -l)" -eq 4
+          test "$(cat pyz-hash/*.txt | sort -u | wc -l)" -eq 1

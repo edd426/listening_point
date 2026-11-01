@@ -2,6 +2,11 @@
 """Keep the live wallpaper's frames ready on a laptop that sleeps a lot. launchd runs this every
 15 minutes while the Mac is awake, and the helper starts it on wake when frames are missing.
 
+- First, every run: sends whatever the menu-bar controls queued while offline (`listener.py drain`).
+- Then, once the shore is set up (the controls' key is in the Keychain): at most hourly, fetches and checks
+  the shore (`shore_sync.py`), and renders again the frames the shore or the lamp has changed since they
+  were made: from an object's landing (or the moment the sea took one) on, and the dark minutes from the
+  moment the lamp was lit. Every frame is rendered with the synced cache (--shore) and the lamp (--lamp).
 - On power: the rest of today (from the current minute on), then all of tomorrow.
 - On battery with at least half a charge: when less than an hour is ready, the next three hours,
   with one worker.
@@ -25,6 +30,7 @@ import shutil
 import subprocess
 import sys
 import time
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
@@ -37,6 +43,13 @@ CACHE = os.path.expanduser("~/Library/Caches/listening-point")
 HEIC = "The Listening Point.heic"
 PACKER = os.path.join(HERE, "..", "..", "make_h24")
 sys.path.insert(0, PROC)
+sys.path.insert(1, HERE)
+
+import shore_sync  # noqa: E402  (stdlib and the kit only)
+
+SYNC = os.path.join(HERE, "shore_sync.py")
+SHORE = shore_sync.cache_dir(shore_sync.HOME)       # the synced shore, in the kit's layout
+LAMP = shore_sync.lamp_file(shore_sync.HOME)        # the lamp state the controls (and sync) keep
 
 
 def log(*a):
@@ -89,7 +102,7 @@ def render(days, d, minutes, jobs, why):
     ok = True
     for a, b in spans:
         cmd = [sys.executable, RENDERER, folder, "--date", d.isoformat(), "--minutes", f"{a}-{b}", "--scale", "0.75",
-               "--jobs", str(workers(jobs)), "--cache", CACHE, "--skip-existing", "--quality", "90"]
+               "--jobs", str(workers(jobs)), "--cache", CACHE, "--skip-existing", "--quality", "90"] + shore_args()
         with open(LOG, "a") as f:
             r = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
         ok = ok and r.returncode == 0
@@ -178,7 +191,7 @@ def refresh_hourly(days, root, today, force=False):
     if missing(folder, hours):
         os.makedirs(folder, exist_ok=True)
         cmd = [sys.executable, RENDERER, folder, "--date", today.isoformat(), "--hours", "0-23", "--scale", "0.75",
-               "--jobs", "1", "--cache", CACHE, "--skip-existing", "--quality", "90"]
+               "--jobs", "1", "--cache", CACHE, "--skip-existing", "--quality", "90"] + shore_args()
         with open(LOG, "a") as f:
             subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
     frames = [os.path.join(folder, f"{h:02d}00.jpg") for h in range(24)]
@@ -196,6 +209,128 @@ def refresh_hourly(days, root, today, force=False):
     log(f"hourly wallpaper rebuilt for {today}")
 
 
+def drain_listener():
+    """Send whatever the menu-bar controls left queued (the lamp, notes) while the Mac was offline.
+    listener.py keeps its own lock and time budget; this never holds up or breaks a render."""
+    listener = os.path.join(HERE, "listener.py")
+    if not os.path.exists(listener):
+        return
+    try:
+        with open(LOG, "a") as f:
+            subprocess.run([sys.executable, "-I", listener, "drain"], stdin=subprocess.DEVNULL, stdout=f,
+                           stderr=subprocess.STDOUT, timeout=90)
+    except Exception as e:
+        log(f"listener drain failed: {e}")
+
+
+def shore_args():
+    """What the renderer draws the shore and the lamp from: the synced cache, once it has a reference set and
+    a ledger sync accepted, and the lamp-state file. Without either the frames are what they always were."""
+    return (["--shore", SHORE] if shore_sync.ready(SHORE) else []) + ["--lamp", LAMP]
+
+
+def shore_on():
+    """The shore is set up once the controls' key is in the Keychain (docs/LISTENER.md); until then nightly
+    leaves it alone: no reference set, no sync."""
+    try:
+        cfg, _ = shore_sync.listener.load_config(shore_sync.listener.Paths(shore_sync.HOME))
+    except Exception:
+        return False
+    return shore_sync.listener.key_present(cfg)
+
+
+def ensure_reference():
+    """This Mac's own reference set, which sync replays the ledger against (and the set the owner publishes
+    to the shore repository): rendered once, about a minute, into a hidden folder that is renamed into place
+    only when it is complete. A failed build waits a day before it is tried again."""
+    dst = shore_sync.reference_dir(SHORE)
+    if os.path.isdir(dst):
+        return
+    base, name = os.path.split(dst)
+    tmp, failed = os.path.join(base, f".{name}.partial"), os.path.join(base, f".{name}.failed")
+    if os.path.exists(failed) and time.time() - os.path.getmtime(failed) < 86400:
+        return
+    os.makedirs(base, exist_ok=True)
+    shutil.rmtree(tmp, ignore_errors=True)
+    log(f"building this Mac's shore reference set {name}")
+    with open(LOG, "a") as f:
+        r = subprocess.run([sys.executable, os.path.join(HERE, "shore_reference.py"), tmp, "--reference", name],
+                           stdin=subprocess.DEVNULL, stdout=f, stderr=subprocess.STDOUT, timeout=1800)
+    if r.returncode == 0:
+        os.replace(tmp, dst)
+        if os.path.exists(failed):
+            os.remove(failed)
+    else:
+        shutil.rmtree(tmp, ignore_errors=True)
+        open(failed, "w").close()
+        log(f"the shore reference set failed (exit {r.returncode}); trying again tomorrow")
+
+
+def sync_shore():
+    """Fetch and check the shore (shore_sync.py does nothing more than hourly). It never renders, and a
+    failure only means the last good shore stays in use."""
+    try:
+        with open(LOG, "a") as f:
+            subprocess.run([sys.executable, "-I", SYNC], stdin=subprocess.DEVNULL, stdout=f, stderr=subprocess.STDOUT,
+                           timeout=120)
+    except Exception as e:
+        log(f"shore sync failed: {e}")
+
+
+def dark_minutes(d, tzname, since):
+    """The clock minutes of d from `since` on in which the listener's window can show: it follows the
+    scene's lights_on, which is nought while the sun is 2 degrees up or more (a degree's margin here)."""
+    import astro
+    from day import BUDAPEST
+    tz = ZoneInfo(tzname)
+    mid = dt.datetime.combine(d, dt.time(0, 0), tz)
+    local = [mid + dt.timedelta(minutes=m) for m in range(1440)]
+    jd = astro.jd_from_unix(np.array([t.astimezone(dt.timezone.utc).timestamp() for t in local]))
+    ra, dec, _ = astro.sun_radec(jd)
+    alt, _ = astro.altaz(ra, dec, jd, BUDAPEST["lat"], BUDAPEST["lon"])
+    alt = alt + astro.refraction(alt)
+    return [m for m in range(1440) if local[m] >= since and alt[m] < 3.0]
+
+
+def refresh_shore(days, d):
+    """Delete the frames of d that the shore or the lamp has changed since they were rendered, so render()
+    makes them again. Each day folder's shore.json says what its frames were rendered with; it is written
+    before they are, so frames are never older than their record."""
+    import shore as shore_draw
+    from day import BUDAPEST
+    folder = os.path.join(days, d.isoformat())
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, "shore.json")
+    old = shore_sync.read_record(path)
+    try:
+        events = shore_sync.cache_events(SHORE) if shore_sync.ready(SHORE) else []
+    except Exception as e:
+        log(f"cannot read the shore cache ({e}); the frames of {d} are left as they are")
+        return
+    tzname = BUDAPEST["tz"]
+    lit = shore_draw.lamp_lit(LAMP, d, ZoneInfo(tzname))
+    new = shore_sync.day_record(events, lit.isoformat() if lit else None)
+    if new == old:
+        return
+    stale = set()
+    first = shore_sync.stale_from(d, tzname, old, events)
+    if first is not None:
+        stale.update(range(first, 1440))
+    since = shore_sync.lamp_from(old, new["lamp"])
+    if since:
+        stale.update(dark_minutes(d, tzname, dt.datetime.fromisoformat(since)))
+    gone = 0
+    for m in sorted(stale):
+        f = os.path.join(folder, f"{m // 60:02d}{m % 60:02d}.jpg")
+        if os.path.exists(f):
+            os.remove(f)
+            gone += 1
+    shore_sync.write_record(path, new)
+    if gone:
+        m = min(stale)
+        log(f"{d}: the shore or the lamp changed; {gone} frames from {m // 60:02d}:{m % 60:02d} will be rendered again")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=ROOT)
@@ -206,6 +341,7 @@ def main():
     a = ap.parse_args()
     days = os.path.join(a.root, "days")
     os.makedirs(days, exist_ok=True)
+    drain_listener()    # first, and on every run, even one that finds another render under way
     lock = open(os.path.join(a.root, ".render.lock"), "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -220,6 +356,11 @@ def main():
     if a.hourly_only:
         refresh_hourly(days, a.root, today, force=True)
         return
+    if shore_on():      # then the shore: never during a render (this holds the render lock), always before one
+        ensure_reference()
+        sync_shore()
+    for d in ([dt.date.fromisoformat(a.date)] if a.date else [today, tomorrow]):
+        refresh_shore(days, d)
     if a.date:
         render(days, dt.date.fromisoformat(a.date), range(1440), a.jobs, "asked for")
         return
