@@ -111,15 +111,18 @@ cheaper because its lighting is now one vectorised call per keyframe instead of 
 
 ## Probes
 
-1. `$PY -m unittest discover -s tests`: `Ran 45 tests in 5.052s` / `OK`.
+Run on the final code (commit `76d7b54`, re-run after the last tree tweak):
+
+1. `$PY -m unittest discover -s tests`: `Ran 45 tests in 5.554s` / `OK`.
 2. Determinism: 2026-11-01 12:00 (`--weather fair --scale 0.75 --quality 90`) rendered twice into
    two directories: `cmp` reports no difference (`BYTE-IDENTICAL`, both md5
-   `38348bfcdeb441b4543431519d1e456a`).
-3. Shore strip: `tools/shore_reference.py /tmp/ref-objects --reference r1` (digest
+   `3aca1b12f2c07d5102bba9b11e4e006d`).
+3. Shore strip: `tools/shore_reference.py /tmp/ref-objects-final --reference r1` (digest
    `37e07b33a34004069bc784f2ee7b8fb4b3293dd96ccc6185c34d3625354f821c`) against the published
    `shore/reference/r1`: `surfaces.json`, `keepout.png`, `palette.json`, `conditions.json`
    byte-identical; `noon.png`, `golden.png`, `night.png`, `fog.png`: 0 differing pixels each.
 4. Render time: after/baseline 1.11 real, 1.03 user CPU (first baseline); at most 2.0 required.
+   (Timed at `d836304`; the last commit changes two constants of the tree and no cost.)
 
 ## Look tests
 
