@@ -9,6 +9,7 @@ from scipy import ndimage as ndi
 from core import *  # noqa: F401,F403
 
 import astro
+import cumulus
 from scipy.special import ndtri
 from stars import GAL, LINES, STAR_DEC, STAR_IDX, STAR_MAG, STAR_RA, STAR_TINT
 
@@ -39,8 +40,13 @@ def moon_rays(P, Q):
 # cloud layers: name, noise texture (h, w, beta, aniso, seed), texels per plane unit, height (km),
 # wind speed up there relative to the surface, opacity, edge softness
 CLOUD_LAYERS = [("high", (256, 2048, 2.5, 3.5, 61), 110.0, 9.0, 3.5, 0.45, 1.3),
-                ("mid", (512, 2048, 2.8, 2.0, 5), 55.0, 3.5, 2.2, 0.93, 1.0),
+                ("mid", (512, 2048, 2.8, 2.0, 5), 55.0, 3.5, 2.2, 0.93, 0.75),
                 ("low", (512, 2048, 3.2, 1.3, 11), 24.0, 1.2, 1.5, 0.97, 0.9)]
+
+
+DIP = (3.0, 1.9, 1.1)       # degrees below our horizon at which each layer (high, mid, low) still sees the sun
+OVERHEAD = 14.0             # degrees: above this the heaps' share of the low cover is drawn as the low noise layer
+ROSE = np.array([238, 118, 140], np.float32)   # sunset light on cloud away from the sun
 
 
 def norm_ppf(p):
@@ -71,6 +77,8 @@ class SkyMixin:
         col = col * (1 - wh) + hor * wh
 
         self.sun_glow = None
+        self.cloud_occ = None       # coverage of all cloud on the sky grid, for the beams (weatherfx)
+        self.heap_occ = None        # coverage of the heaps and the horizon band, for the sea (sea.py)
         vis = sm(-14, -1, sa)
         if vis > 0:
             g = np.degrees(np.arccos(np.clip(e * self.sunv[0] + n * self.sunv[1] + u * self.sunv[2], -1, 1)))
@@ -272,6 +280,12 @@ class SkyMixin:
         lc = lc + np.array([46, 52, 70], np.float32) * self.moon_sky
         wet = max(self.wx.rain, self.wx.snow, self.wx.drizzle * 0.6)
         hm = (np.exp(-alt / 9) * 0.55)[..., None]
+        sunward = lining = None
+        if sm(9, 1, sa) * sm(-DIP[0] - 2.5, -DIP[0] + 0.2, sa) > 0:
+            sunward = sm(-0.6, 0.9, np.cos(np.radians(az - self.sun_az)))
+            g = sky_grid(self.W, self.H, 2)
+            cg = 1 - (g[2] * self.sunv[0] + g[3] * self.sunv[1] + g[4] * self.sunv[2])
+            lining = np.exp(-cg / 0.03) + 0.3 * np.exp(-cg / 0.15)
         acc_c = np.zeros(alt.shape + (3,), np.float32)
         acc_a = np.zeros(alt.shape + (1,), np.float32)
         for i in range(3):
@@ -283,23 +297,69 @@ class SkyMixin:
             n1 = sample(tex, rows + ld[1] * 5, cols + ld[0] * 5)
             lit = np.clip(0.62 + (n0 - n1) * (1.4 if name != "low" else 1.8), 0, 1)
             cover = self.layer_cover(i)
+            if name == "mid":
+                # altocumulus: each cloudlet thicker and darker at its heart, lit on the side toward
+                # the light, the two tones drawn a little apart
+                thick = sm(0.0, 1.6, n0 - self.layer_threshold(i, cover))
+                lit = (0.5 * lit + 0.5 * sm(0.45, 0.78, lit)) * (1 - 0.2 * thick)
             if name == "low":
                 # thick low cloud is dark underneath; a full lid is flatter and greyer
-                thick = sm(0.0, 2.0, n0 - norm_ppf(1 - cover))
+                if self.cloud_regime().share > 0:    # overhead the layer carries the heaps' share too
+                    cover = np.maximum(cover, self.wx.cloud_low * sm(OVERHEAD - 4, OVERHEAD + 6, alt))
+                    thick = sm(0.0, 2.0, n0 - (self.layer_threshold(i, self.wx.cloud_low, "top")
+                                               if self.wx.cloud_low >= 0.01 else 0.0))
+                else:
+                    thick = sm(0.0, 2.0, n0 - self.layer_threshold(i, cover))
                 lit = lit * (1 - 0.45 * thick) * (1 - 0.35 * sm(0.75, 1.0, cover))
                 lit = lit * (1 - 0.5 * wet)
             lit = lit[..., None]
-            cc = sc * (1 - 0.45 * wet) + (lc * (1 - 0.3 * wet) - sc * (1 - 0.45 * wet)) * lit
+            lci = lc
+            warm = sm(9, 1, sa) * sm(-DIP[i] - 2.5, -DIP[i] + 0.2, sa)
+            if warm > 0:     # a low sun: gold toward it, rose away from it, for as long as it lights this height
+                tint = ROSE + (keys(CLOUD_SUN, sa + DIP[i]) - ROSE) * sunward[..., None]
+                lci = lc + (tint - lc) * (0.5 * warm)
+            cc = sc * (1 - 0.45 * wet) + (lci * (1 - 0.3 * wet) - sc * (1 - 0.45 * wet)) * lit
             if self.sun_glow is not None:
                 cc += (self.sun_glow * (1 - 0.6 * dens))[..., None] * keys(GLOW_COL, sa) * (0.9 if name != "low" else 0.6)
+                if warm > 0:  # and the thin edges toward it glow
+                    cc += (lining * (1 - dens) * warm * 0.7)[..., None] * lci
             cc = cc * (1 - hm) + self.hor_col * hm
             if name == "high":   # thin ice cloud: barely there at night unless the moon lights it
                 op = op * (1 - 0.8 * self.night * (1 - min(1.0, 2 * self.moon_sky)))
             al = (dens * op)[..., None]
             acc_c = acc_c * (1 - al) + cc * al
             acc_a = acc_a * (1 - al) + al
+        # the low deck's heaps, in front of everything else in the sky; far off, they run together
+        # into a band along the horizon (only with cumulus.HEAPS on)
+        reg, pop = self.cloud_regime(), self.heaps()
+        heap_a = np.zeros(alt.shape, np.float32) if cumulus.HEAPS else None
+        grid = sky_grid(self.W, self.H, 2)
+        band = cumulus.horizon_band(self, reg, grid) if cumulus.HEAPS else None
+        if band is not None:
+            cc, al, r0 = band
+            heap_a[r0:] = al
+            al = al[..., None]
+            acc_c[r0:] = acc_c[r0:] * (1 - al) + cc * al
+            acc_a[r0:] = acc_a[r0:] * (1 - al) + al
+        if pop is not None:
+            got = cumulus.shafts(self, pop, reg, grid, 2)
+            if got is not None:
+                cc, al = got
+                al = al[..., None]
+                acc_c = acc_c * (1 - al) + cc * al
+                acc_a = acc_a * (1 - al) + al
+            hit = cumulus.render(self, pop, grid, 2)
+            if hit is not None:
+                cc, al, box = cumulus.shade(self, pop, hit, reg, grid)
+                heap_a[box] = 1 - (1 - heap_a[box]) * (1 - al)
+                al = al[..., None]
+                acc_c[box] = acc_c[box] * (1 - al) + cc * al
+                acc_a[box] = acc_a[box] * (1 - al) + al
+        if band is not None or pop is not None:
+            self.heap_occ = heap_a       # the sea shows the heaps paler (sea.py)
         if acc_a.max() <= 0.001:
             return
+        self.cloud_occ = acc_a[..., 0]
         hz, W = col.shape[:2]
         acc_c = upsample(acc_c, (hz, W))
         acc_a = upsample(acc_a, (hz, W))
@@ -307,14 +367,28 @@ class SkyMixin:
         col += acc_c
 
     def layer_cover(self, i):
-        return (self.wx.cloud_high, self.wx.cloud_mid, self.wx.cloud_low)[i]
+        """Cover of noise layer i. The low cover is shared: heaps (cumulus.py) where there is convection,
+        the noise for the rest (stratocumulus, and the lid as the deck closes)."""
+        if i == 2:
+            return self.wx.cloud_low * (1 - self.cloud_regime().share)
+        return (self.wx.cloud_high, self.wx.cloud_mid)[i]
 
-    def cloud_layer(self, i, alt, az, detail=False):
-        """Density of cloud layer i (0 high, 1 mid, 2 low) toward the given directions, drifting with the wind."""
+    def cloud_regime(self):
+        """What kind of low cloud this minute holds (cumulus.regime), worked out once per frame."""
+        if getattr(self, "_cloud_regime", None) is None:
+            self._cloud_regime = cumulus.regime(self)
+        return self._cloud_regime
+
+    def heaps(self):
+        """The heaps in view this minute (cumulus.population), or None; made once per frame."""
+        if not hasattr(self, "_heaps"):
+            self._heaps = cumulus.population(self, self.cloud_regime())
+        return self._heaps
+
+    def _layer_field(self, i, alt, az):
+        """Layer i's noise toward the given directions, drifting with the wind, and its patchiness
+        (an offset to the threshold): (n0, offset, rows, cols, texture)."""
         name, tx, K, hk, wf, op, soft = CLOUD_LAYERS[i]
-        cover = self.layer_cover(i)
-        if cover < 0.01:
-            return None
         a = np.radians(np.maximum(alt, 0.8))
         zr = np.radians(az)
         u, ca = np.sin(a), np.cos(a)
@@ -327,8 +401,40 @@ class SkyMixin:
             Xp, Zp = Xp * math.cos(th) - Zp * math.sin(th), Xp * math.sin(th) + Zp * math.cos(th)
         tex = fnoise(*tx)
         rows, cols = Zp * K, Xp * K + 300 * i
-        n0 = sample(tex, rows, cols)
-        th = norm_ppf(1 - cover) + 0.45 * sample(fnoise(256, 512, 3.0, 1.5, 6 + i), rows * 0.1, cols * 0.1) * (1 - cover)
+        off = 0.45 * sample(fnoise(256, 512, 3.0, 1.5, 6 + i), rows * 0.1, cols * 0.1)
+        return sample(tex, rows, cols), off, rows, cols, tex
+
+    def layer_threshold(self, i, cover, key=None):
+        """The noise level above which layer i is cloud, set so that the cloud you can see takes about
+        the forecast's share of this frame's sky. A fixed level (the normal quantile) leaves that to
+        chance: the window of noise in view is small next to its large blobs, so one minute showed a 5%
+        deck as a veil over half the sky and the next as nothing. Measured on a coarse grid of the
+        sky, once per frame and layer."""
+        got = getattr(self, "_layer_th", None)
+        if got is None:
+            got = self._layer_th = {}
+        key = i if key is None else key
+        if key not in got:
+            alt, az = sky_grid(self.W, self.H, 8)[:2]
+            n0, off, *_ = self._layer_field(i, alt, az)
+            m = (n0 - off * (1 - cover))[alt > (2.0 if key == i else OVERHEAD + 6)]
+            got[key] = float(np.quantile(m, 1 - cover)) - 0.175 * CLOUD_LAYERS[i][6]
+        return got[key]
+
+    def cloud_layer(self, i, alt, az, detail=False):
+        """Density of cloud layer i (0 high, 1 mid, 2 low) toward the given directions, drifting with the
+        wind. Overhead the low layer carries the heaps' share of the low cover too, since heaps are
+        only drawn lower down (cumulus.population)."""
+        soft = CLOUD_LAYERS[i][6]
+        cover = self.layer_cover(i)
+        top = self.wx.cloud_low if i == 2 else cover
+        if max(cover, top) < 0.01:
+            return None
+        n0, off, rows, cols, tex = self._layer_field(i, alt, az)
+        th = (self.layer_threshold(i, cover) if cover >= 0.01 else 9.0) + off * (1 - cover)
+        if top > cover + 0.005:      # overhead: the whole low cover
+            w = sm(OVERHEAD - 4, OVERHEAD + 6, alt)
+            th = th * (1 - w) + (self.layer_threshold(i, top, "top") + off * (1 - top)) * w
         dens = sm(th - 0.25 * soft, th + 0.6 * soft, n0) * sm(0.5, 6, alt)
         return (dens, n0, rows, cols, tex) if detail else dens
 
@@ -344,6 +450,14 @@ class SkyMixin:
                 continue
             k = (0.25, 0.85, 0.97)[i]
             through *= 1 - k * float(d[0])
+        self.sun_through_layers = through        # what the noise layers let through, for the heaps' own light
+        pop = self.heaps()
+        if pop is not None:      # the heaps, across the sun's disk
+            r = 1.3
+            ring = [(0, 0)] + [(r * math.cos(t), r * math.sin(t)) for t in np.arange(6) * math.pi / 3]
+            dirs = [enu(max(self.sun_alt, 0.5) + da, self.sun_az + dz / math.cos(math.radians(max(self.sun_alt, 0.5))))
+                    for (dz, da) in ring]
+            through *= 1 - 0.95 * float(cumulus.coverage(pop, dirs).mean())
         fog = self.wx.fog
         return through * (1 - 0.85 * fog)
 
