@@ -3,6 +3,7 @@ lightning out at sea, and a rainbow when the sun shines into a shower."""
 import math
 
 import numpy as np
+from scipy.signal import lfilter
 
 from core import *  # noqa: F401,F403
 from sky import sky_grid
@@ -124,7 +125,9 @@ class WeatherFxMixin:
 
     def light_shafts(self, cover):
         """Crepuscular rays: smear the bright, unblocked sky toward the sun, so the beams show where the
-        tree, the tower or a cloud's edge breaks the light."""
+        tree, the tower or a cloud's edge breaks the light. With cloud in the sky, cloud_beams()."""
+        if self.cloud_occ is not None:
+            return self.cloud_beams(cover)
         sa = self.sun_alt
         if sa < -1 or sa > 35 or self.sun_vis < 0.2 or self.wx.fog > 0.6:
             return
@@ -147,6 +150,79 @@ class WeatherFxMixin:
         strength = 0.35 * sm(-1, 3, sa) * sm(35, 15, sa) * self.sun_vis * (1 - 0.6 * self.overcast)
         rays = upsample(acc, (hz, W))[..., None] * keys(GLOW_COL, max(sa, 0)) * strength
         self.c[:hz] += rays
+
+    def cloud_beams(self, cover):
+        """Sunbeams through broken cloud, worked along rays out of the sun in polar coordinates.
+
+        Light enters the hazy air through the gaps near the sun and runs outward; behind a cloud the
+        air is in its shadow for a while, so the shafts fan out of the gaps, across the sky and, below
+        the horizon, onto the far sea. Their strength needs a low or middling sun, haze, and cloud broken
+        round the sun (neither clear nor closed). The bright-sky smear of light_shafts() is kept as well,
+        drawn from the gaps only, so a frame with a little cloud looks like one with none."""
+        sa = self.sun_alt
+        if sa < -4 or sa > 50 or self.wx.fog > 0.6:
+            return
+        W, H, hz = self.W, self.H, self.hz
+        sx, sy = to_screen(sa, self.sun_az)
+        if not (-0.35 < sx < 1.35):
+            return
+        k = 4
+        sea_rows = int(0.10 * H) // k * k
+        rows = hz + sea_rows
+        occ = np.zeros(((rows + k - 1) // k, (W + k - 1) // k), np.float32)
+        oc = self.cloud_occ[::2, ::2]
+        occ[:oc.shape[0], :oc.shape[1]] = oc[:occ.shape[0], :occ.shape[1]]
+        blk = cover[:rows:k, ::k].astype(np.float32)
+        h, w = occ.shape
+        blk = blk[:h, :w]
+        src = np.clip(self.c[:rows:k, ::k].mean(-1)[:h, :w] - 150, 0, None) / 105 * (1 - blk) * (1 - occ)
+        src[hz // k:] = 0
+        stop = np.maximum(occ, blk)
+        stop[hz // k:] = 0                       # below the horizon nothing more is in the way
+        cy, cx = sy * H / k, sx * W / k
+        corners = np.array([[0, 0], [0, w], [h, 0], [h, w]], np.float32) - [cy, cx]
+        rmax = float(np.hypot(corners[:, 0], corners[:, 1]).max()) + 2
+        nr, nt = int(rmax) + 1, 1024
+        r = np.arange(nr, dtype=np.float32)
+        t = np.arange(nt, dtype=np.float32) * (2 * np.pi / nt)
+        Y, X = cy + np.sin(t)[:, None] * r, cx + np.cos(t)[:, None] * r
+        sp = ndi.map_coordinates(src, [Y, X], order=1, mode="constant")
+        op = ndi.map_coordinates(stop, [Y, X], order=1, mode="constant")
+        # the bright-sky smear, as light_shafts() draws it (its 28 taps, integrated)
+        c1, c2 = np.cumsum(sp, 1), np.cumsum(sp * r, 1)
+        rr = np.maximum(r, 1.0)
+        glow = 2.083 * np.maximum(c2 - 0.02 * rr * c1, 0) / rr ** 2
+        # the shadow each cloud casts along the rays out of the sun, lasting a while behind it
+        deg = AZ_SPAN / (W / k)                  # degrees per polar step
+        tau = lfilter([0.35], [1, -math.exp(-1 / (18.0 / deg))], op, axis=1)
+        shadow = (1 - np.exp(-tau)) * (1 - op)   # how much of the air here is in a cloud's shadow
+        around = ndi.uniform_filter1d(shadow, 15, axis=0, mode="wrap")    # shadow on neighbouring rays
+        phase = np.exp(-r * deg / 24.0)[None, :]
+        near_sun = float((phase * op).sum() / max(phase.sum() * nt, 1e-6))  # cloud round the sun
+        hidden = sm(0.2, 0.8, 1 - self.sun_vis)          # the sun behind a cloud: the classic case
+        broken = max(sm(0.03, 0.18, near_sun), hidden) * sm(0.9, 0.6, near_sun)
+        haze = 0.55 + 0.45 * sm(0.45, 0.9, self.wx.rh)
+        dark_p = shadow * phase                  # shadowed air is darker...
+        lift_p = (1 - shadow) * (1 - op) * around * phase   # ...and the lit shafts between them brighter
+        # back to the frame
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        dy, dx = yy - cy, xx - cx
+        R = np.hypot(dx, dy)
+        T = (np.arctan2(dy, dx) % (2 * np.pi)) * (nt / (2 * np.pi))
+        inside = R < nr - 1
+        g = ndi.map_coordinates(glow, [T, R], order=1, mode="grid-wrap")
+        s_glow = 0.35 * sm(-1, 3, sa) * sm(35, 15, sa) * max(self.sun_vis, 0.8 * broken) * (1 - 0.6 * self.overcast)
+        s_beam = sm(-4, 0, sa) * sm(50, 22, sa) * broken * haze * (1 - 0.5 * self.overcast)
+        add = upsample(g * s_glow, (rows, W))[..., None] * keys(GLOW_COL, max(sa, 0))
+        if s_beam > 0.01:
+            sea = np.ones((h, 1), np.float32)
+            sea[hz // k:, 0] = np.exp(-(np.arange(h - hz // k, dtype=np.float32) * k) / (0.035 * H)) * 0.6
+            dk = np.where(inside, ndi.map_coordinates(dark_p, [T, R], order=1, mode="grid-wrap"), 0) * sea * s_beam
+            lf = np.where(inside, ndi.map_coordinates(lift_p, [T, R], order=1, mode="grid-wrap"), 0) * sea * s_beam
+            free = 1 - cover[:rows, :, None]
+            self.c[:rows] *= 1 - np.clip(0.6 * upsample(dk, (rows, W)), 0, 0.55)[..., None] * free
+            add += upsample(lf, (rows, W))[..., None] * keys(CLOUD_SUN, sa + 1.0) * 0.8 * free
+        self.c[:rows] += add
 
     def precipitation(self):
         """Rain streaks or snowflakes over everything, slanted by the wind, more and bigger near you."""
