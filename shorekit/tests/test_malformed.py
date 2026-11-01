@@ -58,10 +58,10 @@ def manifest_cases():
            b"[" * 16000, b'{"a":' * 3000, b'{"a":[[[[[1]]]]]}', good.replace(b'"scale":1', b'"scale":NaN'),
            good.replace(b'"scale":1', b'"scale":Infinity'), good.replace(b'"scale":1', b'"scale":-Infinity'),
            good.replace(b'"scale":1', b'"scale":1.0'), good.replace(b'"scale":1', b'"scale":1e0'),
-           good.replace(b'"x":2600', b'"x":2600.5'), good.replace(b'[122,118,110]', b'[1.22e2,118,110]'),
+           good.replace(b'"x":2600', b'"x":2600.5'), good.replace(b'[228,226,220]', b'[2.28e2,226,220]'),
            good.replace(b'"anchor":[8,17]', b'"anchor":[-0.0,17]'), good.replace(b'"x":2600', b'"x":100000000000000000000'),
            good.replace(b'"x":2600', b'"x":' + b"9" * 5000), good.replace(b'{"anchor"', b'{"shore":1,"anchor"'),
-           good.replace(b'"x":2600', b'"x":2600,"x":2601'), good.replace(b'"a":[122', b'"a":[1,2,3],"a":[122'),
+           good.replace(b'"x":2600', b'"x":2600,"x":2601'), good.replace(b'"a":[228', b'"a":[1,2,3],"a":[228'),
            good.replace(b"}", b",}", 1), good.replace(b'"', b"'"), b"// c\n" + good,
            good.replace(b'"maker-a"', b'"maker\ta"'), good.replace(b'"maker-a"', b'"maker\na"')]
     cases = [("manifest bytes %d" % i, judge_manifest, d) for i, d in enumerate(raw)]
@@ -96,7 +96,7 @@ def manifest_cases():
         ("first row empty", lambda o: o["rows"].insert(0, "." * 18)),
         ("last col empty", lambda o: o.__setitem__("rows", [r + "." for r in o["rows"]])),
         ("first col empty", lambda o: o.__setitem__("rows", ["." + r for r in o["rows"]])),
-        ("scale 0", setk(["scale"], 0)), ("scale 3", setk(["scale"], 3)), ("scale str", setk(["scale"], "1")),
+        ("scale 0", setk(["scale"], 0)), ("scale 5", setk(["scale"], 5)), ("scale str", setk(["scale"], "1")),
         ("scale bool", setk(["scale"], True)),
         ("anchor empty", setk(["anchor"], [])), ("anchor one", setk(["anchor"], [1])), ("anchor three", setk(["anchor"], [1, 2, 3])),
         ("anchor neg", setk(["anchor"], [-1, 0])), ("anchor x out", setk(["anchor"], [18, 0])),
@@ -112,6 +112,9 @@ def manifest_cases():
         ("label text 65", setk(["label"], {"text": "A" * 65, "side": "left"})),
         ("label lower", setk(["label"], {"text": "tide", "side": "left"})),
         ("label 13", setk(["label"], {"text": "THIRTEEN CHAR", "side": "left"})),
+        ("label 9", setk(["label"], {"text": "NINE CHAR", "side": "left"})),
+        ("glow not a key", setk(["glow"], "z")), ("glow two keys", setk(["glow"], "ab")), ("glow int", setk(["glow"], 1)),
+        ("glow grey", setk(["glow"], "a")),
         ("label url", setk(["label"], {"text": "A.COM", "side": "left"})),
         ("label lead", setk(["label"], {"text": " LEAD", "side": "left"})),
         ("label slash", setk(["label"], {"text": "A/B", "side": "left"})),
@@ -323,6 +326,8 @@ def refjson_cases():
         edit("surfaces.json", lambda o: o["dry"]["top"].pop()),
         edit("surfaces.json", lambda o: o["deck"].append([1000, 1000])),
         edit("surfaces.json", lambda o: o["max_h"]["h"].pop()),
+        edit("surfaces.json", lambda o: o.pop("min_h")),
+        edit("surfaces.json", lambda o: o["min_h"]["h"].__setitem__(400, o["max_h"]["h"][400] + 1)),
         edit("surfaces.json", lambda o: o["region"].update(x0=1500)),
         edit("surfaces.json", lambda o: o["crop"].update(w=1279)),
         edit("surfaces.json", lambda o: o["dry"]["top"].__setitem__(500, o["dry"]["bottom"][500] + 1)),
@@ -331,6 +336,8 @@ def refjson_cases():
         edit("palette.json", lambda o: o.update(entries=[])),
         edit("palette.json", lambda o: o["entries"].append(dict(o["entries"][0]))),
         edit("palette.json", lambda o: o["plaque"].pop("ink")),
+        edit("palette.json", lambda o: o.pop("glow")),
+        edit("palette.json", lambda o: o["glow"].append(dict(o["entries"][0]))),
         edit("conditions.json", lambda o: o["conditions"].pop()),
         edit("conditions.json", lambda o: o["conditions"][0]["lut"][0].pop()),
         edit("conditions.json", lambda o: o["vignette"].pop()),
@@ -338,6 +345,8 @@ def refjson_cases():
         edit("conditions.json", lambda o: o["conditions"][3]["veil"].update(rgb=[300, 512, 300])),
         edit("conditions.json", lambda o: o["conditions"][2].update(name="noon")),
         edit("conditions.json", lambda o: o.update(cell=8)),
+        edit("conditions.json", lambda o: o["conditions"][0].pop("top")),
+        edit("conditions.json", lambda o: o["conditions"][2].update(lamps=257)),
     ]
 
     def run(item):

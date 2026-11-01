@@ -48,7 +48,8 @@ PALETTE = [
     ("grass-lush", (52, 94, 36)), ("grass-dry", (156, 142, 92)), ("grass-winter", (66, 82, 45)),
 ]
 D = 40
-PLAQUE = {"wood": [152, 140, 118], "grain": [120, 108, 90], "ink": [54, 46, 38]}
+GLOW = [("lamplight", (236, 186, 104)), ("lit-window", (220, 150, 80))]
+PLAQUE = {"wood": [142, 135, 120], "grain": [128, 121, 108], "ink": [102, 95, 84]}
 
 # class codes for the synthetic crops
 SEA, WET, DRY, GRASS, DECKC, SCENERY = 0, 1, 2, 3, 4, 5
@@ -88,6 +89,12 @@ def dry(x):
 def max_h(y):
     num = 224 * 720 + 832 * max(0, min(720, y - 1080))
     return (2 * num + 7200) // 14400
+
+
+def min_h(y):
+    """Look B's floor. Kept low (a 24th of max_h, 2-4 px) so the old scale-1 fixtures still stand;
+    test_rules holds the rule itself."""
+    return max(1, max_h(y) // 24)
 
 
 def in_poly(x, y, poly):
@@ -156,10 +163,12 @@ def make_reference(path, rid="r1"):
                 "region": {"x0": RX0, "y0": RY0, "x1": RX1, "y1": RY1},
                 "dry": {"x0": RX0, "top": tops, "bottom": bots},
                 "deck": [list(v) for v in DECK],
-                "max_h": {"y0": RY0, "h": [max_h(y) for y in range(RY0, RY1 + 1)]}}
+                "max_h": {"y0": RY0, "h": [max_h(y) for y in range(RY0, RY1 + 1)]},
+                "min_h": {"y0": RY0, "h": [min_h(y) for y in range(RY0, RY1 + 1)]}}
     assert len(tops) == nx
     palette = {"shore_palette": 1, "reference": rid, "d": D,
-               "entries": [{"name": n, "rgb": list(c)} for n, c in PALETTE], "plaque": PLAQUE}
+               "entries": [{"name": n, "rgb": list(c)} for n, c in PALETTE],
+               "glow": [{"name": n, "rgb": list(c)} for n, c in GLOW], "plaque": PLAQUE}
 
     def lut(kind, ch):
         out = []
@@ -185,13 +194,21 @@ def make_reference(path, rid="r1"):
             row.append(256 - 9728 * (an * bd + bn * ad) // (100 * ad * bd))
         vig.append(row)
     lights = {"noon": [300, 296, 288], "golden": [330, 250, 180], "night": [60, 66, 96], "fog": [210, 212, 216]}
+    # look B: the light on the top, east and west faces, and the lamps (x256)
+    faces = {"noon": ([360, 354, 340], [250, 252, 256], [250, 252, 256]),
+             "golden": ([300, 240, 190], [200, 180, 170], [420, 300, 200]),
+             "night": ([70, 76, 108], [56, 62, 92], [56, 62, 92]),
+             "fog": ([230, 232, 236], [200, 202, 206], [200, 202, 206])}
+    lamps = {"noon": 0, "golden": 0, "night": 256, "fog": 0}
     shadows = {"noon": ([22, 24, 30], 110), "golden": ([40, 26, 20], 100), "night": ([6, 8, 14], 50),
                "fog": ([90, 94, 100], 40)}
     conds = []
     for name in CONDITIONS:
         alpha = [120 + (CH - r) * 80 // CH for r in range(CH)] if name == "fog" else [0] * CH
         veil = [172, 178, 186] if name == "fog" else [0, 0, 0]
-        conds.append({"name": name, "light": lights[name], "lut": [lut(name, c) for c in range(3)],
+        top, east, west = faces[name]
+        conds.append({"name": name, "light": lights[name], "top": top, "east": east, "west": west,
+                      "lamps": lamps[name], "lut": [lut(name, c) for c in range(3)],
                       "veil": {"rgb": veil, "alpha": alpha},
                       "shadow": {"rgb": shadows[name][0], "alpha": shadows[name][1]}})
     conditions = {"shore_conditions": 1, "reference": rid, "cell": 16, "vignette": vig, "conditions": conds}
@@ -277,7 +294,7 @@ def block(w, h, key="a"):
     return [key * w for _ in range(h)]
 
 
-STONE = {"a": (134, 130, 122)}
+STONE = {"a": (34, 34, 38)}       # look C: a tarred stone, so it stands out from the shingle (rule 7)
 TIMBER = {"a": (96, 80, 64), "b": (118, 112, 102)}
 
 

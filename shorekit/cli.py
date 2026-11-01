@@ -311,7 +311,7 @@ def parser():
     s.add_argument("--on", required=True, help="shingle, pier, or the id of an object to build onto")
     s.add_argument("--at", required=True, help="x,y in frame pixels where the anchor's bottom-centre lands")
     s.add_argument("--anchor", help="column,row of the anchor cell (default: middle of the bottom row)")
-    s.add_argument("--scale", type=int, choices=(1, 2), default=1)
+    s.add_argument("--scale", type=int, choices=(1, 2, 3, 4), default=1)
     s.add_argument("--label")
     s.add_argument("--side", choices=("left", "right"), default="right")
     s.add_argument("--ref-id", help="reference id, e.g. r1 (default: from kit.lock)")

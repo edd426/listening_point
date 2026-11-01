@@ -31,6 +31,7 @@ class SeaMixin:
         if self.lights_on > 0:
             px, py = self.pier_lantern()
             self.emitters.append((px, py, np.array([255, 196, 120], np.float32), 1.2 * self.lights_on, self.pier_water_y()))
+            self.shore_emitters()
         if self.day.events.boat(self.t) is None:
             bx, by = MOORED[0] * W, MOORED[1] * H
             sz = 170 * s

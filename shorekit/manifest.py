@@ -6,7 +6,7 @@ count, the channel cap, the label) live in rules.py beside the others.
 import hashlib
 import re
 
-from . import KIT_VERSION, MAX_CELLS_SIDE, MAX_KEYS
+from . import KIT_VERSION, MAX_CELLS_SIDE, MAX_KEYS, MAX_SCALE
 from .errors import ShoreError
 from .strictjson import canonical, is_int, is_str, loads
 
@@ -21,7 +21,7 @@ REF_RE = re.compile(r"r[1-9][0-9]{0,3}", re.ASCII)
 KEY_RE = re.compile(r"[a-z]", re.ASCII)
 
 REQUIRED = ("anchor", "id", "kit", "maker", "palette", "place", "reference", "rows", "scale", "shore")
-OPTIONAL = ("label",)
+OPTIONAL = ("glow", "label")
 SURFACES = ("shingle", "pier")
 
 
@@ -86,7 +86,7 @@ class Manifest:
     """A parsed, schema-checked object. Coordinates are frame pixels (2880 x 1800)."""
 
     __slots__ = ("id", "maker", "kit", "reference", "palette", "rows", "w", "h", "scale", "anchor",
-                 "on", "x", "y", "label", "side", "obj", "canonical", "sha256")
+                 "on", "x", "y", "label", "side", "glow", "obj", "canonical", "sha256")
 
     def opaque_cells(self):
         return sum(len(r) - r.count(".") for r in self.rows)
@@ -155,8 +155,8 @@ def manifest_from_obj(obj):
     m.w, m.h = w, len(rows)
 
     v = obj["scale"]
-    if not is_int(v) or v not in (1, 2):
-        raise ShoreError("E_SCHEMA", '"scale" must be 1 or 2, got %s' % _show(v))
+    if not is_int(v) or not 1 <= v <= MAX_SCALE:
+        raise ShoreError("E_SCHEMA", '"scale" must be 1-%d, got %s' % (MAX_SCALE, _show(v)))
     m.scale = v
     a = obj["anchor"]
     if type(a) is not list or len(a) != 2 or not all(is_int(x) for x in a):
@@ -195,6 +195,13 @@ def manifest_from_obj(obj):
             raise ShoreError("E_SCHEMA", 'label "side" must be "left" or "right", got %s' % _show(lab["side"]))
         m.label = lab["text"]
         m.side = lab["side"]
+
+    m.glow = None
+    if "glow" in obj:
+        g = obj["glow"]
+        if not is_str(g) or not KEY_RE.fullmatch(g) or g not in palette:
+            raise ShoreError("E_SCHEMA", '"glow" must name one palette key, got %s' % _show(g))
+        m.glow = g
 
     m.obj = obj
     m.canonical = canonical(obj)

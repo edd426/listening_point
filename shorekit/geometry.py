@@ -7,12 +7,33 @@ pixels is row y, and its columns are x - s//2 .. x - s//2 + s-1.
 
 A footprint is the solid pixels (the bitmap's opaque cells and the label plaque) plus the contact
 shadow. Everything here is integer arithmetic on frame pixels.
+
+Look B: every opaque cell also gets a face, read off the bitmap's own silhouette, so the scene's
+light can model it: TOP where nothing is drawn above the cell (it catches the sky and the sun as
+the beach does), else EAST or WEST where it is open on the left or the right only (it catches a
+low morning or evening sun; the viewer looks south, so east is on the left), else FRONT. Cells of
+the manifest's `glow` key are lit from within at night.
 """
 from .errors import ShoreError
 from .font import GAP, PLAQUE_H, plaque_cells
 
 SURFACE_SHINGLE = "shingle"
 SURFACE_PIER = "pier"
+FACE_FRONT, FACE_TOP, FACE_EAST, FACE_WEST = 0, 1, 2, 3
+
+
+def cell_face(rows, c, r):
+    """The face of opaque cell (c, r): TOP if the cell above is empty (or r is 0), else EAST or WEST
+    if exactly one of its left and right neighbours is empty (or off the grid), else FRONT."""
+    if r == 0 or rows[r - 1][c] == ".":
+        return FACE_TOP
+    left = c == 0 or rows[r][c - 1] == "."
+    right = c == len(rows[r]) - 1 or rows[r][c + 1] == "."
+    if left and not right:
+        return FACE_EAST
+    if right and not left:
+        return FACE_WEST
+    return FACE_FRONT
 
 
 class Placed:
@@ -20,7 +41,7 @@ class Placed:
 
     __slots__ = ("id", "seq", "maker", "on", "surface", "manifest", "ox", "oy", "foot_y", "ground_y",
                  "left", "right", "top", "plaque", "solid", "label", "shadow", "bbox", "region_errors",
-                 "foot_cells", "plaque_foot")
+                 "foot_cells", "plaque_foot", "face", "glow")
 
     def key(self):
         return (self.ground_y, self.seq)
@@ -50,13 +71,15 @@ def place(m, ref, support=None, seq=0):
         p.ground_y = support.ground_y if support is not None else p.foot_y
 
     solid = {}
+    face = {}
+    glow = set()
     outside = []
     on_keep = []
     cw, ch, cx0, cy0 = ref.cw, ref.ch, ref.cx, ref.cy
     rx0, ry0, rx1, ry1 = ref.rx0, ref.ry0, ref.rx1, ref.ry1
     keep = ref.keepout
 
-    def put(X, Y, rgb, tag):
+    def put(X, Y, rgb, tag, f=FACE_FRONT, lit=False):
         if not (rx0 <= X <= rx1 and ry0 <= Y <= ry1):
             outside.append((X, Y, tag))
         else:
@@ -64,7 +87,13 @@ def place(m, ref, support=None, seq=0):
             if keep[i]:
                 on_keep.append((X, Y, tag))
         if cx0 <= X < cx0 + cw and cy0 <= Y < cy0 + ch:
-            solid[(Y - cy0) * cw + (X - cx0)] = rgb
+            i = (Y - cy0) * cw + (X - cx0)
+            solid[i] = rgb
+            face[i] = f
+            if lit:
+                glow.add(i)
+            else:
+                glow.discard(i)
 
     pal = m.palette
     for r, row in enumerate(m.rows):
@@ -72,10 +101,12 @@ def place(m, ref, support=None, seq=0):
             if k == ".":
                 continue
             rgb = pal[k]
+            f = cell_face(m.rows, c, r)
+            lit = k == m.glow
             bx, by = p.ox + c * s, p.oy + r * s
             for dy in range(s):
                 for dx in range(s):
-                    put(bx + dx, by + dy, rgb, ("cell", c, r))
+                    put(bx + dx, by + dy, rgb, ("cell", c, r), f, lit)
 
     p.plaque = None
     p.label = frozenset()
@@ -91,11 +122,13 @@ def place(m, ref, support=None, seq=0):
         for r, line in enumerate(rows):
             for c, k in enumerate(line):
                 if k != ".":
-                    put(px0 + c, py0 + r, colours[k], ("plaque", c, r))
+                    put(px0 + c, py0 + r, colours[k], ("plaque", c, r), FACE_TOP)   # look B: it leans back
                     if r == PLAQUE_H - 1:
                         p.plaque_foot.append(px0 + c)
         p.label = frozenset(i for i in solid if i not in before)
     p.solid = solid
+    p.face = face
+    p.glow = frozenset(glow)
 
     # foot cells: the opaque cells of the bottom row, whose bottom pixel row is foot_y
     last = m.rows[-1]
@@ -157,6 +190,9 @@ def body_pixel(p, i):
 
 
 def check_height(p, ref):
+    """Rule 1's height. Look B adds a floor: a thing standing on the shingle or the pier must be big
+    enough to notice at desktop size, its width and height averaging at least min_h (so a long low log
+    may stand where a sliver may not); a thing built onto another may be as small as it likes."""
     m = p.manifest
     cap = ref.height_cap(p.ground_y)
     if cap is None:
@@ -164,6 +200,12 @@ def check_height(p, ref):
     h = m.h * m.scale
     if h > cap:
         return [ShoreError("E_SIZE", "%d px tall standing at y=%d, max %d there" % (h, p.ground_y, cap))]
+    if m.on in (SURFACE_SHINGLE, SURFACE_PIER):
+        low = ref.height_min(p.ground_y)
+        w = m.w * m.scale
+        if w + h < 2 * low:
+            return [ShoreError("E_SIZE", "%dx%d px standing at y=%d: its sides average %d px, min %d there (too small"
+                               " to notice)" % (w, h, p.ground_y, (w + h) // 2, low))]
     return []
 
 

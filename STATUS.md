@@ -33,6 +33,23 @@ _Last updated 2026-11-01._
 
 ## The shore (branch work, not installed)
 
+**The look is variant C (Evan, 2026-11-01), kit 1.2.0.**
+- Variant A's objects were specks at desktop size, and its label plaque read as a UI chip.
+- Variant B was "slightly better" but still hard to see, so C made objects more noticeable.
+
+What C does:
+- **Size:** `scale` 1-4 with a size floor beside the height cap, both scaled by perspective. `max_h`
+  is 96 x persp (about 130 px, or 65 points, on the near shingle). `min_h` is 36 x persp: an
+  object's width and height must average at least about 49 px there.
+- **Paint:** six boat paints in the palette.
+- **Rule 7 (`E_FAINT`):** an object's mean colour must stand 48 apart from the ground around it at
+  noon and at golden hour.
+- **Labels:** at most 8 characters, cut into a small driftwood board.
+- **Glow:** one optional `glow` key (at most 64 px) that emits from dusk.
+- **Lighting:** every pixel is lit by the face it shows.
+
+See `shorekit/SCHEMA.md` section 10.
+
 Small objects that makers far away leave on the beach and the pier, judged by `shorekit/` (see
 `shorekit/README.md` and `SCHEMA.md`), plus a lamp the owner can light. Built on branches, wired
 together on `shore/sync` (2026-11-01), not installed:

@@ -5,7 +5,7 @@ from fractions import Fraction
 import support as S
 from shorekit.geometry import place
 from shorekit.manifest import manifest_from_obj
-from shorekit.rules import evaluate, occlusion, redmean512
+from shorekit.rules import check_local, evaluate, occlusion, redmean512
 
 
 def man(obj):
@@ -39,11 +39,88 @@ class TestLocalRules(unittest.TestCase):
         tall = S.make_object("2026-11-05-a", "maker-a", S.block(1, 30), S.STONE, "shingle", 1800, 1388, scale=2)
         self.assertEqual([e.line() for e in ev(tall)[0]], ["E_SIZE 60 px tall standing at y=1388, max 58 there"])
 
+    def test_size_floor(self):
+        """Look B: a thing standing on the shingle or the pier averages at least min_h across its width
+        and height; one built onto another may be smaller. (The synthetic set's own floor is kept low for
+        the old fixtures, so this raises it to 20 px.)"""
+        from shorekit.reference import load_reference
+        self.assertEqual(S.reference().height_min(1665), 3)
+        ref = load_reference(S.reference_dir())
+        ref.min_h = [20] * len(ref.min_h)
+
+        def judge(obj, live=(), seq=1):
+            return [e.line() for e in evaluate(man(obj), ref, list(live), seq)[0]]
+        small = S.make_object("2026-11-05-a", "maker-a", S.block(10, 10), S.STONE, "shingle", 2640, 1665)
+        self.assertEqual(judge(small), ["E_SIZE 10x10 px standing at y=1665: its sides average 10 px, min 20 there"
+                                        " (too small to notice)"])
+        small["scale"] = 2
+        self.assertEqual(judge(small), [])
+        log = S.make_object("2026-11-05-a", "maker-a", S.block(34, 6), S.STONE, "shingle", 2600, 1665)
+        self.assertEqual(judge(log), [])                       # long and low: 34 + 6 = 2 x 20
+        log["rows"] = S.block(33, 6)
+        self.assertEqual(len(judge(log)), 1)
+        pole = S.make_object("2026-11-05-a", "maker-a", S.block(2, 38), S.STONE, "shingle", 2640, 1665)
+        self.assertEqual(judge(pole), [])
+        cairn = placed(S.fixture_obj("2026-11-02-cairn"), 1)
+        chip = S.make_object("2026-11-05-a", "maker-a", S.block(8, 2), S.STONE, "2026-11-02-cairn", 2602, 1637,
+                             anchor=(3, 1))
+        self.assertEqual(judge(chip, [cairn], 2), [])
+
+    def test_scale_up_to_four(self):
+        big = S.make_object("2026-11-05-a", "maker-a", S.block(5, 5), S.STONE, "shingle", 2640, 1665, scale=4)
+        errs, p = ev(big)
+        self.assertEqual(errs, [])
+        self.assertEqual((p.right - p.left + 1, p.foot_y - p.top + 1), (20, 20))
+
+    def test_faces(self):
+        from shorekit.geometry import FACE_EAST, FACE_FRONT, FACE_TOP, FACE_WEST, cell_face
+        rows = ["..a..", ".aaa.", "aaaaa", "aa.aa", "a.a.a"]
+        got = ["".join("FTEW"[cell_face(rows, c, r)] if ch != "." else "." for c, ch in enumerate(row))
+               for r, row in enumerate(rows)]
+        self.assertEqual((FACE_FRONT, FACE_TOP, FACE_EAST, FACE_WEST), (0, 1, 2, 3))
+        # the viewer looks south: a cell open on its left faces east, open on its right faces west
+        self.assertEqual(got, ["..T..", ".TFT.", "TFFFT", "EW.EW", "F.T.F"])
+
+    def test_glow(self):
+        lamp = {"a": (96, 80, 64), "g": (236, 186, 104)}
+        rows = ["aaaa", "agga", "agga", "aaaa"]
+        ok = S.make_object("2026-11-05-a", "maker-a", rows, lamp, "shingle", 2640, 1665, scale=4)
+        ok["glow"] = "g"
+        errs, p = ev(ok)
+        self.assertEqual(errs, [])
+        self.assertEqual(len(p.glow), 64)
+        big = S.make_object("2026-11-05-a", "maker-a", ["aaaaa", "aggga", "aggga", "aaaaa"], lamp, "shingle", 2640,
+                            1665, scale=3)
+        big["glow"] = "g"
+        self.assertEqual(ev(big)[0], [])              # 6 cells at scale 3: 54 px
+        big["scale"] = 4
+        self.assertEqual([e.line() for e in ev(big)[0]], ["E_GLOW glow 'g' lights 96 px, max 64"])
+        grey = dict(ok, glow="a")
+        self.assertEqual(codes(ev(grey)[0]), ["E_GLOW", "E_GLOW", "E_PALETTE"])   # and 'g' is now plain paint
+        self.assertTrue(ev(grey)[0][0].text.startswith("glow 'a' (96,80,64) is "))
+        # without a glow key, the lamp colour is judged like any other and is too bright for the shore
+        plain = S.make_object("2026-11-05-a", "maker-a", rows, lamp, "shingle", 2640, 1665, scale=4)
+        self.assertEqual(codes(ev(plain)[0]), ["E_PALETTE"])
+
+    def test_glow_lights_up_at_night_only(self):
+        from shorekit.compose import compose
+        ref = S.reference()
+        unlit_obj = S.make_object("2026-11-05-a", "maker-a", ["aaaa", "agga", "agga", "aaaa"],
+                                  {"a": (96, 80, 64), "g": (236, 186, 104)}, "shingle", 2640, 1665, scale=4)
+        p = placed(dict(unlit_obj, glow="g"), 1)
+        dark = placed(unlit_obj, 1)
+        i = min(p.glow)
+        night = next(c for c in ref.conditions if c.name == "night")
+        noon = next(c for c in ref.conditions if c.name == "noon")
+        lit, unlit = compose(ref, [p], night), compose(ref, [dark], night)       # the lamps are lit at night
+        self.assertGreater(sum(lit[3 * i:3 * i + 3]), sum(unlit[3 * i:3 * i + 3]) + 150)
+        self.assertEqual(compose(ref, [p], noon), compose(ref, [dark], noon))
+
     def test_palette(self):
         rock = (134, 130, 122)
         self.assertEqual(redmean512(rock, (134, 150, 122)), 2048 * 400)
         near = S.make_object("2026-11-05-a", "maker-a", S.block(4, 4), {"a": (134, 150, 122)}, "shingle", 2640, 1665)
-        self.assertEqual(ev(near)[0], [])
+        self.assertEqual(check_local(man(near), S.reference()), [])   # (grey on grey: rule 7 would refuse it placed)
         far = S.make_object("2026-11-05-a", "maker-a", S.block(4, 4), {"a": (134, 151, 122)}, "shingle", 2640, 1665)
         self.assertEqual([e.line() for e in ev(far)[0]],
                          ["E_PALETTE 'a' (134,151,122) is 42 from the nearest reference colour rock (134,130,122), max 40"])
@@ -51,6 +128,23 @@ class TestLocalRules(unittest.TestCase):
         self.assertEqual([e.line() for e in ev(hot)[0]], ["E_PALETTE 'a' (241,236,222) has a channel of 241, max 240"])
         green = S.make_object("2026-11-05-a", "maker-a", S.block(4, 4), {"a": (10, 200, 30)}, "shingle", 2640, 1665)
         self.assertEqual(codes(ev(green)[0]), ["E_PALETTE"])
+
+    def test_stand_out(self):
+        """Look C, rule 7 (E_FAINT): the body's mean lit colour stands at least FAINT_D from the ground
+        around it (its box grown by FAINT_RING px, less its own pixels and shadow) at noon and at golden
+        hour. Look B's grey stone on the grey shingle is refused; the same stone tarred or whitewashed
+        passes; and a colour that holds at noon can still vanish in the evening light."""
+        grey = S.make_object("2026-11-05-a", "maker-a", S.block(5, 5), {"a": (134, 130, 122)}, "shingle", 2640, 1665,
+                             scale=4)
+        self.assertEqual([e.line() for e in ev(grey)[0]],
+                         ["E_FAINT at noon it averages (126,121,112) against (140,131,115) around it, 30 apart, min 48:"
+                          " too like the ground to notice (first px at (2630,1646))"])
+        for paint in ((34, 34, 38), (228, 226, 220)):
+            grey["palette"] = {"a": list(paint)}
+            self.assertEqual(ev(grey)[0], [], paint)
+        glass = S.make_object("2026-11-05-a", "maker-a", S.block(6, 6), {"a": (170, 180, 190)}, "shingle", 2640, 1665)
+        self.assertEqual([e.code for e in ev(glass)[0]], ["E_FAINT"])
+        self.assertTrue(ev(glass)[0][0].line().startswith("E_FAINT at golden "))
 
     def test_region_and_keepout(self):
         up = S.make_object("2026-11-05-a", "maker-a", S.block(4, 64), S.STONE, "shingle", 1700, 1200, scale=2)
@@ -78,8 +172,8 @@ class TestLocalRules(unittest.TestCase):
 
     def test_plaque_must_rest_and_stay_clear(self):
         log = S.fixture_obj("2026-11-03-log")
-        log["place"]["y"] = 1633
-        self.assertEqual([e.line() for e in ev(log)[0]], ["E_REST label plaque foot 1 px above dry band at x=2551"])
+        log["place"]["y"] = 1617
+        self.assertEqual([e.line() for e in ev(log)[0]], ["E_REST label plaque foot 1 px above dry band at x=2419"])
         log = S.fixture_obj("2026-11-03-log")
         log["label"]["side"] = "left"
         self.assertEqual(codes(ev(log)[0]), ["E_REST"])

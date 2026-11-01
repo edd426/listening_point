@@ -108,7 +108,8 @@ CAIRN = ["..dd..", ".daab.", ".aabb.", "aabbcc", "abbacc", "bbaacc", "cbbccb"]
 
 def fixtures(shore, ref):
     """Four synthetic objects accepted one after another, as the carrier would: a labelled cairn on the
-    shingle, a post on the pier, a flag built onto the cairn and a scale-2 driftwood log further left.
+    shingle, a post on the pier, a flag built onto the cairn and a driftwood log further left (look B: at
+    scale 4, big enough to clear the floor on size; the flag, built onto the cairn, may stay small).
     Returns their manifests in seq order."""
     out = []
 
@@ -116,11 +117,11 @@ def fixtures(shore, ref):
         shore.accept(m, at, at, "world-1", "0" * 40)
         out.append(m)
     m, _ = place_first(shore, lambda x, y: manifest("2027-03-18-cairn", "maker-a", CAIRN, STONES, "shingle", x, y,
-                                                     label=("CAIRN", "right")), dry_spots(ref, 2520, 2800))
+                                                     scale=4, label=("CAIRN", "right")), dry_spots(ref, 2520, 2800))
     accept(m, "2027-03-18T04:30:00Z")
     post = ["oo", "tt", "tt", "tt", "tt", "tt", "tt", "tt", "tt", "tt"]
     m, _ = place_first(shore, lambda x, y: manifest("2027-03-18-post", "maker-b", post, {"o": (118, 112, 102), "t": (96, 80, 64)},
-                                                     "pier", x, y, anchor=(0, 9)), deck_spots(ref, 2200, 2400))
+                                                     "pier", x, y, anchor=(0, 9), scale=4), deck_spots(ref, 2200, 2400))
     accept(m, "2027-03-18T04:31:00Z")
     cairn = shore.byid["2027-03-18-cairn"]
     top = cairn.top
@@ -132,6 +133,6 @@ def fixtures(shore, ref):
     accept(m, "2027-03-19T04:30:00Z")
     log = ["..wwwwwwww..", ".wwvvwwwwvw.", "wvvwwwwvvwww", ".wwwwvwwww.."]
     m, _ = place_first(shore, lambda x, y: manifest("2027-03-19-log", "maker-b", log, {"w": (150, 140, 116), "v": (118, 112, 102)},
-                                                     "shingle", x, y, scale=2, anchor=(6, 3)), dry_spots(ref, 1760, 1990))
+                                                     "shingle", x, y, scale=4, anchor=(6, 3)), dry_spots(ref, 1760, 1990))
     accept(m, "2027-03-19T04:31:00Z")
     return out

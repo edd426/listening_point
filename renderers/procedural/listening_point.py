@@ -102,6 +102,7 @@ class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, TowerMixin, 
             self.glow(x, y, R * 1.3, (255, 240, 210), 0.5 * k, tail=0.5)
         self.night_lights()
         self.listener_glow()
+        self.shore_glow()
         if not self.reference:
             self.falling_leaves()
         self.precipitation()

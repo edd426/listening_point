@@ -23,9 +23,19 @@ from PIL import Image
 
 from core import *  # noqa: F401,F403
 
-# Every object is lit as one surface with this normal (east, north, up): facing the viewer and tipped
-# up, like the bench, the sheep and the cat. The reference set's light values use the same one.
+# Every object pixel is lit with the normal of its face (east, north, up), which the kit reads off the
+# bitmap's silhouette (shorekit.geometry.cell_face): FRONT faces the viewer and is tipped up, like the
+# bench, the sheep and the cat; TOP faces up and a little south, as the beach under it does, so it
+# catches the sky and the sun like the shingle; EAST and WEST are a cell's open left or right side (the
+# viewer looks south), lit by a low morning or evening sun. The reference set's lights use the same ones.
 UPRIGHT = (0.0, 0.8, 0.6)
+FACES = (UPRIGHT, (0.0, -0.2, 0.98), (0.75, 0.35, 0.55), (-0.75, 0.35, 0.55))
+# A pixel of an object's glow key emits this many times its albedo when the lamps are lit (the kit's
+# compose.EMIT / 256), and the lit area throws a small halo, a pool on the ground and, on the pier, a
+# streak on the water: one key per object and at most shorekit.GLOW_MAX_PX pixels, so it stays a lamp.
+EMIT = 410 / 256
+GLOW_CORE = np.array([255, 214, 150], np.float32)
+GLOW_HALO = np.array([255, 176, 96], np.float32)
 # The contact shadow takes this much of the light from the ground under an object's foot.
 SHADOW = 0.45
 # The listener's window: two panes in the side of the boat's deckhouse, in boat units (see PropsMixin.boat)
@@ -124,23 +134,35 @@ def on_show(adds, gone, when):
 
 
 def draw_set(ref, objs):
-    """The kit's draw plan for these objects as arrays: the solid pixels on show (x, y, albedo and
-    the ground y of the object they belong to) and the contact-shadow pixels on show."""
+    """The kit's draw plan for these objects as arrays: the solid pixels on show (x, y, albedo, face,
+    whether it glows, and the ground y of the object they belong to), the contact-shadow pixels on show,
+    and, per object whose glow shows, where its lit area is."""
     sk = kit()
-    sx, sy, rgb, gy = [], [], [], []
+    sx, sy, rgb, gy, face, glow = [], [], [], [], [], []
+    lamps = []          # per object whose glow shows: (x, y) of the lit area's middle, its pixels, ground y, on the pier
     shadow = set()
+    surface = {o.id: o.surface for o in objs}
     for o in sk.compose.plan(ref, objs):
-        for x, y, c, _, shown in o["solid"]:
+        gx = []
+        for x, y, c, _, shown, f, g in o["solid"]:
             if shown:
                 sx.append(x)
                 sy.append(y)
                 rgb.append(c)
                 gy.append(o["ground_y"])
+                face.append(f)
+                glow.append(g)
+                if g:
+                    gx.append((x, y))
+        if gx:
+            lamps.append((sum(p[0] for p in gx) / len(gx) + 0.5, sum(p[1] for p in gx) / len(gx) + 0.5, len(gx),
+                          o["ground_y"], surface.get(o["id"]) == "pier"))
         shadow.update((x, y) for x, y, shown in o["shadow"] if shown)
     hx = sorted(shadow)
     return dict(ids=tuple(o.id for o in objs),
                 sx=np.array(sx, np.int32), sy=np.array(sy, np.int32), gy=np.array(gy, np.int32),
-                rgb=np.array(rgb, np.uint8).reshape(-1, 3),
+                rgb=np.array(rgb, np.uint8).reshape(-1, 3), face=np.array(face, np.int8),
+                glow=np.array(glow, bool), lamps=lamps,
                 hx=np.array([p[0] for p in hx], np.int32), hy=np.array([p[1] for p in hx], np.int32))
 
 
@@ -215,7 +237,9 @@ class ShoreMixin:
         if self.sun_alt > 1 or (self.moon_alt > 4 and self.sun_alt < -6):
             sh, _ = self.shadow_masks()
             shade = sh[np.clip((gy * k).astype(np.int32), 0, self.H - 1), np.clip((sx * k).astype(np.int32), 0, self.W - 1)]
-        col = self.lit(alb, UPRIGHT, (sx + 0.5) * k, (sy + 0.5) * k, shade=shade)
+        col = self.lit(alb, np.asarray(FACES, np.float32)[st["face"]], (sx + 0.5) * k, (sy + 0.5) * k, shade=shade)
+        if self.lights_on > 0 and st["glow"].any():
+            col[st["glow"]] += alb[st["glow"]] * (EMIT * self.lights_on)
         if native:
             c, a = self.c, self.a
             hx, hy = st["hx"], st["hy"]
@@ -261,6 +285,34 @@ class ShoreMixin:
         allow = np.ones((L.y1 - L.y0, L.x1 - L.x0), np.float32)
         allow[y[inside], x[inside]] = 0.0
         return allow
+
+    def shore_lamps(self):
+        """The lit areas of the objects on show, in this frame's pixels: (x, y, size, ground y, on the pier),
+        with size the side of a square of the same area. Empty unless the lamps are on."""
+        st = self.shore_now()
+        if st is None or self.lights_on <= 0 or not st["lamps"]:
+            return []
+        k = self.W / self.day.shore.frame[0]
+        return [(x * k, y * k, math.sqrt(n) * k, g * k, pier) for x, y, n, g, pier in st["lamps"]]
+
+    def shore_pools(self):
+        """Lamplight on the ground and on things near an object's lit area (FrameBase's pools)."""
+        for x, y, a, g, _ in self.shore_lamps():
+            self.pools.append((x, y, g, WARM, 5.0 * a, 0.35 * self.lights_on))
+
+    def shore_emitters(self):
+        """A lit thing on the pier shows on the water under it, like the pier's lantern."""
+        dy = self.pier_water_y() - float(self.pproj(*self.pier_pt(1.0, -0.1, PIER3["deck"]))[1])
+        for x, y, a, g, pier in self.shore_lamps():
+            if pier:
+                self.emitters.append((x, y, GLOW_HALO, 0.06 * a * self.lights_on, g + dy))
+
+    def shore_glow(self):
+        """The halo of each lit area in the night air, after the fog, with the scene's other lamps."""
+        on = self.lights_on
+        for x, y, a, _, _ in self.shore_lamps():
+            self.glow(x, y, 0.55 * a, GLOW_CORE, 0.45 * on)
+            self.glow(x, y, 3.5 * a, GLOW_HALO, 0.14 * on, tail=0.3)
 
     # -------------------------------------------------------------- the lamp --
     def listener_lamp(self):

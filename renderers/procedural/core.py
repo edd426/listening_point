@@ -278,6 +278,8 @@ class FrameBase:
                 for sv in (-0.52, 0.52):
                     wx_ = self.tw["cx"] + sv * self.tw["r"] * 1.3
                     self.pools.append((wx_, 0.548 * self.H, self.tw["yb"] + 40 * s, WARM, 90 * s, 0.22 * self.windows_lit))
+            if hasattr(self, "shore_pools"):
+                self.shore_pools()          # lamplight from the shore's objects (shore.py)
         self._edge = hill_edge()
         self.lamp_pos = (LAMP[0] * self.W, LAMP[1] * self.H - LAMP[2] * s - 15 * s)
 
