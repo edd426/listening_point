@@ -65,18 +65,45 @@ class PropsMixin:
         bx, gy = BENCH[0] * W, BENCH[1] * H
         L = Layer(self, bx - 110 * s, gy - 95 * s, bx + 110 * s, gy + 10 * s)
         wood_n, iron_n = normalize([0, 0.8, 0.6]), normalize([0, 1, 0.2])
-        wood = self.lit((128, 86, 54), wood_n, bx, gy - 40 * s)
-        iron = self.lit((36, 36, 40), iron_n, bx, gy - 40 * s)
-        L.poly([(bx - 92 * s, gy - 42 * s), (bx + 92 * s, gy - 42 * s), (bx + 92 * s, gy - 36 * s), (bx - 92 * s, gy - 36 * s)], wood * 0.75)
+        up_n, down_n = normalize([0, 0.35, 0.94]), normalize([0, 0.5, -0.87])
+        x, y = bx, gy - 40 * s
+        wood_a = np.array([128, 86, 54], np.float32)
+        iron_a = np.array([36, 36, 40], np.float32)
+        iron = self.lit(iron_a, iron_n, x, y)
+        rg = np.random.default_rng(31)
+        # the back of the seat, then the three back rails: each its own tone, grained along its
+        # length, with a top edge that takes the sky and an underside that does not
+        L.poly([(bx - 92 * s, gy - 42 * s), (bx + 92 * s, gy - 42 * s), (bx + 92 * s, gy - 36 * s), (bx - 92 * s, gy - 36 * s)],
+               self.lit(wood_a * 0.82, normalize([0, 1, 0.1]), x, y))
+        L.line([(bx - 92 * s, gy - 36.4 * s), (bx + 92 * s, gy - 36.4 * s)], self.lit(wood_a * 0.82, down_n, x, y), 0.8 * s)
         for yy in (-78, -64, -50):
-            L.poly([(bx - 94 * s, gy + (yy - 0) * s), (bx + 94 * s, gy + yy * s), (bx + 94 * s, gy + (yy + 9) * s), (bx - 94 * s, gy + (yy + 9) * s)], wood)
-            L.line([(bx - 94 * s, gy + yy * s + 0.8 * s), (bx + 94 * s, gy + yy * s + 0.8 * s)], wood * 1.25, 1.2 * s)
+            a_ = wood_a * rg.uniform(0.9, 1.08)
+            y0, y1 = gy + yy * s, gy + (yy + 9) * s
+            L.poly([(bx - 94 * s, y0), (bx + 94 * s, y0), (bx + 94 * s, y1), (bx - 94 * s, y1)], self.lit(a_, wood_n, x, y))
+            for k in range(5):        # grain: long, faint streaks of darker and paler wood
+                gy0 = y0 + rg.uniform(2.0, 7.5) * s
+                xa = bx - 94 * s + rg.uniform(0, 60) * s
+                xb = min(bx + 94 * s, xa + rg.uniform(50, 140) * s)
+                L.line([(xa, gy0), ((xa + xb) / 2, gy0 + rg.normal(0, 0.4) * s), (xb, gy0 + rg.normal(0, 0.5) * s)],
+                       self.lit(a_ * (0.84 if k % 2 else 1.1), wood_n, x, y), 0.7 * s)
+            L.line([(bx - 94 * s, y0 + 0.8 * s), (bx + 94 * s, y0 + 0.8 * s)], self.lit(a_ * 1.05, up_n, x, y), 1.2 * s)
+            L.line([(bx - 94 * s, y1 - 0.6 * s), (bx + 94 * s, y1 - 0.6 * s)], self.lit(a_, down_n, x, y), 0.9 * s)
+            for sx in (-1, 1):        # the screw heads where the rail meets the iron
+                L.ellipse(bx + sx * 88 * s, (y0 + y1) / 2, 1.1 * s, 1.1 * s, self.lit(iron_a * 2.2, up_n, x, y))
+        # the cast-iron ends: dark iron, its edges worn paler, each edge lit as it faces
         for sx in (-1, 1):
-            x = bx + sx * 97 * s
-            L.line([(x, gy), (x, gy - 82 * s)], iron, 5 * s)
-            L.line([(x - sx * 4 * s, gy - 6 * s), (x - sx * 4 * s, gy - 34 * s)], iron, 4 * s)
-            L.line([(x, gy - 44 * s), (x + sx * 12 * s, gy - 48 * s), (x + sx * 16 * s, gy - 56 * s)], iron, 4 * s)
-            L.ellipse(x + sx * 16 * s, gy - 58 * s, 4 * s, 4 * s, iron)
+            xe = bx + sx * 97 * s
+            for (pts, w) in (([(xe, gy), (xe, gy - 82 * s)], 5),
+                             ([(xe - sx * 4 * s, gy - 6 * s), (xe - sx * 4 * s, gy - 34 * s)], 4),
+                             ([(xe, gy - 44 * s), (xe + sx * 12 * s, gy - 48 * s), (xe + sx * 16 * s, gy - 56 * s)], 4)):
+                L.line(pts, iron, w * s)
+                for side in (-1, 1):
+                    edge = [(px + side * (w * 0.5 - 0.6) * s, py) for px, py in pts]
+                    L.line(edge, self.lit(iron_a * 1.9, normalize([-side * 0.8, 0.55, 0.25]), x, y), 0.7 * s)
+            L.ellipse(xe + sx * 16 * s, gy - 58 * s, 4 * s, 4 * s, iron)
+            L.ellipse(xe + sx * 16 * s, gy - 59 * s, 2.2 * s, 2.0 * s, self.lit(iron_a * 1.9, up_n, x, y))
+            L.ellipse(xe, gy - 1 * s, 4 * s, 1.6 * s, iron)                        # the foot
+            L.ellipse(xe, gy - 83 * s, 3 * s, 2.0 * s, self.lit(iron_a * 1.6, up_n, x, y))   # the finial cap
         L.poly([(bx - 9 * s, gy - 61 * s), (bx + 9 * s, gy - 61 * s), (bx + 9 * s, gy - 56 * s), (bx - 9 * s, gy - 56 * s)],
                self.lit((196, 156, 70), wood_n) + 20 * self.sun_str)
         L.composite()
@@ -86,17 +113,58 @@ class PropsMixin:
         lx, gy, hgt = LAMP[0] * W, LAMP[1] * H, LAMP[2] * s
         on = self.lights_on
         L = Layer(self, lx - 30 * s, gy - hgt - 40 * s, lx + 30 * s, gy + 6 * s)
-        iron = self.lit((34, 34, 38), normalize([0, 1, 0.2]), lx, gy - hgt * 0.5)
-        L.poly([(lx - 9 * s, gy), (lx + 9 * s, gy), (lx + 6 * s, gy - 16 * s), (lx - 6 * s, gy - 16 * s)], iron)
-        L.poly([(lx - 3.6 * s, gy - 14 * s), (lx + 3.6 * s, gy - 14 * s), (lx + 2.6 * s, gy - hgt), (lx - 2.6 * s, gy - hgt)], iron)
-        L.line([(lx - 14 * s, gy - hgt * 0.86), (lx + 14 * s, gy - hgt * 0.86)], iron, 2.4 * s)
+        ya = gy - hgt * 0.5
+        ia = np.array([34, 34, 38], np.float32)
+        iron = self.lit(ia, normalize([0, 1, 0.2]), lx, ya)
+        # round cast iron: a face to the east, one to the camera, one to the west, so the side toward
+        # the sun (or the moon, or the lamp below) is the light one
+        sides = [self.lit(ia * 1.25, normalize([e, 0.6, 0.1]), lx, ya) for e in (0.8, 0.0, -0.8)]
+        up_n = normalize([0, 0.4, 0.92])
+
+        def column(xb0, xb1, xt0, xt1, y0, y1):
+            for i, c in enumerate(sides):
+                a, b = i / 3, (i + 1) / 3
+                L.poly([(xb0 + (xb1 - xb0) * a, y0), (xb0 + (xb1 - xb0) * b, y0), (xt0 + (xt1 - xt0) * b, y1), (xt0 + (xt1 - xt0) * a, y1)], c)
+        # the plinth, fluted, with a moulded top and a collar
+        column(lx - 9 * s, lx + 9 * s, lx - 6 * s, lx + 6 * s, gy, gy - 16 * s)
+        for fx in (-3.5, 0, 3.5):
+            L.line([(lx + fx * 1.2 * s, gy - 1.5 * s), (lx + fx * s, gy - 13 * s)], iron * 0.7, 0.8 * s)
+        L.poly([(lx - 7.5 * s, gy - 15 * s), (lx + 7.5 * s, gy - 15 * s), (lx + 6.5 * s, gy - 18 * s), (lx - 6.5 * s, gy - 18 * s)], self.lit(ia * 1.4, up_n, lx, ya))
+        L.poly([(lx - 9.5 * s, gy), (lx + 9.5 * s, gy), (lx + 9 * s, gy - 2.5 * s), (lx - 9 * s, gy - 2.5 * s)], self.lit(ia * 1.2, up_n, lx, ya))
+        # the post
+        column(lx - 3.6 * s, lx + 3.6 * s, lx - 2.6 * s, lx + 2.6 * s, gy - 14 * s, gy - hgt)
+        for yy in (gy - hgt * 0.45, gy - hgt * 0.97):
+            L.poly([(lx - 4.2 * s, yy + 1.5 * s), (lx + 4.2 * s, yy + 1.5 * s), (lx + 4.2 * s, yy - 1.5 * s), (lx - 4.2 * s, yy - 1.5 * s)], iron)
+            L.line([(lx - 4.2 * s, yy - 1.0 * s), (lx + 4.2 * s, yy - 1.0 * s)], self.lit(ia * 1.6, up_n, lx, ya), 0.7 * s)
+        # the ladder bar, with a ball at each end
+        yb = gy - hgt * 0.86
+        L.line([(lx - 14 * s, yb), (lx + 14 * s, yb)], iron, 2.4 * s)
+        L.line([(lx - 14 * s, yb - 0.8 * s), (lx + 14 * s, yb - 0.8 * s)], self.lit(ia * 1.6, up_n, lx, ya), 0.7 * s)
+        for ex in (-14.5, 14.5):
+            L.ellipse(lx + ex * s, yb, 1.9 * s, 1.9 * s, iron)
+        # the lantern: three panes seen, the side ones turned away, in an iron frame; lit, the glass
+        # glows from the flame inside
         ty = gy - hgt
-        glass = self.lit((170, 180, 190), normalize([0, 1, 0.3])) * (1 - on) + np.array([255, 222, 160], np.float32) * on
-        L.poly([(lx - 9 * s, ty), (lx + 9 * s, ty), (lx + 12 * s, ty - 30 * s), (lx - 12 * s, ty - 30 * s)], glass)
-        L.line([(lx, ty), (lx, ty - 30 * s)], iron, 1.5 * s)
+        gpane = [self.lit((170, 180, 190), normalize([e, 0.75, 0.3]), lx, ty) for e in (0.75, 0.0, -0.75)]
+        warm = np.array([255, 222, 160], np.float32)
+        xs_b = [-9, -5.5, 5.5, 9]
+        xs_t = [-12, -7.5, 7.5, 12]
+        for i in range(3):
+            g = gpane[i] * (1 - on) + warm * (0.86 if i != 1 else 1.0) * on
+            L.poly([(lx + xs_b[i] * s, ty), (lx + xs_b[i + 1] * s, ty), (lx + xs_t[i + 1] * s, ty - 30 * s), (lx + xs_t[i] * s, ty - 30 * s)], g)
+        if on > 0:
+            L.ellipse(lx, ty - 13 * s, 3.2 * s, 5.5 * s, np.array([255, 244, 214], np.float32), a=on)
+        for xb_, xt_ in zip(xs_b, xs_t):
+            L.line([(lx + xb_ * s, ty), (lx + xt_ * s, ty - 30 * s)], iron, 1.3 * s)
         L.line([(lx - 9 * s, ty), (lx + 9 * s, ty)], iron, 2.5 * s)
-        L.poly([(lx - 15 * s, ty - 30 * s), (lx + 15 * s, ty - 30 * s), (lx, ty - 42 * s)], iron)
+        L.poly([(lx - 6 * s, ty + 1 * s), (lx + 6 * s, ty + 1 * s), (lx + 3 * s, ty + 5 * s), (lx - 3 * s, ty + 5 * s)], iron)
+        L.line([(lx - 12.5 * s, ty - 30 * s), (lx + 12.5 * s, ty - 30 * s)], iron, 1.8 * s)
+        # the roof, two faces, and its finial
+        L.poly([(lx - 15 * s, ty - 30 * s), (lx, ty - 30 * s), (lx, ty - 42 * s)], self.lit(ia * 1.3, normalize([0.6, 0.45, 0.66]), lx, ty))
+        L.poly([(lx, ty - 30 * s), (lx + 15 * s, ty - 30 * s), (lx, ty - 42 * s)], self.lit(ia * 1.3, normalize([-0.6, 0.45, 0.66]), lx, ty))
+        L.line([(lx - 15 * s, ty - 30.5 * s), (lx + 15 * s, ty - 30.5 * s)], self.lit(ia * 1.6, up_n, lx, ty), 0.8 * s)
         L.ellipse(lx, ty - 43 * s, 2.5 * s, 2.5 * s, iron)
+        L.ellipse(lx, ty - 43.6 * s, 1.3 * s, 1.2 * s, self.lit(ia * 1.8, up_n, lx, ty))
         L.composite()
         self.lamp_pos = (lx, ty - 15 * s)
 

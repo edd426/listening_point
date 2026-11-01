@@ -1,5 +1,11 @@
-"""The observatory tower: masonry, dome, telescope, windows, door and clock."""
+"""The observatory tower: masonry, dome, telescope, windows, door and clock.
+
+The wall, the dome and the door are surfaces that never change, so their albedo, normals and
+occlusion are made once per frame size (wall_maps, dome_maps, door_maps) and each minute only lights
+them: the light comes from the scene, never from the drawing."""
+import functools
 import math
+from types import SimpleNamespace
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -10,8 +16,202 @@ from core import *  # noqa: F401,F403
 from stars import STAR_DEC, STAR_MAG, STAR_RA
 
 
+def tex(u, v, seed, beta=2.0, aniso=1.0, n=256):
+    """A periodic noise texture (zero mean, unit variance) sampled at texel coordinates u (across), v (down)."""
+    u, v = np.broadcast_arrays(u, v)
+    return sample(fnoise(n, n, beta, aniso, seed), v, u)
+
+
+def rounded_inside(ex, ey, rc):
+    """Distance to the edge of a rectangle with rounded corners, from the distances to its sides."""
+    qx, qy = rc - ex, rc - ey
+    return rc - np.hypot(np.maximum(qx, 0), np.maximum(qy, 0)) - np.minimum(np.maximum(qx, qy), 0)
+
+
+@functools.lru_cache(maxsize=2)
+def wall_maps(W, H):
+    """The masonry: each stone has its own tone and tilt and a bevelled edge into a recessed joint, a
+    few are darker or chipped; rain has streaked the stone under the cornice, the sills and the clock;
+    the foot is damp, with moss in the joints and lichen, and the wall darkens where it meets the
+    ground and under the cornice."""
+    s = W / 3840
+    T = TOWER
+    cx, yb, yt, rt = T["cx"] * W, T["yb"] * H, T["yt"] * H, T["r"] * s
+    rb = rt * 1.03
+    et, eb = 1.2 * (yt / H - VH) * rt, 1.2 * (yb / H - VH) * rb
+    x0, x1 = int(max(0, cx - rb - 2)), int(min(W, cx + rb + 3))
+    y0, y1 = int(max(0, yt - abs(et) - 3)), int(min(H, yb + abs(eb) + 3))
+    X = np.arange(x0, x1, dtype=np.float32)[None, :] + 0.5
+    Y = np.arange(y0, y1, dtype=np.float32)[:, None] + 0.5
+    v0 = np.clip((Y - yt) / (yb - yt), 0, 1)
+    r = rt + (rb - rt) * v0
+    dx = X - cx
+    sv = np.clip(dx / r, -1, 1)
+    cv = np.sqrt(1 - sv ** 2)
+    top, bot = yt + et * cv, yb + eb * cv
+    cov = np.clip(r - np.abs(dx) + 0.5, 0, 1) * np.clip(Y - top + 0.5, 0, 1) * np.clip(bot - Y + 0.5, 0, 1)
+    v = np.clip((Y - top) / (bot - top), 0, 1)
+    arc = np.arcsin(sv) * r
+    hp = v * (yb - yt)
+    # the courses, as before: 21 x 46 (at full size), each course shifted
+    ch, sw = 21 * s, 46 * s
+    ci = np.floor(hp / ch)
+    fy = hp / ch - ci
+    sx = (arc + hash2(ci, 7) * sw) / sw
+    si = np.floor(sx)
+    fx = sx - si
+    t1, t2, t3 = hash2(ci, si), hash2(ci + 31.7, si - 11.3), hash2(ci - 17.9, si + 23.3)
+    t4, t5, t6 = hash2(ci + 2.2, si + 5.5), hash2(ci - 8.1, si - 3.7), hash2(ci + 13.3, si + 0.9)
+    U, V = arc / s, hp / s                      # texel coordinates on the unrolled wall
+    wob = tex(U * 0.9, V * 0.9, 74, 1.7)
+    ex = np.minimum(fx, 1 - fx) * sw * cv + 0.45 * s * wob      # no stone is quite square
+    ey = np.minimum(fy, 1 - fy) * ch + 0.45 * s * tex(U * 0.9 + 91, V * 0.9, 74, 1.7)
+    e = rounded_inside(ex, ey, 2.2 * s)
+    mw, bw, D = 0.8 * s, 2.4 * s, 2.6 * s
+    face = sm(mw, mw + bw, e)                   # 0 in the joint, 1 on the face of the stone
+    rough = tex(U * 2.2, V * 2.2, 75, 1.9)
+    pill = (1 - (2 * fx - 1) ** 2) * (1 - (2 * fy - 1) ** 2)
+    tilt = 0.10 * ((t5 - 0.5) * (2 * fx - 1) * sw * cv + (t6 - 0.5) * (2 * fy - 1) * ch)
+    h = face * (D * (1 + 0.6 * pill) + tilt + 0.5 * s * rough) + (1 - face) * 0.25 * s * rough
+    # a few stones have lost a corner
+    kx, ky = (t4 * 7 % 1 > 0.5).astype(np.float32), (t4 * 13 % 1 > 0.5).astype(np.float32)
+    dc = np.hypot((fx - kx) * sw * cv, (fy - ky) * ch)
+    rc = (0.35 + 0.3 * (t4 * 29 % 1)) * ch
+    chip = (t4 < 0.14) * sm(rc, rc * 0.55, dc + 0.8 * s * wob)
+    h = h - chip * D * 1.6 * (1 - dc / (rc + 1e-3))
+    # tone: every stone its own, a few much darker, a few pale; mottled within
+    val = 0.85 + 0.28 * t1
+    val = np.where(t2 < 0.08, val * 0.78, np.where(t2 > 0.94, val * 1.09, val))
+    warm = (t3 - 0.5) * 0.07
+    mott = tex(U * 0.8, V * 0.8, 76, 2.0)
+    fine = tex(U * 2.6, V * 2.6, 77, 1.3)
+    alb = np.array([176, 166, 147], np.float32) * (val * (1 + 0.065 * mott + 0.03 * fine))[..., None]
+    alb = alb * (1 + warm[..., None] * np.array([1.0, 0.25, -1.0], np.float32))
+    alb = alb * (1 + 0.07 * chip)[..., None]
+    mortar = np.array([140, 132, 116], np.float32) * (1 + 0.05 * fine)[..., None]
+    alb = alb * face[..., None] + mortar * (1 - face[..., None])
+    # rain streaks: under the cornice, the window sills and the clock
+    streak = sample(fnoise(64, 512, 2.0, 0.08, 73), V * 0.05, U * 1.2)
+    stain = sm(0.22, 0.0, v) * sm(-0.3, 1.0, streak) * 0.34
+    for wsv in (-0.52, 0.52):
+        dy_ = Y - (0.548 * H + 49 * s)
+        aw = math.asin(wsv) * rt
+        stain = stain + 0.42 * sm(0, 5 * s, dy_) * sm(120 * s, 8 * s, dy_) * sm(20 * s, 9 * s, np.abs(arc - aw)) \
+            * sm(-0.6, 1.0, streak)
+    Rc = CLOCK["R"] * s * 1.2
+    dxc = np.abs(dx)
+    yc = CLOCK["y"] * H + np.sqrt(np.clip(Rc ** 2 - dxc ** 2, 0, None))
+    dy_ = Y - yc
+    stain = stain + 0.36 * (dxc < Rc * 0.85) * sm(0, 4 * s, dy_) * sm(80 * s, 6 * s, dy_) * sm(-0.4, 1.0, streak)
+    alb = alb * (1 - np.clip(stain, 0, 0.55))[..., None]
+    # the damp foot, with moss in its joints and on the lowest stones, and lichen here and there
+    low = tex(U * 0.35, V * 0.35, 78, 2.2)
+    damp = sm(0.80, 0.97, v + 0.035 * low)
+    alb = alb * (1 - 0.24 * damp)[..., None]
+    alb = alb + (np.array([92, 100, 76], np.float32) - alb) * (0.18 * damp)[..., None]
+    mn = tex(U * 1.1, V * 1.1, 79, 1.8)
+    moss = np.clip(damp * sm(0.0, 1.2, mn + 0.9 * (1 - face) + 0.4 * sm(0.93, 1.0, v)), 0, 1) * 0.75
+    mossc = np.array([74, 94, 52], np.float32) * (1 + 0.12 * fine)[..., None]
+    alb = alb + (mossc - alb) * moss[..., None]
+    ln = tex(U * 1.6, V * 1.6, 80, 1.5)
+    lichen = sm(1.55, 2.05, ln) * face * (0.3 + 0.7 * sm(0.2, 0.9, v)) * 0.75
+    alb = alb + (np.array([176, 172, 138], np.float32) - alb) * lichen[..., None]
+    h = h + 0.5 * s * (moss + lichen)
+    # normals: the round wall, tilted by the stones' relief
+    nrm = np.stack([-sv, cv, np.zeros_like(sv)], -1)
+    nrm = bump_normal(nrm, ndi.gaussian_filter(h, 0.6 * s), 1.0)
+    # occlusion: in the joints, under the cornice, and down at the ground
+    joint = 0.66 + 0.34 * sm(0.0, mw + 0.5 * bw, e)
+    ao = joint * (0.58 + 0.42 * sm(0.0, 0.07, v)) * (0.6 + 0.4 * sm(1.0, 0.92, v)) * (1 - 0.35 * chip * (1 - dc / (rc + 1e-3)))
+    cav = (0.8 + 0.2 * cv) * (0.85 + 0.15 * joint)     # the joints and the turning wall hide some of every light
+    return SimpleNamespace(box=(x0, y0, x1, y1), X=X, Y=Y, cov=cov[..., None].astype(np.float32),
+                           alb=alb.astype(np.float32), nrm=nrm.astype(np.float32), ao=ao.astype(np.float32),
+                           cav=cav[..., None].astype(np.float32))
+
+
+@functools.lru_cache(maxsize=2)
+def dome_maps(W, H):
+    """The dome's copper: sixteen gores between standing seams, each gore in sheets lapped over the one
+    below, every sheet its own shade of patina, with verdigris run down from the seams."""
+    s = W / 3840
+    cx, yt = TOWER["cx"] * W, TOWER["yt"] * H
+    cy, R = yt - 16 * s, TOWER["r"] * s * 0.99
+    x0, x1 = int(cx - R - 2), int(cx + R + 3)
+    y0, y1 = int(cy - R - 2), int(cy + 0.35 * R)
+    X = np.arange(x0, x1, dtype=np.float32)[None, :] + 0.5
+    Y = np.arange(y0, y1, dtype=np.float32)[:, None] + 0.5
+    sx, sy = [np.ascontiguousarray(a) for a in np.broadcast_arrays((X - cx) / R, (cy - Y) / R)]
+    rho = np.sqrt(sx ** 2 + sy ** 2)
+    cov = np.clip((1 - rho) * R + 0.5, 0, 1) * (sy > -0.3)
+    z = np.sqrt(np.clip(1 - rho ** 2, 0, 1))
+    nrm = np.stack([-sx, z, sy], -1)
+    lon = np.degrees(np.arctan2(sx, z))
+    lat = np.arcsin(np.clip(sy, -1, 1))
+    clat = np.cos(lat)
+    gore = np.floor((lon + 11.25) / 22.5)
+    ribd = np.abs(((lon + 11.25) % 22.5) - 11.25) * math.pi / 180 * R * clat
+    # sheets: about 11 degrees of latitude each, staggered from gore to gore
+    lstep = 11.0
+    ls = (np.degrees(lat) + 30 + 5.5 * (gore % 2)) / lstep
+    sheet = np.floor(ls)
+    fl = ls - sheet
+    sd = np.minimum(fl, 1 - fl) * lstep * math.pi / 180 * R          # px to the nearest lap
+    lap = sm(1.3 * s, 0.2 * s, fl * lstep * math.pi / 180 * R)      # the lower edge of a sheet, over the next
+    h = 1.5 * s * sm(2.0 * s, 0.3 * s, ribd) + 0.9 * s * lap * sm(0.4 * s, 1.4 * s, ribd)
+    streak = sample(fnoise(256, 256, 2.0, 0.12, 61), Y * 0.6 / s + 0 * X, X * 0.6 / s + 0 * Y)
+    fine = tex(X * 1.8 / s, Y * 1.8 / s, 62, 1.5)
+    p1, p2 = hash2(gore, sheet), hash2(gore + 7.3, sheet - 2.1)
+    # patina: streaked as the rain runs down, every sheet its own shade, with the pale verdigris washed
+    # out from under each lap and along the seams
+    alb = np.array([76, 137, 116], np.float32) * (1 + 0.13 * streak + 0.05 * fine + 0.12 * (p2 - 0.5))[..., None]
+    verd = sm(0.5, 1.3, 0.7 * streak + 0.7 * sm(0.45, 0.0, fl) + 0.5 * sm(3 * s, 0, ribd) + 0.6 * (p1 - 0.5))
+    alb = alb + (np.array([112, 172, 150], np.float32) - alb) * (0.6 * verd)[..., None]
+    alb = alb * (1 - 0.38 * sm(1.4 * s, 0.3 * s, ribd) - 0.06 * lap)[..., None]
+    nrm = bump_normal(nrm, h, 1.0)
+    # the skirt below the cornice turns away from the sky and into its shadow
+    ao = (0.5 + 0.5 * sm(-0.28, 0.06, sy)) * (0.9 + 0.1 * sm(0.3 * s, 1.6 * s, sd))
+    return SimpleNamespace(box=(x0, y0, x1, y1), sx=sx, sy=sy, rho=rho, z=z, cov=cov, nrm=nrm.astype(np.float32),
+                           alb=alb.astype(np.float32), ao=ao.astype(np.float32), ribd=ribd)
+
+
+@functools.lru_cache(maxsize=2)
+def door_maps(W, H):
+    """The door, at the layer's supersampled resolution: six planks, each its own tone, grained along
+    their length, bevelled into dark gaps; greyed and darker near the step; set back in the arch."""
+    s = W / 3840
+    cx, yb = TOWER["cx"] * W, TOWER["yb"] * H
+    dw, dh = 34 * s, 128 * s
+    dyb = yb + 12 * s
+    ox, oy = math.floor(cx - dw - 1), math.floor(dyb - dh - 1)
+    nx, ny = (math.ceil(cx + dw + 1) - ox) * SS, (math.ceil(dyb + 1) - oy) * SS
+    X = ox + (np.arange(nx, dtype=np.float32)[None, :] + 0.5) / SS
+    Y = oy + (np.arange(ny, dtype=np.float32)[:, None] + 0.5) / SS
+    X, Y = np.broadcast_arrays(X, Y)
+    dx, ys = X - cx, dyb - dh + dw
+    edge = np.where(Y < ys, dw - np.hypot(dx, Y - ys), dw - np.abs(dx))
+    cov = np.clip(edge * SS + 0.5, 0, 1) * np.clip((dyb - Y) * SS + 0.5, 0, 1)
+    pw = 2 * dw / 6
+    k = np.floor((X - (cx - dw)) / pw)
+    fx = (X - (cx - dw)) / pw - k
+    pe = np.minimum(fx, 1 - fx) * pw
+    t1, t2 = hash2(k, 3.3), hash2(k, 17.1)
+    grain = tex(X / s * 1.4 + 37 * k, Y / s * 0.09 + 11 * k, 82, 1.4, 0.12)
+    gap = sm(0.8 * s, 0.25 * s, pe)
+    alb = np.array([104, 63, 39], np.float32) * ((0.86 + 0.26 * t1) * (1 + 0.11 * grain) * (1 - 0.6 * gap))[..., None]
+    alb = alb * (1 + (t2 - 0.5)[..., None] * 0.10 * np.array([1, 0, -1], np.float32))
+    foot = sm(dyb - 26 * s, dyb, Y)
+    alb = alb * (1 - 0.16 * foot)[..., None]
+    alb = alb + (np.array([92, 82, 72], np.float32) - alb) * (0.22 * foot)[..., None]
+    h = 1.6 * s * sm(0.3 * s, 2.0 * s, pe) + 0.25 * s * grain
+    nrm = np.broadcast_to(normalize(np.array([0, 1, 0.1], np.float32)), X.shape + (3,))
+    nrm = bump_normal(nrm, h * SS, 1.0)            # the gradient is per supersampled pixel
+    ao = (0.62 + 0.38 * sm(0, 8 * s, edge)) * (0.8 + 0.2 * sm(0, 1.5 * s, pe))
+    return SimpleNamespace(origin=(ox, oy), X=X, Y=Y, edge=edge, ys=ys, cov=cov, alb=alb.astype(np.float32),
+                           nrm=nrm.astype(np.float32), ao=ao.astype(np.float32), dw=dw, dyb=dyb, cx=cx)
+
+
 class TowerMixin:
-    def cylinder(self, cx, yt, yb, rt, rb, albedo_fn, haze=0.0, local=True, ell_k=1.2):
+    def cylinder(self, cx, yt, yb, rt, rb, albedo_fn, haze=0.0, local=True, ell_k=1.2, nrm_fn=None):
         rmax = max(rt, rb)
         et = ell_k * (yt / self.H - VH) * rt
         eb = ell_k * (yb / self.H - VH) * rb
@@ -29,6 +229,8 @@ class TowerMixin:
         v = np.clip((Y - top) / (bot - top), 0, 1)
         alb = albedo_fn(sv, v, X, Y, r)
         nrm = np.stack([-sv, cv, np.zeros_like(sv)], -1)
+        if nrm_fn is not None:
+            nrm = nrm_fn(nrm, sv, v, X, Y, r)
         L = self.light(nrm) * (0.8 + 0.2 * cv)[..., None]
         if local and self.pools:
             L = L + self.local(X, Y)
@@ -41,39 +243,12 @@ class TowerMixin:
         s, W, H = self.s, self.W, self.H
         tw = self.tw
         cx, yb, yt, r = tw["cx"], tw["yb"], tw["yt"], tw["r"]
-        tex = fnoise(512, 512, 2.0, 1.0, 71)
-        tex2 = fnoise(512, 512, 1.4, 1.0, 72)
-
-        def stone(sv, v, X, Y, rr):
-            arc = np.arcsin(sv) * rr
-            hp = v * (yb - yt)
-            ch, sw = 21 * s, 46 * s
-            ci = np.floor(hp / ch)
-            fy = hp / ch - ci
-            sx = (arc + hash2(ci, 7) * sw) / sw
-            si = np.floor(sx)
-            fx = sx - si
-            tint = hash2(ci, si)
-            ep = np.minimum(np.minimum(fy, 1 - fy) * ch, np.minimum(fx, 1 - fx) * sw * np.sqrt(1 - sv ** 2) + 1e-3)
-            mort = sm(2.2 * s, 0.7 * s, ep)[..., None]
-            n1 = sample(tex, Y * 0.5 / s + 0 * X, X * 0.5 / s + 0 * Y)
-            n2 = sample(tex2, Y * 1.5 / s + 0 * X, X * 1.5 / s + 0 * Y)
-            base = np.array([150, 140, 124], np.float32) + np.array([36, 36, 32], np.float32) * tint[..., None]
-            base = base * (1 + 0.07 * n1 + 0.05 * n2)[..., None] * (1 + 0.06 * (0.5 - fy))[..., None]
-            col = base * (1 - mort) + np.array([112, 104, 92], np.float32) * mort
-            moss = (sm(0.72, 1.0, v) * sm(-0.2, 0.9, n1) * 0.5)[..., None]
-            col = col * (1 - moss) + np.array([78, 98, 54], np.float32) * moss
-            # rain has stained the stone below the cornice and under the window sills
-            streak = sample(fnoise(64, 512, 2.0, 0.08, 73), Y * 0.05 / s + 0 * X, arc / s * 1.2)
-            stain = sm(0.25, 0.0, v) * sm(-0.3, 1.0, streak) * 0.3
-            for wsv in (-0.52, 0.52):
-                below = sm(0.0, 0.05, v - 0.43) * sm(0.45, 0.0, v - 0.43)
-                stain = stain + 0.28 * below * sm(16, 6, np.abs(arc / s - wsv * 146 * 1.1)) * sm(-0.5, 1.0, streak)
-            col = col * (1 - np.clip(stain, 0, 0.5))[..., None]
-            col = col * (1 - 0.3 * self.wx.wet)
-            under = (0.72 + 0.28 * sm(0, 0.05, v))[..., None]
-            return col * under
-        self.cylinder(cx, yt, yb, r, r * 1.03, stone)
+        M = wall_maps(W, H)
+        x0, y0, x1, y1 = M.box
+        L = self.light(M.nrm, ao=M.ao) * M.cav
+        if self.pools:
+            L = L + self.local(M.X, M.Y)
+        self.over(y0, y1, x0, x1, M.alb * (1 - 0.3 * self.wx.wet) * L, M.cov)
         # dome, then the cornice ring that it sits on
         cy = yt - 16 * s
         self.dome(cx, cy, r * 0.99)
@@ -83,8 +258,18 @@ class TowerMixin:
             fx = (arc / (16 * s)) % 1.0
             dent = ((fx < 0.35) & (v > 0.62))[..., None]
             base = np.array([198, 190, 172], np.float32) * (1 - 0.1 * (v > 0.55))[..., None]
+            base = base * (1 + 0.04 * tex(arc / s * 1.5, Y / s * 1.5, 81, 1.6))[..., None]
             return np.where(dent, base * 0.55, base)
-        self.cylinder(cx, cy, yt + 8 * s, r * 1.08, r * 1.08, cornice)
+
+        def moulding(nrm, sv, v, X, Y, rr):
+            # a rounded lip on top, a fascia, a fillet, the dentils (bevelled blocks), a soffit under them
+            arc = np.arcsin(sv) * rr
+            fx = (arc / (16 * s)) % 1.0
+            up = 0.9 * sm(0.22, 0.0, v) - 0.5 * sm(0.53, 0.58, v) * sm(0.64, 0.6, v) - 0.7 * sm(0.9, 1.0, v)
+            side = (v > 0.62) * (sm(0.42, 0.35, fx) - sm(0.93, 1.0, fx)) * 0.8
+            t = np.stack([-np.sqrt(1 - sv ** 2), -sv, np.zeros_like(sv)], -1)      # along the ring, to screen right
+            return normalize(nrm + up[..., None] * np.array([0, 0, 1], np.float32) + side[..., None] * t)
+        self.cylinder(cx, cy, yt + 8 * s, r * 1.08, r * 1.08, cornice, nrm_fn=moulding)
         self.telescope(cx, cy, r * 0.99)
         self.tower_details()
 
@@ -92,26 +277,16 @@ class TowerMixin:
         s = self.s
         x0, x1 = int(cx - R - 2), int(cx + R + 3)
         y0, y1 = int(cy - R - 2), int(cy + 0.35 * R)
-        X = np.arange(x0, x1, dtype=np.float32)[None, :] + 0.5
-        Y = np.arange(y0, y1, dtype=np.float32)[:, None] + 0.5
-        sx, sy = [np.ascontiguousarray(a) for a in np.broadcast_arrays((X - cx) / R, (cy - Y) / R)]
-        rho = np.sqrt(sx ** 2 + sy ** 2)
-        cov = np.clip((1 - rho) * R + 0.5, 0, 1) * (sy > -0.3)
-        z = np.sqrt(np.clip(1 - rho ** 2, 0, 1))
-        nrm = np.stack([-sx, z, sy], -1)
-        lon = np.degrees(np.arctan2(sx, z))
-        lat = np.arcsin(np.clip(sy, -1, 1))
-        streak = sample(fnoise(256, 256, 2.0, 0.12, 61), Y * 0.6 / s + 0 * X, X * 0.6 / s + 0 * Y)
-        alb = np.array([80, 142, 120], np.float32) * (1 + 0.13 * streak)[..., None]
-        ribd = np.abs(((lon + 11.25) % 22.5) - 11.25) * math.pi / 180 * R * np.cos(lat)
-        rib = sm(1.6 * s, 0.4 * s, ribd)[..., None]
-        alb = alb * (1 - 0.45 * rib)
+        M = dome_maps(self.W, self.H)
+        x0, y0, x1, y1 = M.box
+        sx, sy, rho, z, cov, nrm, alb = M.sx, M.sy, M.rho, M.z, M.cov, M.nrm, M.alb
         if self.wx.snow_cover > 0.02:
-            cap = (sm(0.15, 0.55, sy) * min(1.0, self.wx.snow_cover * 1.6) * (1 - 0.6 * rib[..., 0]))[..., None]
+            rib = sm(1.6 * s, 0.4 * s, M.ribd)
+            cap = (sm(0.15, 0.55, sy) * min(1.0, self.wx.snow_cover * 1.6) * (1 - 0.6 * rib))[..., None]
             alb = alb * (1 - cap) + np.array([236, 240, 246], np.float32) * cap
         spec_dir = normalize(self.sunv + np.array([0, 1, 0], np.float32))
         spec = np.clip(nrm @ spec_dir, 0, 1) ** 40 * self.sun_str * (0.5 + 0.6 * self.wx.wet)
-        col = alb * self.light(nrm) + spec[..., None] * 255 * self.sun_col
+        col = alb * self.light(nrm, ao=M.ao) + spec[..., None] * 255 * self.sun_col
         col += (self.wx.wet * 0.12 * sm(0.0, 0.8, sy))[..., None] * self.hor_col
         if self.observing:
             mx, my = self.scope_target()
@@ -225,16 +400,33 @@ class TowerMixin:
             L.poly([(wx - ww - 6 * s * k, wy + wh + 5 * s), (wx + ww + 6 * s * k, wy + wh + 5 * s),
                     (wx + ww + 6 * s * k, wy - wh), (wx - ww - 6 * s * k, wy - wh)], surround)
             L.ellipse(wx, wy - wh, ww + 6 * s * k, ww + 6 * s * k, surround)
+            jt = self.lit((140, 132, 116), nrm, wx, wy)
+            for g in (0.55, 1.15, 1.99, 2.59):
+                L.line([(wx + ww * math.cos(g), wy - wh - ww * math.sin(g)),
+                        (wx + (ww + 6 * s * k) * math.cos(g), wy - wh - (ww + 6 * s * k) * math.sin(g))], jt, 0.9 * s)
+            for yy in (wy - wh * 0.2, wy + wh * 0.45):
+                for side in (-1, 1):
+                    L.line([(wx + side * ww, yy), (wx + side * (ww + 6 * s * k), yy)], jt, 0.9 * s)
+            reveal = self.lit((70, 70, 70), nrm, wx, wy) * 0.8
+            L.poly([(wx - ww, wy + wh), (wx + ww, wy + wh), (wx + ww, wy - wh), (wx - ww, wy - wh)], reveal)
+            L.ellipse(wx, wy - wh, ww, ww, reveal)
             glass = self.lit((42, 50, 62), nrm) + self.amb * 30
             wl = self.windows_lit
             glass = glass * (1 - wl) + np.array([255, 190, 112], np.float32) * wl
-            L.poly([(wx - ww, wy + wh), (wx + ww, wy + wh), (wx + ww, wy - wh), (wx - ww, wy - wh)], glass)
-            L.ellipse(wx, wy - wh, ww, ww, glass)
+            gi = 1.4 * s * k
+            L.poly([(wx - ww + gi, wy + wh), (wx + ww - gi, wy + wh), (wx + ww - gi, wy - wh), (wx - ww + gi, wy - wh)], glass)
+            L.ellipse(wx, wy - wh, ww - gi, ww - gi, glass)
             mull = self.lit((60, 52, 44), nrm)
             L.line([(wx, wy - wh - ww), (wx, wy + wh)], mull, 2.2 * s)
             L.line([(wx - ww, wy + 2 * s), (wx + ww, wy + 2 * s)], mull, 2.2 * s)
+            sill = (196 * 1.06, 188 * 1.06, 170 * 1.06)
             L.poly([(wx - ww - 8 * s * k, wy + wh + 4 * s), (wx + ww + 8 * s * k, wy + wh + 4 * s),
-                    (wx + ww + 8 * s * k, wy + wh + 9 * s), (wx - ww - 8 * s * k, wy + wh + 9 * s)], surround * 1.08)
+                    (wx + ww + 8 * s * k, wy + wh + 9 * s), (wx - ww - 8 * s * k, wy + wh + 9 * s)], self.lit(sill, nrm, wx, wy))
+            L.poly([(wx - ww - 8 * s * k, wy + wh + 3 * s), (wx + ww + 8 * s * k, wy + wh + 3 * s),
+                    (wx + ww + 8 * s * k, wy + wh + 5.5 * s), (wx - ww - 8 * s * k, wy + wh + 5.5 * s)],
+                   self.lit(sill, normalize([-sv * 0.5, k * 0.5, 0.85]), wx, wy))
+            L.line([(wx - ww - 8 * s * k, wy + wh + 9.3 * s), (wx + ww + 8 * s * k, wy + wh + 9.3 * s)],
+                   self.lit((150, 142, 126), normalize([-sv * 0.3, k * 0.3, -0.9]), wx, wy), 1.0 * s)
             wins.append((wx, wy))
         # a small plant on the left sill, a silhouette when the lamp is lit inside
         wx, wy = wins[0]
@@ -247,27 +439,55 @@ class TowerMixin:
         # door
         dw, dh = 34 * s, 128 * s
         dyb = yb + 12 * s
-        arch = self.lit((190, 182, 164), front, cx, dyb - dh)
-        L.poly([(cx - dw - 12 * s, dyb), (cx + dw + 12 * s, dyb), (cx + dw + 12 * s, dyb - dh + dw), (cx - dw - 12 * s, dyb - dh + dw)], arch)
-        L.ellipse(cx, dyb - dh + dw, dw + 12 * s, dw + 12 * s, arch)
-        for a in np.linspace(0.15, math.pi - 0.15, 7):
-            L.line([(cx + (dw + 1 * s) * math.cos(a), dyb - dh + dw - (dw + 1 * s) * math.sin(a)),
-                    (cx + (dw + 12 * s) * math.cos(a), dyb - dh + dw - (dw + 12 * s) * math.sin(a))], arch * 0.75, 1.2 * s)
+        # the doorway: dressed stone, jamb blocks long and short and a ring of voussoirs with a keystone,
+        # each stone its own tone, set in mortar
+        sp = dyb - dh + dw
+        rg = np.random.default_rng(53)
+        up_n = normalize([0, 0.45, 0.9])
+        arch_alb = np.array([190, 182, 164], np.float32)
+        L.poly([(cx - dw - 12 * s, dyb), (cx + dw + 12 * s, dyb), (cx + dw + 12 * s, sp), (cx - dw - 12 * s, sp)],
+               self.lit((120, 112, 98), front, cx, dyb - dh))
+        L.ellipse(cx, sp, dw + 12 * s, dw + 12 * s, self.lit((120, 112, 98), front, cx, dyb - dh))
+        bh = (dyb - sp) / 4
+        for side in (-1, 1):
+            for j in range(4):
+                ya, yb2 = dyb - j * bh, dyb - (j + 1) * bh
+                xa, xb = cx + side * dw, cx + side * (dw + (12 if j % 2 == 0 else 10) * s)
+                a_ = arch_alb * rg.uniform(0.84, 1.08)
+                L.poly([(xa, ya - 0.6 * s), (xb, ya - 0.6 * s), (xb, yb2 + 0.6 * s), (xa, yb2 + 0.6 * s)], self.lit(a_, front, cx, dyb - dh))
+                L.line([(xa, yb2 + 1.1 * s), (xb, yb2 + 1.1 * s)], self.lit(a_, up_n, cx, dyb - dh), 0.9 * s)
+        n_v = 9
+        for i in range(n_v):
+            g0, g1 = math.pi * i / n_v + 0.6 * s / dw, math.pi * (i + 1) / n_v - 0.6 * s / dw
+            ro = dw + (15 if i == n_v // 2 else 12) * s
+            ri = dw + 0.3 * s
+            pts = [(cx + ri * math.cos(g), sp - ri * math.sin(g)) for g in np.linspace(g0, g1, 4)] + \
+                  [(cx + ro * math.cos(g), sp - ro * math.sin(g)) for g in np.linspace(g1, g0, 4)]
+            gm = (g0 + g1) / 2
+            a_ = arch_alb * rg.uniform(0.84, 1.08)
+            L.poly(pts, self.lit(a_, front, cx, dyb - dh))
+            # its outer face turns a little toward the sky, the soffit inside the arch away from it
+            L.line([(cx + (ro - 0.6 * s) * math.cos(g), sp - (ro - 0.6 * s) * math.sin(g)) for g in np.linspace(g0, g1, 4)],
+                   self.lit(a_, normalize([0.4 * math.cos(gm), 0.6, 0.6 * math.sin(gm)]), cx, dyb - dh), 0.9 * s)
         wood = self.lit((96, 58, 36), front, cx, dyb - dh * 0.5)
-        L.poly([(cx - dw, dyb), (cx + dw, dyb), (cx + dw, dyb - dh + dw), (cx - dw, dyb - dh + dw)], wood)
-        L.ellipse(cx, dyb - dh + dw, dw, dw, wood)
-        for i in range(1, 6):
-            x = cx - dw + i * 2 * dw / 6
-            L.line([(x, dyb), (x, dyb - dh + dw - math.sqrt(max(0, dw * dw - (x - cx) ** 2)) + 2 * s)], wood * 0.62, 1.4 * s)
+        self.door_wood(L)
+        # the ironwork: two strap hinges with their nails, and rows of nail heads; each piece has a top
+        # face that takes the sky and an underside that does not
         iron = self.lit((34, 32, 32), front)
+        iron_top = self.lit((44, 42, 40), normalize([0, 0.55, 0.85]))
+        iron_low = self.lit((34, 32, 32), normalize([0, 0.6, -0.8]))
+        nail = self.lit((92, 86, 78), normalize([0, 0.7, 0.7]))
         for yy in (dyb - 0.25 * dh, dyb - 0.7 * dh):
             L.line([(cx - dw, yy), (cx + dw * 0.7, yy)], iron, 3.2 * s)
+            L.line([(cx - dw, yy - 1.2 * s), (cx + dw * 0.7, yy - 1.2 * s)], iron_top, 0.9 * s)
+            L.line([(cx - dw, yy + 1.3 * s), (cx + dw * 0.7, yy + 1.3 * s)], iron_low, 0.8 * s)
             L.poly([(cx + dw * 0.7, yy - 3.5 * s), (cx + dw * 0.86, yy), (cx + dw * 0.7, yy + 3.5 * s)], iron)
+            L.poly([(cx + dw * 0.7, yy - 3.5 * s), (cx + dw * 0.86, yy), (cx + dw * 0.7, yy - 1.5 * s)], iron_top)
             for k in range(6):
-                L.ellipse(cx - dw + (k + 0.5) * 1.6 * dw / 6, yy, 1.2 * s, 1.2 * s, iron * 1.8 + 20)
+                L.ellipse(cx - dw + (k + 0.5) * 1.6 * dw / 6, yy, 1.2 * s, 1.2 * s, nail)
         for i in range(3):
             for j in range(5):
-                L.ellipse(cx - dw * 0.6 + i * dw * 0.6, dyb - dh * (0.15 + 0.17 * j), 1.0 * s, 1.0 * s, iron * 1.6 + 15)
+                L.ellipse(cx - dw * 0.6 + i * dw * 0.6, dyb - dh * (0.15 + 0.17 * j), 1.0 * s, 1.0 * s, nail)
         L.ellipse(cx + dw * 0.55, dyb - 0.47 * dh, 5 * s, 5 * s, iron)
         L.ellipse(cx + dw * 0.55, dyb - 0.47 * dh, 3 * s, 3 * s, wood)
         step = self.lit((176, 168, 150), [0, 0.5, 0.9], cx, dyb)
@@ -345,6 +565,25 @@ class TowerMixin:
         L.composite()
         self.win_pos = wins
         self.door_lantern = (lx, lyy)
+
+    def door_wood(self, L):
+        """The planked door (door_maps), lit, drawn into the details layer. When the sun reaches the
+        door's face, the jambs and the arch, a stone deep, shade the side and top toward it."""
+        D = door_maps(self.W, self.H)
+        s = self.s
+        shade = None
+        e, n, u = (float(c) for c in self.sunv)
+        if n > 0.02 and self.sun_str > 0:
+            dd = 8 * s
+            ox = float(np.clip(dd * -e / n, -40 * s, 40 * s))
+            oy = float(np.clip(dd * u / n, 0, 80 * s))
+            Xs, Ys = D.X + ox, D.Y - oy
+            inside = np.where(Ys < D.ys, D.dw - np.hypot(Xs - D.cx, Ys - D.ys), D.dw - np.abs(Xs - D.cx))
+            shade = sm(0.5 * s, -0.5 * s, inside)
+        Lt = self.light(D.nrm, shade=shade, ao=D.ao)
+        if self.pools:
+            Lt = Lt + self.local(D.X, D.Y)
+        L.blit(D.origin[0], D.origin[1], D.alb * Lt, D.cov)
 
     def clock(self, L, x, y, R):
         s, h = self.s, self.h
