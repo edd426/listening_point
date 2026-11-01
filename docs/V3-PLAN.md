@@ -3,6 +3,87 @@
 From Evan's interview on 2026-11-01, held after the shore went live. These are his answers; the
 phases are their order. Every step gets a look test before it is installed.
 
+## HANDOFF — pickup after Evan's macOS restart (written 2026-11-01 ~15:20 CET)
+
+**The plan, in Evan's words:** "don't start the animals and instead I restart my computer to update
+the MacOs version, then come back and you make sure everything works, then we continue."
+The session that ran phases 1–3 ended with the restart. Its agents are gone; their work is on the
+branches below, and each branch's doc has a "Status at pause" section. Read this section, then
+`## Status` at the bottom, then the part docs.
+
+### Step 1 — make sure everything works after the update
+
+APP=`~/Library/Application Support/The Listening Point`, ROOT=`~/Pictures/Wallpapers/The Listening Point`.
+
+1. **Python is the likeliest break.** Both venvs point at Xcode's Python. Before the update:
+   - Xcode's Python was 3.9.6, with numpy 2.0.2, scipy 1.13.1 and Pillow 11.3.0, on macOS 27.0.1 (26A434).
+   - The two venvs are `$APP/venv` (installed) and `~/Documents/Projects/listening_point/venv` (dev).
+
+   Check:
+   - `"$APP/venv/bin/python" -c "import numpy, scipy, PIL; print('ok')"`, and the same for the dev venv.
+   - If either fails, move that venv to the Trash and run `tools/install.sh` from `listening_point`
+     `main`. It rebuilds `$APP/venv` only when `venv/bin/python` is missing. Rebuild the dev venv
+     with `python3 -m venv venv && venv/bin/pip install -r requirements.txt`.
+2. **Jobs:** `launchctl list | grep listening-point` shows both `.live` and `.render`. If not, re-run
+   `tools/install.sh` from `main`.
+3. **Frames:**
+   - `ls "$ROOT/days/$(date +%F)" | wc -l` grows, and the current minute's `HHMM.jpg` exists.
+   - `tail ~/Library/Logs/listening-point.log` shows renders and no tracebacks.
+   - Before the restart, 2026-11-01 had 777 frames and 2026-11-02 had 901, rendering.
+4. **What Evan sees:**
+   - The desktop shows the live frame, through the helper `$APP/live_wallpaper`.
+   - The lock screen and Mission Control show `$ROOT/The Listening Point.heic`.
+   - An OS update can reset the wallpaper store; `tools/install.sh` sets it again and backs up
+     `Index.plist`. Ask Evan to glance at the desktop and the lock screen.
+5. **Shore on the Mac:** `$APP/shore/sync.json` should have:
+   - `reference` = `r2` / `7cbee1f442afce967826b8e6f6aaffddd8921391b138a487f359b4d9024d35fa`;
+   - `error` null;
+   - `last_ok` recent.
+
+   Only `r2` is in `$APP/shore/reference/` (r1 is in `$APP/shore/retired/`). The Keychain key
+   (service `listening-point-github`, account `listener`) must still be readable: check with
+   `"$APP/venv/bin/python" -I "$APP/src/tools/shore_sync.py" --force`.
+6. **The dev environment still reproduces r2.** Check from `listening_point` `main`:
+   `venv/bin/python tools/shore_reference.py /tmp/r2check --reference r2` → digest `7cbee1f4…`.
+   - If a new numpy changes it, the phase probes' "r2 unchanged" baseline must be re-taken from
+     `main` on the new setup.
+   - The Mac's published r2 stays what counts; do not republish.
+7. **Nothing else depends on the Mac.** The carrier (waypost, GitHub Actions) runs at 22:17, 23:17
+   and 05:11 UTC. Wren's first shore reading is about 00:09 UTC and Gnomon's about 02:02 UTC.
+   Check with `gh run list -R edd426/waypost --workflow carrier.yml`.
+
+### Step 2 — then continue (Evan's standing go-ahead: build, merge, install, report; no need to ask)
+
+Install recipe, the same every time:
+1. `git merge --no-ff` the part into `main`, run the tests, push.
+2. Move today's remaining frames and tomorrow's out of `$ROOT/days/` to the Trash, so they re-render.
+3. Run `tools/install.sh`.
+4. Check that a new frame appears.
+
+| Part | Branch / worktree | State at pause | Next |
+|---|---|---|---|
+| 2 sky: clouds | `v3/clouds`, `~/Documents/Projects/lp-v3-clouds` | v2 at `202b860` reviewed. Heaped cumulus parked behind `cumulus.HEAPS = False` (`096a314`, pushed; probes and `-d-v3` renders were still running at the pause, so check the doc for whether they finished) because the heaps read as CG bells. Ships: cover that follows the forecast, sunrise and sunset colour on every layer, mid-layer cloudlets, beams through cloud, paler sea reflections | Confirm the probes on the head (tests, determinism, r2 digest, ratio ≤1.25), look at `scratchpad/v3/clouds/*-d-v3.jpg` (re-render if the scratchpad is gone), then **merge and install** |
+| 2 sky: air | `v3/air`, `~/Documents/Projects/lp-v3-air` | `0a18623`: all six done (geese, murmuration, gulls, contrails and aircraft, balloon, kite). Tests PASS, r2 PASS on `e6e8869`, timing 0.76–0.85 | Run determinism and the r2 digest on the head, do a look-test review at full and half size, then merge (one line in `sky()` overlaps clouds; see its doc) and install |
+| 3 hillside: land | `v3/hillside`, `~/Documents/Projects/lp-v3-hillside` | `a3b7cd7`: walled garden (4 staged beds, shed, 3 hives, wicket gate, a new wall in 5 staged stretches), open field gate, outcrops, gorse, heather, wildflowers, puddles; `GardenStage`/`WallStage` for phase 5. Tests (52), determinism and r2 PASS; timing ~1.03–1.09 | Fix the shed-shadow anchoring, re-run probes 2–3, render the before/after look test (script ready), review it, then merge and install |
+| 3 hillside: animals | not started (Evan: not before the restart) | — | Once the land part is in: a fox, hares, crows on the new gates and walls, bigger sheep, using the coordinates in `docs/v3/phase3-hillside.md`. Same probes, ratio ≤1.15 |
+
+The scratchpad look tests are in `/private/tmp/claude-501/.../scratchpad/v3/`. They may not survive
+the restart; re-render from the scripts and recipes in the part docs if they are gone.
+
+**Review bar:**
+- Restraint: Evan found the first grass "a bit distracting".
+- Readable at a glance, rewarding up close.
+- Keep the layout, colour, mood and real-world ties.
+- No people.
+- Reject anything that reads as pasted-on CG; the parked heaps are the example.
+
+**Suggested pause** (my recommendation, not yet decided by Evan): once phases 2 and 3 are installed,
+let him live with them for a few days before phase 4 (sea) and phase 5 (story).
+
+**Unfinished ideas:** a second try at heaped cumulus with a painted 2D approach (see "v3: heaps off"
+in `docs/v3/phase2-clouds.md`). The aircraft should fly behind heaps above their height, if the heaps
+come back.
+
 ## What Evan asked for
 
 - **More defined:** the ground and the objects. He picked these over the distance or the picture as a
