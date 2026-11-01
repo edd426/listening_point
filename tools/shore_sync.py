@@ -23,7 +23,7 @@ usage: shore_sync.py [--home DIR] [--api URL] [--force] [--json] [status]
 
 Files, under --home (default ~/Library/Application Support/The Listening Point):
   shore/ledger.json, shore/objects/<id>.json   the last good shore, in the kit's layout
-  shore/reference/r1/                          this Mac's own reference set (nightly.py builds it once)
+  shore/reference/r2/                          this Mac's own reference set (nightly.py builds it once)
   shore/sync.json                              when it last tried and last reached the repository, the
                                                ETags, the ledger it holds, and any trouble
   listener/lamp.json                           the lamp state, shared with tools/listener.py
@@ -59,7 +59,7 @@ from shorekit.reference import load_reference  # noqa: E402
 from shorekit.strictjson import canonical  # noqa: E402
 
 HOME = listener.HOME
-REFERENCE = "r1"                # the reference set this Mac judges with, and renders against
+REFERENCE = "r2"                # the reference set this Mac judges with, and renders against (r2: v3 grass)
 LEDGER = "ledger/ledger.json"   # in the shore repository: the carrier's mirror of its ledger
 OBJECTS = "ledger/objects"
 LAMPS = "listener/lamp"
