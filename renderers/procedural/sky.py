@@ -40,7 +40,7 @@ def moon_rays(P, Q):
 # cloud layers: name, noise texture (h, w, beta, aniso, seed), texels per plane unit, height (km),
 # wind speed up there relative to the surface, opacity, edge softness
 CLOUD_LAYERS = [("high", (256, 2048, 2.5, 3.5, 61), 110.0, 9.0, 3.5, 0.45, 1.3),
-                ("mid", (512, 2048, 2.8, 2.0, 5), 55.0, 3.5, 2.2, 0.93, 0.6),
+                ("mid", (512, 2048, 2.8, 2.0, 5), 55.0, 3.5, 2.2, 0.93, 0.75),
                 ("low", (512, 2048, 3.2, 1.3, 11), 24.0, 1.2, 1.5, 0.97, 0.9)]
 
 
@@ -299,7 +299,7 @@ class SkyMixin:
                 # altocumulus: each cloudlet thicker and darker at its heart, lit on the side toward
                 # the light, the two tones drawn a little apart
                 thick = sm(0.0, 1.6, n0 - norm_ppf(1 - cover))
-                lit = (0.45 * lit + 0.55 * sm(0.45, 0.78, lit)) * (1 - 0.3 * thick)
+                lit = (0.5 * lit + 0.5 * sm(0.45, 0.78, lit)) * (1 - 0.2 * thick)
             if name == "low":
                 # thick low cloud is dark underneath; a full lid is flatter and greyer
                 thick = sm(0.0, 2.0, n0 - norm_ppf(1 - cover))

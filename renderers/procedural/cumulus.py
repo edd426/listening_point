@@ -344,7 +344,7 @@ def shade(fr, pop, hit, reg, grid):
     alt, az, e, n, u = (g[box] for g in grid)
     sa = fr.sun_alt
     sac = sa + 1.1                                      # the sun's altitude as the deck sees it
-    ds = sm(-0.6, 0.6, sac) * getattr(fr, "sun_through_layers", 1.0) ** 0.7   # less behind the higher layers
+    ds = sm(-0.6, 0.6, sac) * (0.35 + 0.65 * getattr(fr, "sun_through_layers", 1.0))   # less behind the higher layers
     nE, nN, nU = hit.nE, hit.nN, hit.nU
     dm = 0.75 * fr.moon_sky * sm(-2, 8, fr.moon_alt) * (1 - ds)
     lc = keys(CLOUD_SUN, sac) * ds + (keys(CLOUD_LIT, sa) + np.array([46, 52, 70], np.float32) * fr.moon_sky) * (1 - ds)
@@ -358,7 +358,7 @@ def shade(fr, pop, hit, reg, grid):
     L = L + 0.08 * min(1.0, ds + dm) * hit.rim ** 2 * (1 - down)       # each puff's rim catches a little light
     dark = reg.dark
     body = (0.85 - 0.1 * (1 - hrel) ** 3) * (1 - 0.4 * dark) * (1 - 0.3 * dark * (1 - hrel))
-    under = 0.66 * (1 - 0.35 * dark) * (0.86 + 0.24 * hit.brim ** 2)     # the flat base: darkest under the middle
+    under = 0.72 * (1 - 0.4 * dark) * (0.86 + 0.24 * hit.brim ** 2)      # the flat base: darkest under the middle
     if down.max() > 0.5:                 # and mottled, as the air under it is lumpy
         mot = sample(fnoise(256, 256, 2.0, 1.0, 83), hit.pN * 9.0, hit.pE * 9.0)
         under = under * (1 + 0.07 * np.clip(mot, -2, 2))
