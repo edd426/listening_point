@@ -121,3 +121,8 @@ phases are their order. Every step gets a look test before it is installed.
   wildflowers, puddles). The garden and wall are drawn from a stage parameter, for phase 5. Part 2
   (animals: a fox, hares, crows, bigger sheep) follows once part 1 lands, using its gate, walls and
   garden. Same probes, with time ratio ≤1.15.
+- **2026-11-01: `v3/clouds` first pass (`acf9b4d`) held back at review.** Its probes passed, and the beams
+  and the sunset colour on the mid layer were good. But the heaped cumulus read as smooth grey stickers
+  (no bright lit tops or cauliflower edges, clip-art rows on the horizon, flat discs overhead), and
+  fair days lost their soft cloud texture, against Evan's "upper sky is empty". Rework requested on
+  the same branch.
