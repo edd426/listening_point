@@ -98,3 +98,6 @@ phases are their order. Every step gets a look test before it is installed.
   Evan's verdict: "It looks fine. A little better. The grass is a bit distracting, but I like what you
   did with everything else." So the next step is to calm the grass (lower tuft contrast and density,
   less yellow in summer) and show that scene again before installing.
+- **2026-11-01: phase 1 installed** (Evan, on the calmer grass: "It's great. Let's go with that.").
+  `main` `4192c35`; the shore moved to reference r2 (waypost `docs/shore/STATUS.md`). Next: phase 2, the
+  sky, when Evan wants it.
