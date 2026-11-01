@@ -242,3 +242,20 @@ larger, all left of x 650); the tests (probe 1) were re-run after it, probes 2 a
 
 **Open problems:** see Known issues; the main one for part 2 is depth: animals drawn in `front()` go over
 the gate and the garden walls even when they stand behind them.
+
+## Pickup after the restart (2026-11-01, evening)
+
+- **Shed shadow fixed** (`7afbae2`): each top corner of the `"box"` caster now carries the ground point
+  under it, so the ridge's shadow starts under the ridge, not at the front corners.
+- **Merged with `main`** (clouds `8b07231`, air `3a971cb`); the only conflict was the `Frame` mixin list
+  (`HillsideMixin` and `AirMixin` both kept). Head `714817b`.
+- **Probes on `714817b`:** 1 tests `Ran 52 tests ... OK`; 2 determinism, 13 frames (2026-11-01 12:00-12:04
+  fair, 2027-04-06 13:00-13:03 synthetic, 2027-01-27 11:00-11:03 synthetic) rendered twice, 0 differ;
+  3 r2 digest `7cbee1f4…`. All PASS. Probe 4 not re-timed: the Mac was shared with a game and swapping,
+  so a timing would mean nothing; the earlier 1.03-1.09 stands.
+- **Look test**, main (with clouds and air) against this branch at `--scale 0.75`, the ten scenes of
+  `look.sh`: hillside crops in `out/look/v3/hillside/` of the main checkout (`crop-*`, `wl-*`; top is
+  main, bottom the branch). Reviewed: garden, gate, gorse and heather read as drawn scenery, restrained;
+  the shed's shadow sits right. For Evan to judge, as before: the puddles on the path read as pale ovals
+  in the wet scene (2027-04-06); snow-covered gorse reads as grey-blue mounds (2027-01-27); the
+  outcrops are faceted grey stones that may read slightly CG up close.
