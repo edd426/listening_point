@@ -104,7 +104,7 @@ Mac, without the helper: it changes on the hour.
 ## How it's made
 
 - **No 3D engine and no image model.** Everything is hand-written 2D procedural rendering on the CPU
-  with NumPy, SciPy and Pillow, split by subject in `renderers/procedural/` (`sky`, `sea`, `land`,
+  with NumPy, SciPy and Pillow, split by subject in `renderers/procedural/` (`sky`, `sea`, `land`, `ground`,
   `tree`, `tower`, `props`, `life`, `distant`, `weatherfx`, `mystery`).
 - **Astronomy** (`astro.py`): sun, moon (full ELP-2000/82 series), planets (truncated VSOP87) and
   precessed stars, matching JPL's DE421 to better than 0.01° (`tests/test_astro.py`).

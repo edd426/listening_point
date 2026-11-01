@@ -249,13 +249,20 @@ class LandMixin:
         tw = self.tw
         p = self.bezier((0.10 * W, 1.03 * H), (0.15 * W, 0.80 * H), (0.27 * W, 0.71 * H), (tw["cx"], tw["yb"] + 10 * s))
         q = self.bezier((0.205 * W, 0.80 * H), (0.30 * W, 0.755 * H), (0.40 * W, 0.735 * H), (BENCH[0] * W, BENCH[1] * H + 6 * s))
-        # The ground's fine structure (ground.py) covers the columns left of the shore; the shore's own
-        # columns are drawn exactly as they always were, so the shore kit's reference frames still hold.
-        xk = int(math.ceil(0.55 * W))
-        F = ground.fields(W, H, y0, xk, (p, 0.038 * W, 0.009 * W), (q, 0.007 * W, 0.004 * W),
-                          lambda xn: self.edge(xn) * H)
+        # The ground's fine structure (ground.py) covers the whole hill, but stops a few rows short of the
+        # shingle: the shingle, the sea and the pier stay exactly as they always were (and so does every
+        # draw from r, which places the shore's stones), so the shore kit's reference frames still hold.
+        xk, xw = W, int(math.ceil(0.4 * W))     # the ground's columns, and the walls'
+        grass_y = lambda xn: self.edge(xn) * H + band(xn)     # where the grass starts (the top of the hill
+        F = ground.fields(W, H, y0, xk, (p, 0.038 * W, 0.009 * W), (q, 0.007 * W, 0.004 * W), grass_y)  # left)
         r2 = np.random.default_rng(32)          # everything new draws from here, never from r
         free = lambda x, y: 0 <= x < xk and y0 <= y < H
+
+        def clear_of_shingle(x0_, x1_, top):
+            """Whether a stroke whose highest point is `top` stays below the shingle and the three rows of
+            grass under it (where the shore kit fits its contact shadows) between columns x0_ and x1_."""
+            xs_ = np.array([x0_, (x0_ + x1_) / 2, x1_], np.float32) / W
+            return top - 1 > float(np.max(grass_y(xs_))) + 4 or float(np.max(band(xs_))) < 0.5
         on_path = lambda x, y: free(x, y) and float(F["path"][int(y) - y0, int(x)]) > 0.6
         tuft = np.array([[58, 90, 40], [84, 112, 48], [108, 124, 60], [146, 136, 80]], np.float32)
         tuft = tuft * (1 - 0.35 * se.winter) + np.array([118, 108, 70]) * 0.35 * se.winter
@@ -349,7 +356,7 @@ class LandMixin:
         # a dry-stone wall across the lower field, open where the path crosses
         walls = (self.bezier((-0.02 * W, 0.742 * H), (0.04 * W, 0.76 * H), (0.10 * W, 0.79 * H), (0.148 * W, 0.812 * H), 90),
                  self.bezier((0.196 * W, 0.826 * H), (0.25 * W, 0.845 * H), (0.30 * W, 0.88 * H), (0.34 * W, 0.95 * H), 90))
-        WM = Layer(self, 0, y0, xk, H)          # where the walls stand, so they don't fall in their own shadow
+        WM = Layer(self, 0, y0, xw, H)          # where the walls stand, so they don't fall in their own shadow
         for seg in walls:
             self.wall(A, N, seg, r, persp, r2, WM)
         for seg in walls:                        # grass grown up against the foot of the wall
@@ -358,8 +365,9 @@ class LandMixin:
                     gx_, gy_ = x_ + r2.uniform(-5, 5) * s, y_ + r2.uniform(0.5, 3.0) * s * persp(y_)
                     if r2.random() < 0.7 and free(gx_, gy_):
                         self.tuft(A, N, gx_, gy_, r2.uniform(5, 10) * s * persp(gy_), r2, tuft[0] * 0.95, tuft[2])
-        # tufts across the slope; browner in winter, straw-coloured in a dry summer. Left of the shore the
-        # ground's own tufts (ground.py) take their place, and these become blades in the foreground.
+        # tufts across the slope; browner in winter, straw-coloured in a dry summer. The ground's own tufts
+        # (ground.py) take their place, except where one reaches the shingle; near the bottom of the
+        # frame some become larger blades in the foreground.
         for _ in range(int(11000)):
             gx, gy = r.uniform(0, x1), r.uniform(y0, H)
             if gy < self.edge(gx / W) * H + 3 * s + band(gx / W) * r.uniform(0.85, 1.05):
@@ -367,10 +375,11 @@ class LandMixin:
             ln = r.uniform(4, 11) * s * persp(gy) * (1 - 0.3 * se.winter)
             c = tuft[r.integers(0, 4)] * r.uniform(0.8, 1.15)
             leans = [r.uniform(-0.5, 0.5) * ln for k in range(3)]
-            if gx >= 0.50 * W:
-                for k in range(3):
+            if not clear_of_shingle(gx - 0.5 * ln - 2 * s, gx + 3 * s + 0.5 * ln + 2 * s, gy - ln):
+                for k in range(3):       # reaches the shingle: drawn exactly as it always was
                     A.line([(gx + k * 1.5 * s, gy), (gx + k * 1.5 * s + leans[k], gy - ln)], c, 1.1 * s)
-            elif gy > 0.88 * H and not on_path(gx, gy) and r2.random() < 0.22:
+            elif gy > 0.88 * H and not on_path(gx, gy) and r2.random() < 0.22 \
+                    and clear_of_shingle(gx - 2.2 * ln, gx + 2.2 * ln, gy - 2.0 * ln):
                 self.tuft(A, N, gx, gy, ln * 2.0, r2, tuft[0] * 0.95, tuft[2] * 1.05)
         # blades along the crest, against the sea
         for x in np.arange(0, 0.60 * W, 2.2 * s):
@@ -398,14 +407,14 @@ class LandMixin:
         bw_row = band(xn)[None, :] + 1e-3
         on_shore = sm(0.555, 0.59, xn)[None, :]
         wetline = 0.5 * self.tide + 0.12 + 0.22 * (1 - self.tide)
-        # left of the shore: the walls' shadows, cast from wherever the sun (or a bright moon) stands, and
+        # the walls' shadows, cast from wherever the sun (or a bright moon) stands, and
         # the darker grass in the angle at their foot
         src = None
         if self.sun_alt > 1:
             src = (self.sun_alt, self.sun_az, 0.82)
         elif self.moon_alt > 4 and self.sun_alt < -6:
             src = (self.moon_alt, self.moon_az, 0.6)
-        wsh, wao = Image.new("L", (xk, hh), 0), Image.new("L", (xk, hh), 0)
+        wsh, wao = Image.new("L", (xw, hh), 0), Image.new("L", (xw, hh), 0)
         dsh, dao = ImageDraw.Draw(wsh), ImageDraw.Draw(wao)
         if src:
             cot = min(1 / math.tan(math.radians(src[0])), 3.0)
@@ -418,8 +427,9 @@ class LandMixin:
                     dsh.polygon([(xa, ya - y0), (xb, yb - y0), (xb + sx * hb, yb - y0 + sy * hb), (xa + sx * ha, ya - y0 + sy * ha)], fill=255)
         WSH = ndi.gaussian_filter(np.asarray(wsh, np.float32) / 255, 1.2 * s) * (src[2] if src else 0)
         WAO = ndi.gaussian_filter(np.asarray(wao, np.float32) / 255, 3.0 * s)
-        keep = sm(0.545, 0.47, xn[:xk])[None, :]
-        kk = keep[..., None]
+        shore_cols = sm(0.54, 0.56, xn)[None, :]
+        clip0 = ey_row + bw_row + 4.0                     # 4 rows under the top of the grass, at the shore
+        clip1 = clip0 + np.maximum(6.0, 0.12 * bw_row)
         soil_c = np.array([150, 128, 98], np.float32) * 0.97
         worn_c = np.array([126, 124, 84], np.float32)
         frost_c = np.array([200, 210, 218], np.float32)
@@ -435,9 +445,12 @@ class LandMixin:
             alb = base + np.array([46, 34, 18], np.float32) * sm(-1.5, 1.5, g1)[..., None]
             alb = alb * (1 - dry) + np.array([156, 142, 92], np.float32) * dry
             alb *= (1 + 0.07 * g2 + 0.09 * g3)[..., None]
-            # left of the shore, the ground's fine structure: tufts with dark feet and light tips, darker
+            # the ground's fine structure: tufts with dark feet and light tips, darker
             # hollows between them, swathes along the slope, and the worn path with its ruts and verges
             f = {k_: v_[sl].astype(np.float32) for k_, v_ in F.items()}
+            Ygk = np.arange(y0 + r0, y0 + r1, dtype=np.float32)[:, None] + 0.5
+            keep = 1 - shore_cols * (1 - sm(clip0, clip1, Ygk))   # 0 on the shingle, exactly
+            kk = keep[..., None]
             tc, tip, pm = f["tuft"][..., None], f["tip"][..., None], f["path"][..., None]
             ac, rut, trail = np.abs(f["across"])[..., None], f["rut"][..., None], f["trail"][..., None]
             dl = f["dense"][..., None]
@@ -482,7 +495,7 @@ class LandMixin:
                 alb = alb * (1 - snow) + np.array([236, 240, 246], np.float32) * snow
                 buried = snow[:, :xk, 0]
                 nrm[:, :xk, :2] -= kk * np.stack([dnx, dny], -1) * (0.8 * buried)[..., None]
-                nrm[:, :xk] = normalize(nrm[:, :xk])
+                nrm[:, :xk] = np.where(kk > 0, normalize(nrm[:, :xk]), nrm[:, :xk])
             if wx.frost > 0.01:
                 rime = (wx.frost * 0.55 * (1 - beach) * (1 - oal[..., 0]) * sm(-0.5, 0.8, g2))[..., None]
                 alb = alb * (1 - rime) + np.array([200, 210, 218], np.float32) * rime
@@ -492,17 +505,18 @@ class LandMixin:
                 alb *= 1 - 0.28 * wx.wet
             shade, ao = self.shade[y0 + r0:y0 + r1, :x1], self.ao[y0 + r0:y0 + r1, :x1]
             amb = 1 - 0.55 * ao
-            # left of the shore: the feet of the tufts and the hollows between them get less of the sky and
+            # the feet of the tufts and the hollows between them get less of the sky and
             # the sun; the walls cast their shadows and darken the grass at their foot
-            shade, wk = shade.copy(), keep[0]
+            shade, wk = shade.copy(), keep
             _, wal = WM.arrays_rows(r0, r1)
             d0 = f["dense"]
             occ = ((1 - t0) * (1 - p0) * 0.4 * d0 + t0 * (1 - f["tip"]) * 0.3) * (1 - buried)
             sk = 1 - (1 - shade[:, :xk]) * (1 - occ)
-            sk = np.maximum(sk, WSH[sl] * (1 - wal[..., 0]))
+            sk[:, :xw] = np.maximum(sk[:, :xw], WSH[sl] * (1 - wal[..., 0]))
             shade[:, :xk] += wk * (sk - shade[:, :xk])
             oa = (1 - t0) * ((1 - 0.3 * d0) * (1 - p0) + p0 * (1 - 0.2 * f["rut"])) + t0 * (0.72 + 0.28 * f["tip"])
-            oa = oa * (1 - 0.1 * sm(0.5, -1.5, f["hum"])) * (1 - 0.45 * WAO[sl] * (1 - wal[..., 0]))
+            oa = oa * (1 - 0.1 * sm(0.5, -1.5, f["hum"]))
+            oa[:, :xw] *= 1 - 0.45 * WAO[sl] * (1 - wal[..., 0])
             amb[:, :xk] *= 1 + wk * (oa - 1) * (1 - 0.8 * buried)
             L = self.light(nrm, shade, amb)
             if self.pools:

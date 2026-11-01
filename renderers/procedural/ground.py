@@ -124,8 +124,9 @@ def build(W, H, y0, xk, path, trail, edge_y):
     # ---- tufts, on a jittered lattice laid on the ground in perspective
     dens = 0.1 + 0.88 * sm(-0.5, 0.45, F["clump"] - 0.3 * F["swathe"])
     dens = dens * (1 - 0.97 * F["path"] * sm(1.03, 0.92, a)) * (1 - 0.75 * F["trail"])
-    dens *= Yc[:, None] > edge_y(Xc / W)[None, :] + 4 * s
-    tall = 0.72 + 0.4 * sm(-0.3, 1.2, F["clump"])
+    below = Yc[:, None] - edge_y(Xc / W)[None, :]                     # rows under where the grass starts
+    dens *= below > 4 * s
+    tall = (0.72 + 0.4 * sm(-0.3, 1.2, F["clump"])) * (0.5 + 0.5 * sm(4 * s, 40 * s, below))
     vb = np.concatenate([v, v[-1] + np.arange(1, 64) / (P[-1] * s)])   # carry on below the frame
     yb = np.concatenate([Yc, Yc[-1] + np.arange(1, 64)])
     NI = int(vb[-1] // CV) + 2
