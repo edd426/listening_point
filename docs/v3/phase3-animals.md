@@ -176,9 +176,10 @@ follows its keyframe in the same worker, so the recorded masks are always used.
 
 ## Probes
 
-1. **Tests.** `$PY -m unittest discover -s tests` -> PROBE1. Also
-   `$PY tests/test_shore_reference.py` (its tests are module functions, which `unittest discover` does not
-   collect) -> PROBE1B. `tests/test_fauna.py` adds 12:
+1. **Tests** (on `3dcf150`). `$PY -m unittest discover -s tests` -> `Ran 64 tests in 28.092s OK` (52
+   before, plus 12 in `tests/test_fauna.py`). **PASS.** `$PY tests/test_shore_reference.py` (its tests are
+   module functions, which `unittest discover` does not collect) -> `4/4 passed`, including
+   `test_reference_build_is_deterministic_and_leaves_the_tree_clean`. **PASS.** `tests/test_fauna.py`'s 12:
    - the fox is shy;
    - hares come out at dawn and dusk, and box in March and April only;
    - crows come out by day;
@@ -201,10 +202,14 @@ follows its keyframe in the same worker, so the recorded masks are always used.
    A bats case for `critters` (2027-07-06 21:30) replaces the rabbits'. One case already failed on `main`:
    2027-01-12 17:15 for `high_air` had no flight in range. It was moved to 18:40, where a night flight's lights
    are in view.
-2. **Determinism.** PROBE2
-3. **Shore reference.** `$PY tools/shore_reference.py out/animals-r2 --reference r2` -> `reference r2
-   written to .../out/animals-r2: digest 7cbee1f442afce967826b8e6f6aaffddd8921391b138a487f359b4d9024d35fa`,
-   exactly the published r2. **PASS.** Reference mode draws no animals (front() skips them, and `_hold_still`
+2. **Determinism** (on `3dcf150`). `listening_point.py OUT --date 2027-03-24 --minutes 1058-1063 --scale 0.75
+   --jobs 1 --weather fair --quality 90`, rendered twice in a row. The six frames have the fox trotting
+   and mousing, a hare sitting up and then loping away from it, two crows on the garden wall, and the ewes.
+   `cmp` on every frame -> `6 frames compared with cmp, 0 differ` (1740.jpg `438dde204442193e2fb1c79cfe9a8f5b`).
+   **PASS.** Earlier, the same with 17:38-17:45 at `--scale 0.375`: 8 frames, 0 differ.
+3. **Shore reference** (on `3dcf150`, and before on `8845eab`). `$PY tools/shore_reference.py out/animals-r2
+   --reference r2` -> `reference r2 written to .../out/animals-r2: digest
+   7cbee1f442afce967826b8e6f6aaffddd8921391b138a487f359b4d9024d35fa`, exactly the published r2. **PASS.** Reference mode draws no animals (front() skips them, and `_hold_still`
    empties their schedules), and the recorder is off in reference frames.
 4. **Near scenery unchanged.** `Frame.foreground()` at `--scale 0.375` on `main` and on this branch:
    - 2027-03-24 12:00 fair;
@@ -212,7 +217,26 @@ follows its keyframe in the same worker, so the recorded masks are always used.
    - 2027-01-27 11:00 synthetic (snow).
 
    Colour and coverage arrays are identical in all three (`np.array_equal`). **PASS.**
-5. **Cost.** PROBE5
+5. **Cost** (scratchpad `cost.py`). `frame_image()` CPU over 10 consecutive minutes (2027-03-24 17:35-17:44,
+   fair, `--scale 0.75`, keyframe step 10, so 6 `foreground()` calls). One process per run, `main` and this
+   branch in turn, on a shared machine:
+
+   | run | main | branch | ratio |
+   |---|---|---|---|
+   | 1 (main first, load 8) | 39.56 s | 32.57 s | 0.82 |
+   | 2 (branch first) | 33.93 s | 34.34 s | 1.01 |
+   | 3 (load rose to 13) | 43.61 s | 48.51 s | 1.11 |
+   | sum | 117.10 s | 115.42 s | **0.99** |
+
+   Per call, `front()` took 0.22-0.28 s on main and 0.12-0.19 s on the branch.
+
+   Measured directly in one process (`cost2.py`):
+   - Recording the occluders costs +0.14 s CPU, once per day and frame size in a process: a warm
+     `foreground()` takes 2.56 s while recording and 2.42 s with them recorded already.
+   - Over 18 minutes with the animals out (the boxing hares, the fox with hares and crows, crows on the gate),
+     per minute: `sheep` 29 ms, `hares` 4 ms, `fox` 2 ms, `crows` 1 ms. The whole `front()` was 134 ms.
+
+   Against about 3.4 s a frame, the new work is about 1%. **PASS** (well under the 1.15 limit).
 
 ## Look test
 
@@ -221,7 +245,22 @@ Folder: `out/look/v3/animals/` of the main checkout. `pair-<scene>.jpg` is the w
 `main` above this branch. Each was rendered with
 `listening_point.py --scale 0.75 --jobs 1 --quality 90`, one at a time.
 
-LOOKTEST
+Nine scenes. The crops' boxes are given in native pixels (x0, y0, x1, y1).
+
+| scene | when | what to look at |
+|---|---|---|
+| `sheep-midday` | 2027-03-24 12:00 fair; crop (0, 1150, 1100, 1650) | The ewes and lambs: main's small grey ovals against blackface ewes in white fleece. The ewe by the upper wall stands on it in main, and behind it in the branch, legs hidden. A crow walks the grass beside her. |
+| `behind-gate-sheep` | 2027-03-02 12:50 fair; (0, 1200, 1300, 1600) | Depth fix: a ewe in the corner behind the open gate shows her legs behind its rails (main draws her over them). Two crows sit on the upper wall's coping at the far left. Crows that would sit on the gate's bar leave it, because the ewe stands there. |
+| `crows-gate-garden` | 2027-03-24 10:30 fair; (200, 1100, 800, 1550) | Two crows on the open gate's top bar, and one on the garden's right-wall coping by the back corner. |
+| `hares-boxing` | 2027-03-24 17:12 fair (sunset 18:01); (0, 1400, 800, 1800) | Two hares boxing on the path's edge, low left; one sitting up on the path. |
+| `fox-dusk` | 2027-03-24 17:40 fair; (0, 1150, 900, 1700) | The fox trotting across the lower field. One hare sits up watching it and the other lopes off. The ewes are heading for the fold, and a crow is on the garden's front wall. |
+| `behind-gate-fox` | 2027-03-30 06:55 fair (sun 4 degrees); (150, 1250, 700, 1650) | Depth fix: the fox sitting in the corner behind the open gate, seen between the rails, and a hare sitting up watching it. The dawn ewes are pale shapes (Known issues). |
+| `behind-garden-fox` | 2027-01-25 07:54 fair; (0, 1000, 800, 1350) | Depth fix: the fox on the skyline behind the garden's back wall, left of the hives. The wall hides its legs. |
+| `night-moon` | 2027-02-18 18:33 fair, moon 93%; (0, 1050, 1100, 1650) | The flock lying folded behind the upper wall in the moonlight (main lays them on top of it). The fox behind the garden's back wall by the hives. |
+| `snow` | 2027-01-27 11:00 synthetic; (0, 1150, 1300, 1650) | Ewes in snow. Those just behind the walls have their legs hidden; main stands them on the coping. One ewe beyond the lower wall still seems to stand on it (Known issues). |
+
+Development renders (`--scale 0.375`, this branch only) and the sprite sheets are in `out/animals-dev/` of the
+main checkout. The raw look-test frames are in `out/animals-dev/look/{main,branch}-<scene>/`.
 
 ## Known issues
 
@@ -243,7 +282,25 @@ LOOKTEST
 - **Not occluded:** the cat's eye glints (glows, as before), and the bats, swallows and butterflies in
   `critters()`, which fly.
 - Hares sometimes sit on the path.
+- **Tests outside this part.** `tests/test_shore_render.py` fails 5 of 7 with `no spot passes for
+  2027-03-17-cairn` (and `-18-`), on `main` too (checked with
+  `test_resting_things_are_hidden_by_objects_standing_nearer`, the same reference set). Its synthetic cairn
+  finds no spot that passes against r2. Not touched here.
 
 ## Status
 
-STATUS
+**Done on `v3/animals`** (2026-11-01 evening), from `main` `5b1b55e`:
+- `8845eab`: the code and tests;
+- `3dcf150`: refinements and this doc's draft;
+- the commit after it: this doc completed.
+
+Probes 1-5 pass (above) and the look test is rendered, in `out/look/v3/animals/`. The branch is not merged
+and not installed: the lead merges and installs.
+
+Rendering during this part was shared with a game. The first iterations waited on a memory gate
+(`kern.memorystatus_level` of at least 40, or 45 at `--scale 0.75`), until Evan said to go ahead. Every render was
+one at a time, `--jobs 1`, under `nice -n 15`.
+
+**Left for later:**
+- A choice on the "just beyond a wall" look (Known issues), if Evan finds it reads wrong.
+- The stale `test_shore_render.py` cairn spots, which belong to the shore work.
