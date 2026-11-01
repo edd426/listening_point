@@ -214,7 +214,7 @@ class LandMixin:
             bw = max(0.6 * self.s, h * 0.08)
             bx = x + rng.uniform(-0.18, 0.18) * h
             mx, my = bx + lean * hk * 0.45, y - hk * 0.5
-            n = enc((-lean * 0.5, 0.05, 0.95))
+            n = enc((-lean * 0.5, -0.3, 0.9))          # facing the way the slope does, leaning out
             low = [(bx - bw, y + bw * 0.5), (bx + bw, y + bw * 0.5), (mx + bw * 0.7, my), (mx - bw * 0.7, my)]
             high = [(mx - bw * 0.7, my), (mx + bw * 0.7, my), (bx + lean * hk, y - hk)]
             A.poly(low, dark * rng.uniform(0.85, 1.1))
@@ -271,10 +271,11 @@ class LandMixin:
             if not on_path(px, py):
                 continue
             rr *= 0.85
-            A.ellipse(px, py + rr * 0.3, rr * 1.15, rr * 0.62, (52, 44, 34), a=0.5)
-            A.ellipse(px, py, rr, rr * 0.6, c * 0.9)
+            c = c * 0.4 + np.array([132, 126, 114]) * (0.36 + 0.4 * c[0] / 150)   # greyer than the soil
+            A.ellipse(px, py + rr * 0.3, rr * 1.15, rr * 0.62, (52, 44, 34), a=0.4)
+            A.ellipse(px, py, rr, rr * 0.6, c * 0.85)
             N.ellipse(px, py, rr, rr * 0.6, enc((nx_ * 0.5, 0.55, 0.8)))       # its face, toward us
-            A.ellipse(px, py - rr * 0.16, rr * 0.72, rr * 0.38, c * 1.05)
+            A.ellipse(px, py - rr * 0.16, rr * 0.72, rr * 0.38, c * 1.12)
             N.ellipse(px, py - rr * 0.16, rr * 0.72, rr * 0.38, enc((nx_ * 0.3, -0.3, 0.92)))   # its top
         for _ in range(70):     # flat stones set in the path, worn level with it
             i = int(r2.integers(0, len(p) - 6))
@@ -369,8 +370,8 @@ class LandMixin:
             if gx >= 0.50 * W:
                 for k in range(3):
                     A.line([(gx + k * 1.5 * s, gy), (gx + k * 1.5 * s + leans[k], gy - ln)], c, 1.1 * s)
-            elif gy > 0.86 * H and not on_path(gx, gy) and r2.random() < 0.3:
-                self.tuft(A, N, gx, gy, ln * 1.6, r2, tuft[1] * 0.85, c * 1.2)
+            elif gy > 0.88 * H and not on_path(gx, gy) and r2.random() < 0.22:
+                self.tuft(A, N, gx, gy, ln * 2.0, r2, tuft[0] * 0.95, tuft[2] * 1.05)
         # blades along the crest, against the sea
         for x in np.arange(0, 0.60 * W, 2.2 * s):
             y = self.edge(x / W) * H + 2 * s
@@ -474,10 +475,14 @@ class LandMixin:
             nrm[:, :xk, :2] += kk * np.stack([dnx, dny], -1)
             nrm = normalize(nrm * (1 - nal) + (nrgb / 127.5 - 1) * nal)
             # weather on the ground: lying snow on whatever faces up, rime on the grass, wet darkening
+            buried = 0.0                 # how far lying snow has filled in the tufts and the ruts
             if PATCH is not None:
                 patch = sm(-0.8, 0.6, PATCH[sl] + 3 * (wx.snow_cover - 0.5))
                 snow = (wx.snow_cover * sm(0.5, 0.85, nrm[..., 2]) * patch)[..., None]
                 alb = alb * (1 - snow) + np.array([236, 240, 246], np.float32) * snow
+                buried = snow[:, :xk, 0]
+                nrm[:, :xk, :2] -= kk * np.stack([dnx, dny], -1) * (0.8 * buried)[..., None]
+                nrm[:, :xk] = normalize(nrm[:, :xk])
             if wx.frost > 0.01:
                 rime = (wx.frost * 0.55 * (1 - beach) * (1 - oal[..., 0]) * sm(-0.5, 0.8, g2))[..., None]
                 alb = alb * (1 - rime) + np.array([200, 210, 218], np.float32) * rime
@@ -492,13 +497,13 @@ class LandMixin:
             shade, wk = shade.copy(), keep[0]
             _, wal = WM.arrays_rows(r0, r1)
             d0 = f["dense"]
-            occ = (1 - t0) * (1 - p0) * 0.4 * d0 + t0 * (1 - f["tip"]) * 0.3
+            occ = ((1 - t0) * (1 - p0) * 0.4 * d0 + t0 * (1 - f["tip"]) * 0.3) * (1 - buried)
             sk = 1 - (1 - shade[:, :xk]) * (1 - occ)
             sk = np.maximum(sk, WSH[sl] * (1 - wal[..., 0]))
             shade[:, :xk] += wk * (sk - shade[:, :xk])
             oa = (1 - t0) * ((1 - 0.3 * d0) * (1 - p0) + p0 * (1 - 0.2 * f["rut"])) + t0 * (0.72 + 0.28 * f["tip"])
             oa = oa * (1 - 0.1 * sm(0.5, -1.5, f["hum"])) * (1 - 0.45 * WAO[sl] * (1 - wal[..., 0]))
-            amb[:, :xk] *= 1 + wk * (oa - 1)
+            amb[:, :xk] *= 1 + wk * (oa - 1) * (1 - 0.8 * buried)
             L = self.light(nrm, shade, amb)
             if self.pools:
                 X = np.arange(x1, dtype=np.float32)[None, :] + 0.5
@@ -507,9 +512,10 @@ class LandMixin:
             # wet stones and shingle catch the sky
             sheen = (np.maximum(wet, 0.6 * wx.wet * beach) * sm(0.6, 0.95, nrm[..., 2]))[..., None]
             col += sheen * self.hor_col * 0.18
-            if wx.wet > 0.01:          # water standing in the ruts catches the sky
-                pud = (wx.wet * sm(0.35, 0.8, f["rut"]) * f["path"] * (1 - oal[:, :xk, 0]))[..., None] * kk
-                col[:, :xk] += pud * self.hor_col * 0.3
+            if wx.wet > 0.01:          # water standing here and there in the ruts catches the sky
+                pud = wx.wet * sm(0.55, 0.95, f["rut"]) * sm(0.2, 1.2, g3[:, :xk]) * f["path"]
+                pud = (pud * (1 - oal[:, :xk, 0]) * (1 - buried) * sm(0.6, 0.95, nrm[:, :xk, 2]))[..., None] * kk
+                col[:, :xk] = col[:, :xk] * (1 - 0.35 * pud) + pud * self.hor_col * 0.09
             crest = (sm(0.05 * H, 0, Yg - ey_row) * 0.12 * (1 - on_shore))[..., None]
             col = col * (1 - crest) + self.hor_col * crest
             # the sea covers the lower beach as the tide comes in
