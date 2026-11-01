@@ -31,3 +31,13 @@ Summer grass reads lighter and yellower than before; snow hides most of the chan
    `shore.reference` to `{"id": "r2", "digest": <its digest>}` and check it against the Mac's
    `shore/sync.json`. Until then the carrier's pass waits; a manifest made against r1 after the
    switch comes back with `E_REFERENCE`.
+
+## Calmer grass (`4fd76e1`, after Evan's look)
+
+Evan: "The grass is a bit distracting, but I like what you did with everything else." `land.py`
+`TUFT_SHOW = 0.55` scales the tufts' contrast, shade and lean; `TUFT_LIFT` 1.18 -> 1.10, swathes
+0.14 -> 0.09, foreground blades 0.22 -> 0.10. Fine-scale contrast (luminance minus a 3 px blur) in
+five grass boxes, before / first try / calmer: noon right 11.8 / 18.0 / 13.5, mid 9.6 / 14.9 / 11.1;
+summer right 15.2 / 23.2 / 17.2, mid 16.9 / 25.4 / 19.1. Mean colour within a few percent of before.
+Re-probed: tests OK, determinism identical (`f3ec322b...`), shingle 0, deck 0, shadow-fit rows 0
+changed. Shown to Evan as `grass-*-{1-before,2-first-try,3-calmer}.jpg` in the scratchpad's `v3/look/`.
