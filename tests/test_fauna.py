@@ -80,7 +80,7 @@ class Schedule(unittest.TestCase):
             for m in range(0, 1440, 7):
                 for x, y, f, grazing, size, view in ev.sheep(m / 60, lambs=True):
                     side = 1 if y > events.wall_y(x) else -1
-                    self.assertGreater(abs(y - events.wall_y(x)), 0.009, (day.date, m, x, y))
+                    self.assertGreater(abs(y - events.wall_y(x)), 0.005, (day.date, m, x, y))
                     if side < 0 and events.GARDEN[0][0] < x < events.GARDEN[1][0]:
                         self.assertGreater(y, events.garden_front_y(x), (day.date, m, x, y))
                     self.assertIn(view, ("side", "front", "back"))

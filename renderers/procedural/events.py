@@ -80,13 +80,14 @@ def garden_front_y(x):
     return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
 
 
-def keep_to_field(x, y, side, margin=0.010):
+def keep_to_field(x, y, side):
     """(x, y) kept on its own side of the field walls (side 1: the lower field, -1: the upper), and in the
-    upper field out of the walled garden."""
+    upper field out of the walled garden. Just behind a wall the wall hides an animal's legs; much farther
+    back and it would seem to stand on the coping, as we look down on the field."""
     w = wall_y(x)
     if side > 0:
-        return max(y, w + margin)
-    y = min(y, w - margin)
+        return max(y, w + 0.010)
+    y = min(y, w - 0.0055)
     if GARDEN[0][0] - 0.012 < x < GARDEN[1][0] + 0.012:
         y = max(y, garden_front_y(x) + 0.010)
     return y
@@ -103,7 +104,7 @@ def field_point(field, u, v):
     for k in range(5):
         if field == "upper":
             x = 0.02 + 0.30 * u
-            lo, hi = 0.705, min(wall_y(x) - 0.016, 0.87)
+            lo, hi = 0.705, min(wall_y(x) - 0.024, 0.87)
         else:
             x = 0.03 + 0.23 * u
             lo, hi = wall_y(x) + 0.020, 0.972
@@ -635,7 +636,7 @@ class Schedule:
             if ha is None or hb is None:
                 continue
             fa = 1 if hb[0] >= ha[0] else -1
-            gap = 0.0058 * persp_f(ha[1])
+            gap = 0.36 * 76 * 1.3 / 3840 * persp_f(ha[1])     # 0.36 m apart at fauna's hare scale
             tx, ty = ha[0] + fa * gap, ha[1] + 0.002
             if m == bx["m0"] - 1:             # one comes loping over to the other
                 hb[:4] = [(hb[0] + tx) / 2, (hb[1] + ty) / 2, "lope", 1 if tx >= hb[0] else -1]

@@ -61,7 +61,7 @@ class LifeMixin:
         rim = self.lit((60, 56, 58), [f * -0.6, 0.4, 0.7], x, y)
         S = Layer(self, x - 1.2 * k, y - 0.3 * k, x + 1.2 * k, y + 0.4 * k)
         S.ellipse(x, y + 0.05 * k, 1.0 * k, 0.18 * k, np.array([20, 24, 18]) * (self.amb + 0.25), a=0.45)
-        self.life_put(S, depth, solid=False)
+        self.life_put(S, depth, solid=False, xc=x)
         L = Layer(self, x - 3 * k, y - 3.4 * k, x + 3 * k, y + 0.6 * k)
         if pose == "sit":
             L.ellipse(x, y - 0.9 * k, 0.62 * k, 0.95 * k, fur)
@@ -86,7 +86,7 @@ class LifeMixin:
         for e in (-1, 1):
             ex = hx + e * 0.24 * k
             L.poly([(ex - 0.14 * k, hy - 0.2 * k), (ex + 0.14 * k, hy - 0.2 * k), (ex + e * 0.06 * k, hy - 0.62 * k)], fur)
-        self.life_put(L, depth)
+        self.life_put(L, depth, xc=x)
         # eyes: a glint of green-gold when a lamp is near, as a cat's do
         if pose != "curl":
             near = self.lights_on * (1.0 if spot in ("lamp", "step") or pose == "walk" else 0.4)

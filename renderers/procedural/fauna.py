@@ -251,22 +251,24 @@ class FaunaMixin:
                 return gy0 + float(rows[0])
         return None
 
-    def life_allow(self, L, depth):
+    def life_allow(self, L, depth, xc=None):
         """1 where an animal whose feet stand at frame row `depth` may show in layer L, 0 where something
-        nearer (standing scenery, or an animal already drawn) hides it; None if nothing does."""
+        nearer (standing scenery, or an animal already drawn) hides it; None if nothing does. Each thing is
+        nearer or farther as a whole, by its foot under the animal's own column xc (the middle of L if not
+        given), so a wall that slopes across the screen never cuts an animal in two."""
         allow = None
+        xc = (L.x0 + L.x1) / 2 if xc is None else xc
         for _, gx0, gy0, mask, foot in list(self.occluders()) + self.life_drawn():
             h, w = mask.shape
             x0, x1 = max(L.x0, gx0), min(L.x1, gx0 + w)
             y0, y1 = max(L.y0, gy0), min(L.y1, gy0 + h)
             if x0 >= x1 or y0 >= y1:
                 continue
-            near = foot[x0 - gx0:x1 - gx0] > depth + 0.5
-            if not near.any():
+            if not foot[min(w - 1, max(0, int(xc) - gx0))] > depth + 0.5:
                 continue
             if allow is None:
                 allow = np.ones((L.y1 - L.y0, L.x1 - L.x0), np.float32)
-            allow[y0 - L.y0:y1 - L.y0, x0 - L.x0:x1 - L.x0] *= 1 - mask[y0 - gy0:y1 - gy0, x0 - gx0:x1 - gx0] * near
+            allow[y0 - L.y0:y1 - L.y0, x0 - L.x0:x1 - L.x0] *= 1 - mask[y0 - gy0:y1 - gy0, x0 - gx0:x1 - gx0]
         return allow
 
     def life_drawn(self):
@@ -274,13 +276,13 @@ class FaunaMixin:
             self._life = []
         return self._life
 
-    def life_put(self, L, depth, solid=True):
-        """Composite an animal's layer, hidden where something nearer stands; a solid one then hides the
-        animals behind it in turn."""
+    def life_put(self, L, depth, solid=True, xc=None):
+        """Composite an animal's layer (standing at column xc, row depth), hidden where something nearer
+        stands; a solid one then hides the animals behind it in turn."""
         if not L.ok:
             return
         rgb, al = L.arrays()
-        allow = self.life_allow(L, depth)
+        allow = self.life_allow(L, depth, xc)
         if allow is not None:
             al = al * allow[..., None]
         self.over(L.y0, L.y1, L.x0, L.x1, rgb, al)
@@ -313,7 +315,7 @@ class FaunaMixin:
             pts = foot + [(px + sx, py + sy) for px, py in foot]
             S.poly(hull(pts), col, a=0.34 * self.sun_str * k)
         S.ellipse(x, y + 0.02 * w, 0.52 * w, 0.12 * w, col, a=0.42 * k)
-        self.life_put(S, depth, solid=False)
+        self.life_put(S, depth, solid=False, xc=x)
 
     # -------------------------------------------------------------- light --
     def tones(self, alb, x, y):
@@ -361,14 +363,14 @@ class FaunaMixin:
             sp = Sprite(x, y, M, f if side else 1)
             self.draw_sheep(sp, i, fleece, v, grazing, shorn, x, y)
             sp.draw(L, self.ink_w())
-            self.life_put(L, y)
+            self.life_put(L, y, xc=x)
 
     def draw_sheep(self, sp, i, fleece, view, grazing, shorn, x, y):
         lv = self.sunv if self.sun_alt > -3 else self.moonv
         rim_n = normalize([lv[0] * 0.8, lv[1] * 0.8 + 0.25, 0.45])
         b, t, u = (self.lit(fleece, n, x, y) for n in ((0, 0.5, 0.87), (0, -0.2, 0.98), (0, 0.8, -0.25)))
         m_ = 0.5 * (b + t)
-        rim = 0.5 * (self.lit(fleece, rim_n, x, y) + t)
+        rim = self.lit(fleece, rim_n, x, y)
         fb, ft, _, _ = self.tones((50, 44, 42), x, y)
         legc = self.lit((82, 72, 64), (0, 0.8, 0.55), x, y)
         r = np.random.default_rng(700 + i)
@@ -377,7 +379,7 @@ class FaunaMixin:
             lying = view == "lying"
             a_, b_ = 0.6 * bw, 0.31 * bw
             cy = 0.27 if lying else 0.25 + b_
-            ox, oy = self.rim_off(sp.f, 0.04)
+            ox, oy = self.rim_off(sp.f, 0.06)
             if not lying:                                    # thin legs, the far pair darker
                 for lx, far in ((0.44, True), (-0.36, True), (0.36, False), (-0.44, False)):
                     sp.limb([(lx, cy - b_ + 0.06), (lx + 0.015, 0.0)], 0.046, legc * (0.7 if far else 1.0), edge=False)
@@ -393,15 +395,16 @@ class FaunaMixin:
             sp.blob(0.0, cy, a_, b_, b, p=2.2)
             for k, (bx_, by_, rr) in enumerate(bumps):
                 sp.ell(bx_, by_, rr, rr * 0.88, t if k < 7 else m_ if k < 9 else b)
-            sp.blob(0.0, cy + 0.07 * bw, a_ * 0.97, b_ * 0.8, m_, edge=False, p=2.4)
-            sp.blob(0.0, cy + 0.15 * bw, a_ * 0.84, b_ * 0.52, t, edge=False, p=2.2)
+            sp.blob(0.0, cy + 0.05 * bw, a_ * 0.98, b_ * 0.86, 0.67 * b + 0.33 * t, edge=False, p=2.4)
+            sp.blob(0.0, cy + 0.1 * bw, a_ * 0.92, b_ * 0.68, 0.33 * b + 0.67 * t, edge=False, p=2.3)
+            sp.blob(0.0, cy + 0.16 * bw, a_ * 0.8, b_ * 0.48, t, edge=False, p=2.2)
             sp.blob(0.0, cy - 0.22 * bw, a_ * 0.8, b_ * 0.22, 0.5 * (u + b), edge=False, p=2.2)
             self.sheep_curls(sp, r, 0.0, cy, a_, b_, b, m_)
             # the neck and head, in front of the fleece
             hk = 1.25            # the head a little larger than life, so it reads
             if grazing and not lying:
-                sp.limb([(0.42, cy), (0.58, 0.3)], 0.21, 0.5 * (b + m_))
-                pv, ang = (0.61, 0.3), -78
+                sp.limb([(0.42, cy), (0.6, 0.28)], 0.2, 0.5 * (b + m_))
+                pv, ang = (0.62, 0.26), -62
             elif lying:
                 sp.limb([(0.4, cy + 0.06), (0.56, cy + 0.12)], 0.2, m_)
                 pv, ang = (0.6, cy + 0.14), (-14 if i % 2 else -40)
@@ -419,7 +422,7 @@ class FaunaMixin:
             front = view == "front"
             a_, b_ = 0.36 * bw, 0.32 * bw
             cy = 0.25 + b_
-            ox, oy = self.rim_off(1, 0.035)
+            ox, oy = self.rim_off(1, 0.05)
             for lx, far in ((-0.1, True), (0.1, True), (-0.16, False), (0.16, False)):
                 sp.limb([(lx, cy - b_ + 0.06), (lx * 1.05, 0.0)], 0.048, legc * (0.7 if far else 1.0), edge=False)
             if not front and not grazing:                    # its head beyond the fleece
@@ -431,8 +434,9 @@ class FaunaMixin:
             for xx in np.linspace(-0.26, 0.26, 4) * bw:
                 rr = (0.09 + 0.02 * r.random()) * bw
                 sp.ell(xx, cy + b_ * 0.82, rr, rr * 0.85, t)
-            sp.blob(0.0, cy + 0.07 * bw, a_ * 0.96, b_ * 0.8, m_, edge=False, p=2.4)
-            sp.blob(0.0, cy + 0.15 * bw, a_ * 0.8, b_ * 0.52, t, edge=False, p=2.2)
+            sp.blob(0.0, cy + 0.05 * bw, a_ * 0.97, b_ * 0.86, 0.67 * b + 0.33 * t, edge=False, p=2.4)
+            sp.blob(0.0, cy + 0.1 * bw, a_ * 0.9, b_ * 0.68, 0.33 * b + 0.67 * t, edge=False, p=2.3)
+            sp.blob(0.0, cy + 0.16 * bw, a_ * 0.76, b_ * 0.48, t, edge=False, p=2.2)
             sp.blob(0.0, cy - 0.22 * bw, a_ * 0.78, b_ * 0.22, 0.5 * (u + b), edge=False)
             self.sheep_curls(sp, r, 0.0, cy, a_, b_, b, m_)
             if front:                                        # its face toward you, the ears out sideways
@@ -473,7 +477,7 @@ class FaunaMixin:
         sp = Sprite(x, y - (0.2 * M if pose == "pounce" else 0.0), M, f)
         self.draw_fox(sp, pose, look, x, y)
         sp.draw(L, self.ink_w())
-        self.life_put(L, y)
+        self.life_put(L, y, xc=x)
 
     def draw_fox(self, sp, pose, look, x, y):
         b, t, u, rim = self.tones((182, 92, 44), x, y)
@@ -594,7 +598,7 @@ class FaunaMixin:
             sp = Sprite(x, y, M, f)
             self.draw_hare(sp, pose, var, which, x, y)
             sp.draw(L, self.ink_w())
-            self.life_put(L, y)
+            self.life_put(L, y, xc=x)
 
     def draw_hare(self, sp, pose, var, which, x, y):
         b, t, u, rim = self.tones((176, 130, 82), x, y)
@@ -746,7 +750,7 @@ class FaunaMixin:
             sp = Sprite(x, feet, M, f)
             self.draw_crow(sp, pose, x, feet)
             sp.draw(L, self.ink_w() * 0.8)
-            self.life_put(L, depth)
+            self.life_put(L, depth, xc=x)
 
     def draw_crow(self, sp, pose, x, y):
         b, t, u, _ = self.tones((24, 24, 28), x, y)
