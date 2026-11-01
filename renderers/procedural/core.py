@@ -165,6 +165,17 @@ def normalize(v):
     return v / (np.linalg.norm(v, axis=-1, keepdims=True) + 1e-6)
 
 
+def bump_normal(nrm, h, k=1.0):
+    """Tilt normals nrm (h, w, 3: east, north, up) by a height field h (h, w) in frame pixels, as the
+    camera sees it: screen right is west and screen up is up. Each screen axis is projected onto the
+    surface first, so a slope on a face seen edge-on is foreshortened as it should be."""
+    nrm = np.asarray(nrm, np.float32)
+    gy, gx = np.gradient(np.asarray(h, np.float32))
+    tr = np.array([-1, 0, 0], np.float32) + nrm[..., :1] * nrm      # e_r - (e_r.n) n, e_r = west
+    tu = np.array([0, 0, 1], np.float32) - nrm[..., 2:] * nrm       # e_u - (e_u.n) n
+    return normalize(nrm - k * gx[..., None] * tr + k * gy[..., None] * tu)
+
+
 class Layer:
     """A supersampled RGBA drawing surface covering a pixel box of the frame."""
 
@@ -193,6 +204,18 @@ class Layer:
 
     def text(self, x, y, s, font, col, a=1.0):
         self.d.text(self.P(x, y), s, font=font, fill=rgba(col, a), anchor="mm")
+
+    def blit(self, x, y, rgb, a):
+        """Draw a colour image rgb (h, w, 3) with coverage a (h, w), both at the layer's supersampled
+        resolution, with its top left corner at frame point (x, y) (whole pixels), over what is drawn."""
+        px, py = (int(round(v)) for v in self.P(x, y))
+        h, w = a.shape
+        c0, r0 = max(0, -px), max(0, -py)
+        c1, r1 = min(w, self.img.width - px), min(h, self.img.height - py)
+        if c1 <= c0 or r1 <= r0:
+            return
+        im = np.dstack([np.clip(rgb[r0:r1, c0:c1] + 0.5, 0, 255), np.clip(a[r0:r1, c0:c1, None] * 255 + 0.5, 0, 255)])
+        self.img.alpha_composite(Image.fromarray(im.astype(np.uint8), "RGBA"), dest=(px + c0, py + r0))
 
     def arrays(self):
         im = self.img.resize((self.x1 - self.x0, self.y1 - self.y0), Image.BOX)
