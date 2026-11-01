@@ -22,6 +22,8 @@ import numpy as np
 
 from core import *  # noqa: F401,F403
 
+HEAPS = False       # draw the heaps at all (parked: see docs/v3/phase2-clouds.md, "v3: heaps off"). Off, the
+                    # whole low cover is the noise layer, and the horizon band and rain curtains go too
 HK = 1.2            # km: the base of the low deck (sky.CLOUD_LAYERS "low"); lengths here are in deck heights
 WF = 1.5            # wind at the deck relative to the surface, as the low noise layer
 CELL = 1.7          # grid cell on the deck (deck heights): one heap at most per cell
@@ -72,7 +74,7 @@ def regime(fr):
     heat = sm(2, 30, max(fr.sun_alt, lag)) * (0.55 + 0.45 * sm(0, 22, wx.temp_c))
     conv = min(1.0, max(heat, 1.3 * shw, 1.3 * thn))
     lid = max(sm(0.6, 0.95, wx.cloud_low), frn * sm(0.35, 0.85, wx.cloud_low))
-    share = (1 - lid) ** 2 * (0.25 + 0.75 * conv)
+    share = (1 - lid) ** 2 * (0.25 + 0.75 * conv) if HEAPS else 0.0
     tower = min(1.45, max(0.75, 0.6 + 0.6 * heat + 0.8 * shw + 0.6 * thn)) * (1 - 0.5 * lid)
     wet = max(wx.rain, wx.snow, 0.6 * wx.drizzle)
     dark = min(1.0, 0.15 + 0.5 * shw + 0.3 * thn + 0.25 * lid + 0.35 * wet)

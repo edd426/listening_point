@@ -304,9 +304,12 @@ class SkyMixin:
                 lit = (0.5 * lit + 0.5 * sm(0.45, 0.78, lit)) * (1 - 0.2 * thick)
             if name == "low":
                 # thick low cloud is dark underneath; a full lid is flatter and greyer
-                cover = np.maximum(cover, self.wx.cloud_low * sm(OVERHEAD - 4, OVERHEAD + 6, alt))
-                thick = sm(0.0, 2.0, n0 - (self.layer_threshold(i, self.wx.cloud_low, "top")
-                                           if self.wx.cloud_low >= 0.01 else 0.0))
+                if self.cloud_regime().share > 0:    # overhead the layer carries the heaps' share too
+                    cover = np.maximum(cover, self.wx.cloud_low * sm(OVERHEAD - 4, OVERHEAD + 6, alt))
+                    thick = sm(0.0, 2.0, n0 - (self.layer_threshold(i, self.wx.cloud_low, "top")
+                                               if self.wx.cloud_low >= 0.01 else 0.0))
+                else:
+                    thick = sm(0.0, 2.0, n0 - self.layer_threshold(i, cover))
                 lit = lit * (1 - 0.45 * thick) * (1 - 0.35 * sm(0.75, 1.0, cover))
                 lit = lit * (1 - 0.5 * wet)
             lit = lit[..., None]
@@ -327,11 +330,11 @@ class SkyMixin:
             acc_c = acc_c * (1 - al) + cc * al
             acc_a = acc_a * (1 - al) + al
         # the low deck's heaps, in front of everything else in the sky; far off, they run together
-        # into a band along the horizon
+        # into a band along the horizon (only with cumulus.HEAPS on)
         reg, pop = self.cloud_regime(), self.heaps()
-        heap_a = np.zeros(alt.shape, np.float32)
+        heap_a = np.zeros(alt.shape, np.float32) if cumulus.HEAPS else None
         grid = sky_grid(self.W, self.H, 2)
-        band = cumulus.horizon_band(self, reg, grid)
+        band = cumulus.horizon_band(self, reg, grid) if cumulus.HEAPS else None
         if band is not None:
             cc, al, r0 = band
             heap_a[r0:] = al
