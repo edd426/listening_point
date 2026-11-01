@@ -83,27 +83,36 @@ def core(r, T):
     return 0.0, 0.85 * r, 0.72 * T
 
 
-def _dome(rng, r, T, lod, lean):
+def _dome(rng, r, T, px, lean):
     """Spheres (east, north, up, radius, squash) of one dome about its base centre, in deck heights:
     the body; a ring of bumps round its foot, cut flat by the deck with it, so the base is one plane
     with a lumpy edge; and rounded heads bulging out of it, larger toward the crown and more of them on
-    one side. lod 0-2 sets how many puffs a far or near dome gets."""
+    one side.
+
+    The full set is always drawn from the generator in the same order and a far dome (px, its radius
+    in grid pixels) keeps only the first few of each kind, so as a heap drifts nearer it gains puffs
+    one at a time and never changes shape."""
     z0, rc, tz = core(r, T)
     out = [(0.0, 0.0, z0, rc, tz / rc)]
-    ring, heads = ((2, 3), (4, 5), (5, 9))[lod]
+    f = float(np.clip((px - 10.0) / 35.0, 0, 1))
+    n_ring = int(round(2 + 3 * f))
+    n_heads = int(round((3 + 6 * f) * min(1.5, max(1.0, (T / r) ** 0.4))))
     a0 = rng.uniform(0, 2 * math.pi)
-    for j in range(ring):
-        a = a0 + 2 * math.pi * (j + rng.uniform(-0.3, 0.3)) / ring
+    for j in range(5):
+        a = a0 + 2 * math.pi * (j + rng.uniform(-0.3, 0.3)) / 5
         R = min(r * rng.uniform(0.32, 0.46), 0.8 * T)
         d = rc * rng.uniform(0.72, 0.98)
-        out.append((d * math.cos(a), d * math.sin(a), 0.0, R, 1.0))
+        if j < n_ring:
+            out.append((d * math.cos(a), d * math.sin(a), 0.0, R, 1.0))
     size = min(rc, tz)
     side, bias = rng.uniform(0, 2 * math.pi), rng.uniform(0.0, 0.7)
-    for j in range(int(heads * min(1.5, max(1.0, (T / r) ** 0.4)))):
+    for j in range(14):
         ph = side + rng.uniform(-math.pi, math.pi) * (1 - bias * rng.uniform(0, 1))
         ct = 0.25 + 0.75 * rng.uniform(0.0, 1.0) ** 0.6       # cos of the angle from the top of the dome
         st = math.sqrt(1 - ct * ct)
         R = size * rng.uniform(0.3, 0.5) * (0.75 + 0.3 * ct)
+        if j >= n_heads:
+            continue
         nx, ny, nz = st * math.cos(ph) / rc, st * math.sin(ph) / rc, ct / tz
         ln = math.sqrt(nx * nx + ny * ny + nz * nz)
         x, y, z = rc * st * math.cos(ph), rc * st * math.sin(ph), tz * ct
@@ -144,22 +153,21 @@ def population(fr, reg):
     sph, domes = [], []
     for idx in np.nonzero(keep)[0]:
         rr = float(r[idx])
-        if rr < 0.05:
+        if rr < 0.01:
             continue
         T = min(rr * (0.55 + 0.45 * float(u[6][idx])) * reg.tower, 7.0)
         dist = float(D[idx])
-        px_ = rr / max(dist, 0.3) * ppr                                     # the heap's radius on the grid
-        lod = 2 if px_ > 45 else 1 if px_ > 14 else 0
         rng = np.random.default_rng([salt, int(I[idx]) & 0xFFFFFFF, int(J[idx]) & 0xFFFFFFF, 3])
         x, y = float(X[idx]), -float(Z[idx])
-        parts = [(x, y, rr, T, lod)]
-        if rr > 0.5 and u[7][idx] < 0.6:
-            b = rng.uniform(0, 2 * math.pi)
-            r2 = rr * rng.uniform(0.5, 0.75)
-            parts.append((x + 0.75 * rr * math.cos(b), y + 0.75 * rr * math.sin(b), r2,
-                          T * rng.uniform(0.55, 0.85) * math.sqrt(r2 / rr), max(lod - 1, 0)))
-        for (px, py, pr, pT, pl) in parts:
-            for j, (de, dn, du, R, sq) in enumerate(_dome(rng, pr, pT, pl, lean)):
+        b, f2, f3 = rng.uniform(0, 2 * math.pi), rng.uniform(0.5, 0.75), rng.uniform(0.55, 0.85)
+        parts = [(x, y, rr, T, rng.integers(1 << 30))]
+        r2 = rr * f2 * sm(0.3, 0.6, rr)                                    # a big heap grows a second, lower dome
+        if u[7][idx] < 0.6 and r2 > 0.01:
+            parts.append((x + 0.75 * rr * math.cos(b), y + 0.75 * rr * math.sin(b), r2, T * f3 * math.sqrt(r2 / rr),
+                          rng.integers(1 << 30)))
+        for (px, py, pr, pT, seed) in parts:
+            prng = np.random.default_rng([salt, int(seed)])
+            for j, (de, dn, du, R, sq) in enumerate(_dome(prng, pr, pT, pr / max(dist, 0.3) * ppr, lean)):
                 if j == 0 or R / dist * ppr > 2.5:                          # puffs too small to see are left out
                     sph.append((px + de, py + dn, 1.0 + du, R, sq, len(domes)))
             z0, rc, tz = core(pr, pT)
