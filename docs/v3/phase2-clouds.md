@@ -7,39 +7,95 @@ gradient, the layout, the real sun and moon and the real forecast are unchanged;
 cloud comes from the scene's own sun, moon and sky. Flocks, gulls, geese, aircraft, balloons and
 kites are the `v3/air` part and are not touched here.
 
-## What changed
+## Version 2 (after the lead's review of the first look test)
+
+The lead kept the beams (6) and the sunset colour on the noise layers (7) and sent the heaps back:
+smooth grey "stickers"; a clip-art field of near-identical puffs; giant flat discs overhead; a fair
+sky that had lost its texture; dark blots in the sea. What v2 does about each:
+
+1. **Form and light** (`cumulus._dome`, `render`, `shade`)
+   - **Cauliflower edges at three sizes.** Each dome is a body, a ring of bumps at its foot, up to 14
+     heads, then knobs on the first heads and smaller knobs on those knobs, pushed to the upper and
+     sunward side. On top of that, a cellular texture of sphere caps (`billow_tex`, two sizes, about
+     150 m and 60 m) rides on each dome's face. It tilts the surface normal, so every billow is lit on
+     its sun side, and it cuts the outline into knobs (`knobs`).
+   - **Light.** Sunlit planes are a warm white (`CLOUD_SUN` times `WARM`, slightly past white, so the
+     grade's shoulder rolls them off) with a defined turn into shade (`_ramp`). The shaded side is
+     sky-lit blue-grey (`lights()`: the cloud shade colour mixed with the sky's mid and zenith
+     colours), lighter on faces that look up and faintly darker in the creases between puffs.
+   - **Silver lining.** It follows only the heap's outline, broken by the knobs, with a weaker glow
+     through the body. Its strength falls off with the angle from the sun. In v1 every puff's rim
+     glowed, which drew the grey discs.
+   - **Bases.** The flat base is darker under the middle, mottled, lighter on small (thin) heaps,
+     and hazes out with distance.
+2. **The field** (`population`, `horizon_band`)
+   - **Clusters and streets.** A slow noise sets where heaps cluster and how big they grow. In a
+     moderate wind (3-7 m/s) they line up in streets along it.
+   - **Rows of domes.** A big heap is a row of two to four domes, the first the tallest; extra domes
+     grow in smoothly.
+   - **Size.** Sizes range widely: the radius is cubic in a uniform hash, so most heaps are small and
+     a few are big.
+   - **Toward the horizon.** Far heaps grow broader and flatter, then fade (at 8-11 deck heights)
+     into `horizon_band`. The band is low, flattened lumps of a noise on the deck, lit along their
+     tops, lost in the horizon haze, and drifting with the heaps.
+3. **Overhead**
+   - No heap is drawn nearer than about 3-4 deck heights, so none sits above about 15 degrees and
+     none can fill the top of the frame.
+   - Above `OVERHEAD` (14 degrees) the low noise layer carries the heaps' share of the low cover, so
+     the cover overhead is still the forecast's.
+   - Each heap is turned partly side-on: about its base, by 0.75 of the angle we look up at it
+     (`TILT`). So its flat base is seen nearly edge-on, as a 2D background shows clouds, not as a
+     grey disc from below.
+4. **Cover follows the forecast, and fair days keep their texture** (`sky.layer_threshold`)
+   - **The cause.** Each noise layer used a fixed threshold, the normal quantile of its cover. The
+     window of noise in view is small next to the noise's large blobs, so what showed was chance. On
+     2026-11-01 12:00 the 5% low deck covered about half the sky on `main` (mean density 0.34) and
+     nearly nothing on v1.
+   - **The fix.** The threshold is now measured from this frame's sky (a quantile on a coarse grid,
+     once per layer and frame), so each layer's visible density matches its forecast cover.
+   - **Measured on the sky grid** (mean density above 2 degrees; cover / seen):
+
+     | frame | high | mid | low |
+     |---|---|---|---|
+     | 2026-11-01 fair 12:00 | 0.20 / 0.20 | 0.14 / 0.13 | |
+     | 2026-11-01 fair 15:40 | 0.48 / 0.47 | 0.22 / 0.22 | |
+     | 2026-11-11 synthetic 12:00 | 0.40 / 0.40 | 0.71 / 0.69 | noise 0.87 / 0.86 |
+
+   - **Heaps.** On frames where all the low cover is heaps (share 1), heaps and overhead layer
+     together showed 0.29 / 0.36, 0.48 / 0.48, 0.59 / 0.46, 0.51 / 0.54, 0.51 / 0.55 and 0.31 / 0.32
+     (seen / forecast).
+   - **Fair days.** The fair-day high and mid layers now draw their full cover, so the soft veil and
+     wisps of `main` are back; the 5% low cover is a few small heaps.
+5. **Sea** (`sea.py`). Where the reflection samples a heap or the horizon band (`heap_occ`), it is
+   pulled 55% toward the horizon colour, so heaps show in the sea as pale, hazy shapes, not dark
+   blots.
+
+## What changed (v1 and v2 together)
 
 ### Heaped low cloud (`renderers/procedural/cumulus.py`, new)
 
-The low deck's cover (`wx.cloud_low`, unchanged) is now shared between two drawings:
+The low deck's cover (`wx.cloud_low`, unchanged) is shared between heaps and the old noise layer.
 
-- **Heaps:** separate clouds, each one or two *domes*. A dome is an ellipsoid body standing on the
-  deck, a ring of bumps round its foot, and rounded heads bulging out of it, larger toward the crown
-  and more of them on one side. Everything below the deck (1.2 km, the old low layer's height) is cut
-  off flat, so every heap has a flat base in the one plane: distant heaps show a thin dark line,
-  heaps overhead show their underside. The spheres are ray-cast on the sky's half-resolution grid
-  (the grid the noise layers already use), puff by puff from the nearest, each laid over or under
-  what is there with an anti-aliased edge (a soft depth test smooths the creases; the flat base's
-  edges are anti-aliased by their own slope across the grid, as a shader's `fwidth` would).
-- **The noise layer** (the old `cloud_layer`, unchanged): stratocumulus and, as the deck closes,
-  the lid.
+**The heaps** are separate clouds built from spheres:
+- **Shape.** One heap is a row of one to four *domes*, each built as in Version 2 item 1.
+- **The flat base.** Everything below the dome's base plane, the deck at 1.2 km (the old low
+  layer's height) turned with the heap, is cut off flat.
+- **Drawing.** The spheres are ray-cast on the sky's half-resolution grid, the grid the noise layers
+  already use. Puffs are laid one by one from the nearest, each over or under what is there, with
+  anti-aliased edges and a soft depth test.
 
-Heaps live in cells of a grid on the deck (1.7 deck heights) that drifts with the wind at the deck,
-the same drift (`day.drift_e/n`) and wind factor as the old low layer. A cell's heap has its own
-threshold, so as the cover rises heaps appear and grow, and as it falls they shrink away; each also
-swells and shrinks a little on its own 45-100 minute clock. Positions, sizes and shapes come from a
-hash of the cell and the date, so a minute always renders the same. Only heaps within 16 deck
-heights (about 3.6 degrees above the horizon) are drawn; distance haze pulls them into the horizon
-colour. Puffs smaller than 2.5 grid pixels are left out, and far heaps get fewer puffs.
+**The noise layer** (the old `cloud_layer`) draws the rest: stratocumulus and, as the deck closes,
+the lid. Overhead it also carries the heaps' share.
 
-**Shading.** Each puff's normal is blended into its dome's (0.2 puff, 0.8 dome), so a heap is lit as
-one form with lumps on it: a soft two-tone wrap (`_tone`) toward the scene's sun, plus the moon at
-night. Sunlit faces take `CLOUD_SUN` (new in `core.py`), the sunlight's colour keyed by the sun's
-altitude *as the deck sees it* (1.1 degrees lower than we do); shaded faces take `CLOUD_SHADE`, a
-little darker, and the base darker again, darkest under the middle and mottled. A high sun shades
-the lower body under the puffs above it. Toward the sun the thin edges and puff rims glow (a
-forward-scattering lobe round the sun's direction). Haze grows with distance. Behind higher cloud
-(what `sun_visibility` lets through the noise layers) the heaps lose some of their direct light.
+**Motion and lifetime:**
+- Heaps live in cells of a grid on the deck (1.7 deck heights). The grid drifts with the wind at the
+  deck: the same drift (`day.drift_e/n`) and wind factor as the old low layer.
+- A cell's heap has its own threshold, so as the cover rises, heaps appear and grow; as it falls,
+  they shrink away. Each also swells and shrinks a little on its own 45-100 minute clock.
+- Positions, sizes and shapes come from a hash of the cell and the date, so a minute always renders
+  the same.
+- A far dome keeps only the first puffs of its fixed list, so as it drifts nearer it gains puffs
+  without changing shape.
 
 ### How cloud type is chosen (`cumulus.regime`, once per frame; signals once per day)
 
@@ -54,10 +110,9 @@ altitude, and the wind.
 - **Lid** `lid`: the low cover from 0.6 to 0.95, or a front's steady rain with a mostly closed deck.
 - **Share** of the low cover drawn as heaps: `(1 - lid)^2 * (0.25 + 0.75 * convection)`; the rest
   is the noise layer. So a summer afternoon is all heaps, a night or a winter day mostly
-  stratocumulus with a few flattened heaps, an overcast day a flat grey lid. Heaps cover 0.75 of
-  their share on the deck (their sides fill more of the view than their footprint).
-- **Tower:** a heap's height is 0.65-1.2 times its radius on a warm fair afternoon (at least 0.4 at
-  night or in winter); showers and thunder build towers 2-3 times as tall, with heavier, darker
+  stratocumulus with a few flattened heaps, an overcast day a flat grey lid.
+- **Tower:** a heap's height over its radius, 0.8-1.4 times a factor of 0.75-1.2 on a fair day
+  (rising with the day's heat), up to 1.45 when showers or thunder are near, with heavier, darker
   bases (`dark`).
 - **Rain shafts:** when showers are about (signal over 0.25), the biggest, tallest heaps hang a grey
   curtain from the base to the horizon, leaning downwind, streaked.
@@ -98,58 +153,62 @@ cloud. One polar pass costs less than the old 28 resamplings.
 
 ## Probes
 
-All on `cefb576` (the code this doc describes; the doc commit after it changes no code).
+All on `e5b750b`, the v2 code; the doc commit after it changes no code.
 `$PY` = `~/Documents/Projects/listening_point/venv/bin/python`.
 
-1. **Tests: PASS.** `$PY -m unittest discover -s tests`: `Ran 45 tests in 7.166s` / `OK`.
+1. **Tests: PASS.** `$PY -m unittest discover -s tests`: `Ran 45 tests in 6.471s` / `OK`.
 2. **Determinism: PASS.**
-   - The two branch runs of the timing command (2027-06-08, `--weather synthetic`, 12:00-12:59, heaps,
-     mid and high cloud, keyframes): all 60 frames `cmp`-identical (`60 frames compared, 0 differ`).
-   - Rendered again into a second folder and `cmp`'d against the look-test renders, `--scale 0.75`:
-     2026-11-01 `--weather fair` 15:40 identical (`0c398f22b948ebbf22f8513dad7f814e`);
-     2027-10-15 `--weather synthetic` 17:00 identical (`06d4182485c5542d5e0363b7e8e2a73c`) and
-     17:45 identical (`4fe308d8ea469aead3ef87d2500d16e9`).
-3. **Shore reference unchanged: PASS.** `$PY tools/shore_reference.py OUT --reference r2` from this
-   tree: `digest 7cbee1f442afce967826b8e6f6aaffddd8921391b138a487f359b4d9024d35fa` (the same as
-   `main`; also checked on the untouched tree before starting and on `7d33c78`). Why it holds: the
-   reference weathers (`clear`, `fog`) have no cloud at all, so every new path is skipped (no layer
-   reaches `cover >= 0.01`, `population()` returns None, `cloud_occ` stays None and
-   `light_shafts()` runs its old code); `CLOUD_LAYERS`' mid softness only matters where there is mid
-   cloud. The look test's fog frame (2026-11-01 `--weather fog` 10:00) is byte-identical to `main`'s.
-4. **Render time: ratio about 1.1 (<= 1.25)**; see Render time.
+   - The heavier heap sky, 2027-07-07 `--weather synthetic`, 12:00-12:59 (probe-4 command): two
+     branch runs, all 60 frames `cmp`-identical (`60 frames compared, 0 differ`).
+   - The 11 look-test frames were rendered twice, once on `e1fe7f4` and once on `e5b750b`. The last
+     commit only changes the heaps' haze, so frames without heaps must match, and they do: fair night
+     22:00 (`4042d8abedd25de45655b07555b31fe0`), fog 10:00 (`5c81f5d3c5609b881083eb400a1417c7`) and
+     overcast 2026-11-11 12:00 (`7a690ad1edbff6bedf66d4c6e5531085`).
+3. **Shore reference unchanged: PASS.** `$PY tools/shore_reference.py OUT --reference r2`, run on
+   `e1fe7f4` and on `e5b750b`: `digest 7cbee1f442afce967826b8e6f6aaffddd8921391b138a487f359b4d9024d35fa`,
+   the same as `main`.
+
+   Why it holds: the reference weathers (`clear`, `fog`) have no cloud at all, so every new path is
+   skipped:
+   - no layer reaches `cover >= 0.01`, so the new threshold code never runs;
+   - `population()` and `horizon_band()` return None;
+   - `cloud_occ` and `heap_occ` stay None, so `light_shafts()` takes its old path and the sea its
+     old reflection.
+
+   The look test's fog frame is byte-identical to `main`'s.
+4. **Render time: ratio about 1.14 (<= 1.25)**; see Render time.
 
 ## Render time
 
-Probe-4 command, `nice -n 10 $PY renderers/procedural/listening_point.py OUT --date D --minutes 720-779
---scale 0.75 --jobs 1 --weather synthetic --quality 90`, main (`~/Documents/Projects/listening_point`,
-`4192c35`) against this branch. The machine was shared with other agents' renders and tests, and its
-load swung from 5 to 27 during the runs, so the sequential pairs are mostly noise; two pairs run *at
-the same moment* (both processes see the same load) are the better measure.
+**v2.** The probe-4 command, `nice -n 10 $PY renderers/procedural/listening_point.py OUT --date D
+--minutes 720-779 --scale 0.75 --jobs 1 --weather synthetic --quality 90`. Main
+(`~/Documents/Projects/listening_point`, `4192c35`) and this branch were started *at the same moment*,
+so both saw the same load; load 6-8 throughout (quieter than v1's runs).
 
-| pair | date | order | load (1 min) | main real / cpu s | branch real / cpu s | ratio real / cpu |
-|---|---|---|---|---|---|---|
-| 1 | 2027-06-08 | main, branch | 15 -> 8 | 307.9 / 267.6 | 266.9 / 246.1 | 0.87 / 0.92 |
-| 2 | 2027-06-08 | main, branch | 8 -> 8 | 238.9 / 219.4 | 181.0 / 179.1 | 0.76 / 0.82 |
-| 3 | 2027-06-08 | branch, main | 19 -> 11 | 411.4 / 322.1 | 488.2 / 393.3 | 1.19 / 1.22 |
-| 4 | 2027-07-07 | branch, main | 5 -> 6 | 142.1 / 142.7 | 157.0 / 155.9 | 1.10 / 1.09 |
-| 5 | 2027-07-07 | main, branch | 6 -> 19 | 182.8 / 176.0 | 401.3 / 292.9 | 2.20 / 1.66 |
-| C1 | 2027-07-07 | together | 10 -> 27 | 530.2 / 321.6 | 568.4 / 353.4 | **1.07 / 1.10** |
-| C2 | 2027-06-08 | together | 27 -> 9 | 468.9 / 279.4 | 509.2 / 310.7 | **1.09 / 1.11** |
+| pair | date | load (1 min) | main real / cpu s | branch real / cpu s | ratio real / cpu |
+|---|---|---|---|---|---|
+| 1 | 2027-07-07 | 8.1 -> 8.5 | 181.2 / 174.4 | 209.4 / 201.9 | 1.16 / 1.16 |
+| 2 | 2027-06-08 | 8.5 -> 6.7 | 170.9 / 167.7 | 191.0 / 187.2 | 1.12 / 1.12 |
+| 3 | 2027-07-07 | 6.7 -> 7.2 | 164.8 / 161.8 | 190.8 / 188.2 | 1.16 / 1.16 |
 
-(cpu = user + sys.) 2027-06-08 noon: low 0.36, mid 0.23, high 0.29, heaps. 2027-07-07 noon: low
-0.49-0.59, mid 0.27: a heavier heap sky. Pair 5's branch run met a load spike (6 to 19) in its
-middle. The concurrent pairs give about **1.08 wall, 1.10 CPU**. Where it goes, per minute frame
-(sky only, profiled): the heaps' ray cast and shading cost 0.3-0.6 s on a busy machine, partly paid
-back where the heaps replace the low noise layer (its full-grid resamplings skipped) and where
-`cloud_beams()`' single polar pass replaces the old 28 resamplings. The heaviest case seen is a
-showery afternoon (2027-06-02 16:20: about 1,400 puffs, sky about +0.3 s); not timed over a full hour.
+(cpu = user + sys.) About **1.15**. Where the cost goes, per minute frame (sky only, best of three,
+CPU): 2027-07-07 12:30, 0.58 s on main and 0.84 s here; 2027-06-02 15:30 (showery), 0.59 s and
+0.89 s; 2026-11-01 fair 12:00, 0.73 s and 0.62 s. The puff ray cast is about 0.3 s, the billow
+texture and band 0.1 s. Part of this is paid back: the heaps replace the low noise layer, and
+`cloud_beams()`' single polar pass replaces the old 28 resamplings.
+
+v1 measured 1.07-1.11 in concurrent pairs under heavier load (load 9-27); those runs are superseded.
 
 ## Look test
 
-Folder: `/private/tmp/claude-501/-Users-eddelord-Documents-Projects-cozy-cabin-claude/b85a93cd-3703-4aff-b84b-d9b69db72a54/scratchpad/v3/clouds/`,
-`<n>-<scene>-a-before.jpg` (main, `4192c35`) and `-b-after.jpg` (this branch), full frames at
-`--scale 0.75` (2880x1800), quality 90, rendered with `--times` (so each minute has its own near
-scenery, as the reference frames do).
+Folder: `/private/tmp/claude-501/-Users-eddelord-Documents-Projects-cozy-cabin-claude/b85a93cd-3703-4aff-b84b-d9b69db72a54/scratchpad/v3/clouds/`.
+
+**Files**
+- `<n>-<scene>-a-before.jpg`: `main` (`4192c35`).
+- `-b-after.jpg`: v1 (`cefb576`).
+- `-c-v2.jpg`: this version (`e5b750b`).
+- All are full frames at `--scale 0.75` (2880x1800), quality 90, rendered with `--times`.
+- `<n>-heaps-crop.png`: native-size crops of the v2 frames: 1, 2, 3, 6 and 7.
 
 | n | scene | date | time | weather |
 |---|---|---|---|---|
@@ -165,51 +224,40 @@ scenery, as the reference frames do).
 | 10 | fair-night | 2026-11-01 | 22:00 | fair |
 | 11 | fog | 2026-11-01 | 10:00 | fog |
 
-What to look at:
+What to look at in v2:
 
-- **1, 3:** heaps with lit tops and flat bases, rows of them shrinking into the haze toward the
-  horizon; near ones overhead show their grey undersides. 3's are towers with heavier bases.
-- **4:** dark, heavy heaps under the mid deck in the rain (the rain shafts are faint at this size).
-- **5:** the flat grey lid, as before (heaps fade out as the deck closes).
-- **6:** the sun behind a heap on the horizon; shafts fan up and left out of the gaps and the
-  heaps near the sun have glowing rims.
-- **7:** peach-gold heaps lit from below, darker violet tops, rose cloudlets above, shafts from the
-  setting sun.
-- **8-11:** nothing else broke. Night (10) differs from `main` by a mean of 0.01 levels, fog (11) is
-  byte-identical, the land and sea are unchanged except through the sky's light (the sea reflects
-  the new clouds; `sun_vis` now includes the heaps).
-- **Fair days have much less low cloud than before (8, 9).** On `main` the fair day's 5% low cover
-  was drawn by the noise layer as a milky veil over about half the sky (mean density 0.34 on the
-  sky grid, 46% of it above 0.3); now that 5% is a handful of heaps, so the sky is bluer and
-  clearer. This follows the forecast more closely but changes the fair days' look the most; it is
-  the first thing to check with Evan.
+- **8, 9:** the fair-day veil and wisps are back, with a few small heaps along the horizon.
+- **1, 2:** heaps in clusters and rows, smaller and flatter toward the horizon, with knobbly tops
+  and a hazy band below them. The tops are brighter than v1.
+- **6:** the sun is behind a heap at 17:00. The heap field is different from v1's, so the sun sits
+  behind a smaller heap and the beams are weaker than in v1. The sun is hidden from 16:42 to 17:04
+  that day.
+- **7:** the noise layers' sunset colour is unchanged from v1. The heaps are peach and rose, lit
+  from below.
+- **10:** the fair night now differs from `main` by a mean 0.66 levels: the night layers' cover now
+  follows the forecast. **11:** byte-identical to `main`.
 
 ## Known issues
 
-- **Motion:** the heaps drift with the same wind as the old low layer (1.5 times the surface wind
-  at the deck), so a near heap moves several degrees a minute on a windy day; between two frames it
-  is a step, not a glide. This matches the old layer's speed but heaps, being distinct shapes, make
-  it more noticeable.
-- **Midnight:** the heaps' cells are salted with the date and the drift restarts at midnight, so
-  the heaps change at 00:00 (the noise layers already jump there).
-- **Level of detail:** a heap gains or sheds puffs one at a time as its size on screen changes
-  (always from one fixed list, so it keeps its shape); puffs under 2.5 grid pixels are left out.
-  A small puff can still pop in or out between minutes; not seen at viewing size.
-- **Edges** are drawn on the half-resolution sky grid and upsampled, so silhouettes are about 2 px
-  soft at 2880 wide (1 pt); a few creases between a dome's side and its flat base still show
-  1-2 px steps at 1:1.
-- **Style:** the heaps are stylised (rounded puffs, smooth gradients, a flat underside), nearer a
-  game background than a photograph, as asked; up close they can read as smooth "clay". There are
-  no ragged fractus edges or wisps. Heaps overhead show large flat grey bases.
-- **Beams** are strongest with a low sun behind broken cloud (6, 7). With the sun hidden behind a
-  small isolated heap high in the sky the shafts are faint (the shadow wedge is narrow).
-- **Summer sunsets** are off the right edge of the frame (azimuth over 290 degrees), so in June the
-  sunset colours show on the clouds but the sun and its shafts are out of view (unchanged geometry).
-- **Rain shafts** only hang from big, tall heaps within 16 deck heights when the shower signal is
-  over 0.25; at viewing size they are faint grey veils.
-- **Timing** was measured on a heavily shared machine; the concurrent pairs (1.07-1.11) are the
-  number to trust, and the lead's re-time of the merged tree should confirm it.
-- `v3/air` draws gulls, geese and aircraft in `sky_extras()`, after `sky()`; nothing here touches
-  that code, so the two should merge cleanly, but the air's things will now fly in front of the
-  heaps (they are drawn later), which is right for things below 1.2 km and wrong for aircraft above
-  the deck.
+- **Still not the target in the towers (3, 4).**
+  - Showery heaps read as rows of bells: tall, smooth-sided columns, each with a flat brim at the
+    bottom.
+  - The billow texture gives their surfaces a cauliflower grain, but their outlines stay simple.
+  - A crisper silhouette needs more large lobes on the flanks than the cost allows with this puff
+    count. Tried and dropped: stacking turrets (it read as snowmen).
+- **The tilt is a stylisation.** Each heap is turned side-on to us, so seen from below, a heap does
+  not show a cut-off base as it physically would. Bases are only visible as a thin darker band.
+- **Fair-weather heaps at a high sun (1)** are lit from above. Their sides are in sky-lit shade, so
+  the lit/shaded split is mostly top/bottom, and the warm-white is strongest on the crowns.
+- **Beams (6)** depend on where the heap field puts a heap in front of the sun at that minute. They
+  are faint when the sun is behind a small heap.
+- **Motion:** heaps drift with the old low layer's wind (1.5 times the surface wind at the deck).
+  Near ones step a few pixels a minute on windy days.
+- **Midnight:** the heaps change at 00:00, where the noise layers already jumped.
+- **Edges** are drawn on the half-resolution sky grid. Silhouettes are about 2 px soft at 2880 wide,
+  and the depth test leaves faint crease lines between some puffs.
+- **Rain shafts** are faint grey curtains, only under big, tall heaps when the shower signal is over
+  0.25.
+- **June sunsets** are off the right edge of the frame (unchanged geometry).
+- **Things in the air:** `v3/air` draws after `sky()`, so its things fly in front of the heaps. That
+  is right for birds and wrong for aircraft above 1.2 km.
