@@ -16,24 +16,20 @@ carrier is green. The lock screen was not checked (needs Evan's eye).
 | Part | Merge | Installed? |
 |---|---|---|
 | 2 sky: clouds (heaps parked behind `cumulus.HEAPS = False`) | `8b07231` | yes, 16:28 |
-| 2 sky: air (geese, murmuration, gulls, contrails, balloon, kite) | `3a971cb` | **no**, see below |
-| 3 hillside part 1: land (garden, shed, hives, gates, outcrops, gorse, heather, puddles) | `70ea7f3` | **no**, see below |
+| 2 sky: air (geese, murmuration, gulls, contrails, balloon, kite) | `3a971cb` | yes, 16:52 |
+| 3 hillside part 1: land (garden, shed, hives, gates, outcrops, gorse, heather, puddles) | `70ea7f3` | yes, 16:52 |
 
 Probes were re-run on each merged head (tests, determinism, r2 digest): all PASS. The details are in
 each part's doc under `docs/v3/`.
 
-**Paused for a game.** At 16:43, Evan's Slay the Spire 2 co-op run was stalling. The two game
-sessions (`sts2-coop-*`) asked for the CPU, so the wallpaper render job was SIGSTOPped
-(`kill -STOP`, nightly.py and its worker). The job holds its render lock while stopped, so no
-new render starts. Resume with `kill -CONT` on those PIDs (`pgrep -f "The Listening Point/src/tools/nightly.py"`
-and its child), once the game sessions say "resume".
+**Shared with a game.** From 16:43 to 16:51 the render job was SIGSTOPped while Evan's Slay the
+Spire 2 co-op run recovered. The game sessions (`sts2-coop-*`) and Evan agreed on low priority from
+16:51: the render job as usual (nice 10), other renders one at a time, `--jobs 1`, `nice -n 15`, no
+parallel batches. If a game session says "pause", `kill -STOP` the render job again.
 
 **Next, in order:**
-1. **Install air + hillside together** (one re-render instead of two). This needs the CPU back:
-   - move today's remaining frames and all of tomorrow's out of `$ROOT/days/` to the Trash;
-   - run `tools/install.sh`;
-   - check that a new frame appears (`tools/capture_wallpaper.sh`).
-2. **Phase 3 part 2, animals:**
+1. Air + hillside installed at 16:52 (frames re-rendering).
+2. **Phase 3 part 2, animals**, started 16:55 on `v3/animals` (`.claude/worktrees/v3-animals`):
    - a fox, hares, crows on the new gates and walls, bigger sheep;
    - use the coordinates in `docs/v3/phase3-hillside.md`;
    - **depth order:** animals are drawn in `front()` over all the near scenery, so they must be
