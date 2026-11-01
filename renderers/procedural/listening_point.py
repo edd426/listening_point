@@ -29,6 +29,7 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 from PIL import Image
 
+from air import AirMixin
 from core import FrameBase
 from day import Day
 from distant import DistantMixin
@@ -46,7 +47,7 @@ from weatherfx import WeatherFxMixin
 
 
 class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, HillsideMixin, TowerMixin, TreeMixin, PropsMixin, LifeMixin,
-            WeatherFxMixin, MysteryMixin, ShoreMixin):
+            WeatherFxMixin, MysteryMixin, ShoreMixin, AirMixin):
     def background(self):
         """Everything behind the near scenery, rendered every minute."""
         self.sky()
@@ -96,6 +97,7 @@ class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, HillsideMixi
             self.cat()
             self.heron()
             self.owl()
+            self.air_kite()
         C, A = self.fog_near(self.c, self.a), self.a
         self.c, self.a = base * (1 - A[..., None]) + C, None
         if getattr(self, "backlit", None):

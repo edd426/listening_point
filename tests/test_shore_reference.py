@@ -33,7 +33,7 @@ PY = sys.executable
 TOOL = os.path.join(ROOT, "tools", "shore_reference.py")
 # Every method that draws a creature, a rare event or a passing thing. In reference mode none may draw.
 DRAWERS = ("comet", "ghost_ship", "far_lights", "whale", "footprints", "bottle", "book", "door_light", "pier_gulls",
-           "sheep", "critters", "cat", "heron", "owl", "sky_extras", "boats", "falling_leaves")
+           "sheep", "critters", "cat", "heron", "owl", "sky_extras", "boats", "falling_leaves", "high_air", "air_kite")
 # (date, time, weather, what normal mode draws then): each a day when it really happens (2027's schedule)
 CASES = [
     (D(2027, 1, 25), "02:05", "fair", {"far_lights"}),                    # the light in the empty cottage
@@ -48,6 +48,11 @@ CASES = [
     (D(2027, 7, 6), "00:00", "fair", {"comet"}),
     (D(2027, 9, 27), "08:57", "fair", {"door_light"}),
     (D(2027, 10, 20), "12:00", "fair", {"falling_leaves"}),
+    (D(2027, 1, 12), "10:20", "fair", {"high_air"}),                      # a contrail and its aircraft
+    (D(2027, 1, 12), "17:15", "fair", {"high_air"}),                      # a night flight's lights
+    (D(2027, 1, 15), "16:00", "fair", {"sky_extras"}),                    # starlings at dusk
+    (D(2027, 5, 3), "06:20", "fair", {"sky_extras"}),                     # a balloon
+    (D(2027, 4, 25), "15:00", "synthetic", {"air_kite"}),
 ]
 SMALL = 0.25
 
@@ -110,11 +115,12 @@ def test_reference_mode_draws_no_creature_or_rare_event():
         assert not any((my.comet, my.ghost, my.cottage, my.lantern, my.prints, my.whale, my.bottle, my.book,
                         my.clock_stopped, my.door)), date
         assert ev.trip is None and not ev.heron and not ev.owl and not ev.gulls and not ev.geese and not ev.meteors
+        assert not ev.flights and not ev.contrails and not ev.starlings and not ev.balloons and not ev.kite
         drew, specks, img = render_with_spies(day, m)
         assert not drew, (date, hhmm, "reference mode drew", drew)
         assert specks == 0, (date, hhmm, "moths or fireflies in reference mode")
     assert seen >= {"comet", "ghost_ship", "far_lights", "whale", "bottle", "book", "door_light", "pier_gulls",
-                    "sheep", "critters", "cat", "heron", "owl", "falling_leaves"}, seen
+                    "sheep", "critters", "cat", "heron", "owl", "falling_leaves", "high_air", "air_kite"}, seen
     # the moths and fireflies of a warm summer night show only in normal mode
     day = Day(D(2027, 7, 6), weather="fair")
     assert render_with_spies(day, minute("23:30"))[1] > 0
