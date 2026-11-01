@@ -8,6 +8,11 @@ from scipy import ndimage as ndi
 from core import *  # noqa: F401,F403
 import ground
 
+# How strongly the grass's fine structure reads (1 = the first phase-1 look, which Evan found a bit
+# distracting): the tufts' light tips against their dark feet, the shade between them, the blades' lean.
+TUFT_SHOW = 0.55
+TUFT_LIFT = 1.10
+
 
 def enc(n):
     """A normal as a colour for the normal layer."""
@@ -378,7 +383,7 @@ class LandMixin:
             if not clear_of_shingle(gx - 0.5 * ln - 2 * s, gx + 3 * s + 0.5 * ln + 2 * s, gy - ln):
                 for k in range(3):       # reaches the shingle: drawn exactly as it always was
                     A.line([(gx + k * 1.5 * s, gy), (gx + k * 1.5 * s + leans[k], gy - ln)], c, 1.1 * s)
-            elif gy > 0.88 * H and not on_path(gx, gy) and r2.random() < 0.22 \
+            elif gy > 0.88 * H and not on_path(gx, gy) and r2.random() < 0.10 \
                     and clear_of_shingle(gx - 2.2 * ln, gx + 2.2 * ln, gy - 2.0 * ln):
                 self.tuft(A, N, gx, gy, ln * 2.0, r2, tuft[0] * 0.95, tuft[2] * 1.05)
         # blades along the crest, against the sea
@@ -455,8 +460,8 @@ class LandMixin:
             ac, rut, trail = np.abs(f["across"])[..., None], f["rut"][..., None], f["trail"][..., None]
             dl = f["dense"][..., None]
             gk = alb[:, :xk]
-            g = gk * (1.18 + 0.14 * f["swathe"] + 0.06 * f["hum"])[..., None]   # lifted for what the
-            gap = g * (1 - 0.3 * dl)                                           # tufts' feet take back
+            g = gk * (TUFT_LIFT + 0.09 * f["swathe"] + 0.06 * f["hum"])[..., None]   # lifted for what the
+            gap = g * (1 - 0.3 * TUFT_SHOW * dl)                                           # tufts' feet take back
             gap = gap * (1 - 0.6 * trail) + (g * 0.55 + worn_c * 0.45) * 0.6 * trail
             soil = soil_c * (1 + 0.08 * sm(0.55, 0.05, ac) - 0.14 * sm(0.5, 1.0, ac) - 0.1 * rut) \
                 * (1 + 0.05 * g2[:, :xk] + 0.04 * g1[:, :xk])[..., None]
@@ -468,6 +473,7 @@ class LandMixin:
             tcol = (tlo + (thi - tlo) * tip ** 1.3) * (0.86 + 0.18 * f["blade"] + 0.2 * f["tone"] - 0.1)[..., None]
             straw = sm(0.82, 0.95, f["tone"])[..., None] * (0.25 + 0.4 * se.winter + 0.3 * se.dry)
             tcol = tcol * (1 - straw) + tuft[3] * (0.6 + 0.4 * tip) * straw
+            tcol = ground_ + (tcol - ground_) * TUFT_SHOW
             new = ground_ * (1 - tc) + tcol * tc
             alb[:, :xk] = gk + kk * (new - gk)
             Yg = np.arange(y0 + r0, y0 + r1, dtype=np.float32)[:, None] + 0.5
@@ -483,7 +489,7 @@ class LandMixin:
             nrm += beach[..., None] * np.stack([-HX[sl] * kb, HY[sl] * kb, np.zeros_like(g1)], -1)
             # tufts lean their blades out to either side; hummocks and ruts tilt the ground under them
             t0, p0 = f["tuft"], f["path"]
-            dnx = -0.5 * f["lean"] * t0 + 0.13 * f["hum_x"] * (1 - p0) - f["rut_x"]
+            dnx = -0.5 * TUFT_SHOW * f["lean"] * t0 + 0.13 * f["hum_x"] * (1 - p0) - f["rut_x"]
             dny = -0.13 * f["hum_y"] * (1 - p0) + f["rut_y"]
             nrm[:, :xk, :2] += kk * np.stack([dnx, dny], -1)
             nrm = normalize(nrm * (1 - nal) + (nrgb / 127.5 - 1) * nal)
@@ -510,11 +516,12 @@ class LandMixin:
             shade, wk = shade.copy(), keep
             _, wal = WM.arrays_rows(r0, r1)
             d0 = f["dense"]
-            occ = ((1 - t0) * (1 - p0) * 0.4 * d0 + t0 * (1 - f["tip"]) * 0.3) * (1 - buried)
+            occ = ((1 - t0) * (1 - p0) * 0.4 * d0 + t0 * (1 - f["tip"]) * 0.3) * TUFT_SHOW * (1 - buried)
             sk = 1 - (1 - shade[:, :xk]) * (1 - occ)
             sk[:, :xw] = np.maximum(sk[:, :xw], WSH[sl] * (1 - wal[..., 0]))
             shade[:, :xk] += wk * (sk - shade[:, :xk])
             oa = (1 - t0) * ((1 - 0.3 * d0) * (1 - p0) + p0 * (1 - 0.2 * f["rut"])) + t0 * (0.72 + 0.28 * f["tip"])
+            oa = 1 + (oa - 1) * TUFT_SHOW
             oa = oa * (1 - 0.1 * sm(0.5, -1.5, f["hum"]))
             oa[:, :xw] *= 1 - 0.45 * WAO[sl] * (1 - wal[..., 0])
             amb[:, :xk] *= 1 + wk * (oa - 1) * (1 - 0.8 * buried)
