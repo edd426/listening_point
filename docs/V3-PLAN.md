@@ -93,3 +93,5 @@ phases are their order. Every step gets a look test before it is installed.
 
   Next: merge both into one branch, run the look test at real point size, and get Evan's go before
   installing.
+- **2026-11-01: phase 1 merged** on `v3/phase1` (probes pass, see `docs/v3/phase1.md` there). Look
+  test shown to Evan. The install moves the shore to reference r2. Waiting on Evan's go.
