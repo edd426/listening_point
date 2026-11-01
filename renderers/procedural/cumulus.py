@@ -540,7 +540,7 @@ def shade(fr, pop, hit, reg, grid):
         k = ds * (1 - 0.4 * dark) * (1 - 0.5 * reg.lid)
         col += (ph * (1.5 * edge + 0.2 + 0.15 * (1 - big)) * k)[..., None] * sunc   # small heaps are thin: they glow a little
     col *= 1 - 0.35 * reg.wet
-    hm = (0.8 * (1 - np.exp(-hit.dist * (HK / 15.0))) + 0.2 * np.exp(-alt / 4))[..., None]   # haze with distance
+    hm = (0.65 * (1 - np.exp(-hit.dist * (HK / 24.0))) + 0.2 * np.exp(-alt / 4))[..., None]  # haze with distance
     col = col * (1 - hm) + fr.hor_col * hm
     knobs = np.clip(0.5 + hit.SD - 2.6 * near * (1.0 - np.clip(bil, 0, 1)), 0, 1)   # the edge cut into knobs
     a = np.minimum(hit.A, knobs) * sm(1.0, 4.0, alt) * sm(DMAX, DMAX - 3, hit.dist)
