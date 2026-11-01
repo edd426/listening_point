@@ -113,3 +113,11 @@ phases are their order. Every step gets a look test before it is installed.
   Probes: the tests pass; renders are deterministic; the reference r2 digest stays `7cbee1f4…`
   (bit-identical reference renders, so no r3); time ratio ≤1.25 for clouds and ≤1.15 for air.
   Each part writes `docs/v3/phase2-<part>.md`.
+
+  Evan: "merge them in as they come. You can also start on the next phase." So each phase-2 part is
+  merged and installed as soon as it passes its probes and its look test.
+- **2026-11-01: phase 3 (hillside) started**, part 1 on `v3/hillside` (`~/Documents/Projects/lp-v3-hillside`):
+  built things (garden, shed, hives, gate, more wall) and land detail (outcrops, gorse, heather,
+  wildflowers, puddles). The garden and wall are drawn from a stage parameter, for phase 5. Part 2
+  (animals: a fox, hares, crows, bigger sheep) follows once part 1 lands, using its gate, walls and
+  garden. Same probes, with time ratio ≤1.15.
