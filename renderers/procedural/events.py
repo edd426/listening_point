@@ -282,8 +282,9 @@ class Schedule:
                 hd = float(r.choice([128.0, 72.0]) + r.normal(0, 8) + 180 * r.integers(2))
             else:
                 hd = float(r.uniform(0, 360))
-            self.flights.append((t, hd % 360, float(r.uniform(15, 90) * (1 if r.random() < 0.75 else -1)), float(r.uniform(9.4, 11.9)),
-                                 float(r.uniform(12.6, 14.6)), float(r.random())))
+            off = float(r.uniform(15, 90) * (1 if r.random() < 0.75 else -1))     # mostly south of us, in view
+            self.flights.append((t, hd % 360, off, float(r.uniform(9.4, 11.9)), float(r.uniform(12.6, 14.6)),
+                                 float(r.random())))
 
         # a starling murmuration over the far side of the bay on some autumn and winter evenings
         r = np.random.default_rng([self.seed, 21])
@@ -315,7 +316,8 @@ class Schedule:
         self.kite = None
         t0 = max(float(r.uniform(10.0, 15.0)), self.sunrise + 1.0)
         t1 = min(t0 + float(r.uniform(1.0, 2.8)), self.sunset - 0.4)
-        go, x, style, cols, seed = r.random() < 0.45, float(r.random()), int(r.integers(3)), int(r.integers(4)), int(r.integers(1 << 30))
+        go, x = r.random() < 0.45, float(r.random())
+        style, cols, seed = int(r.integers(3)), int(r.integers(4)), int(r.integers(1 << 30))
         sl = span(t0, t1)
         if go and t1 - t0 > 0.75:
             ws, th = wx.wind_ms[sl], np.radians(np.asarray(wx.wind_dir_deg[sl], np.float64))
@@ -330,8 +332,9 @@ class Schedule:
         # the shape of each skein of geese: how many, how the V is drawn up, whether one lags behind
         r = np.random.default_rng([self.seed, 24])
         self.skeins = [dict(n=int(r.integers(9, 24)), near=float(r.uniform(0.3, 0.7)), half=float(r.uniform(25, 40)),
-                            psi=float(r.uniform(15, 45) * r.choice([-1, 1])), mins=float(r.uniform(11, 17)), size=float(r.uniform(0.85, 1.2)),
-                            straggler=bool(r.random() < 0.7), seed=int(r.integers(1 << 30))) for _ in self.geese]
+                            psi=float(r.uniform(15, 45) * r.choice([-1, 1])), mins=float(r.uniform(11, 17)),
+                            size=float(r.uniform(0.85, 1.2)), straggler=bool(r.random() < 0.7),
+                            seed=int(r.integers(1 << 30))) for _ in self.geese]
 
     def plane_enu(self, f, t):
         """Where flight f is at clock time t (hours, scalar or array): east, north, up in km."""
