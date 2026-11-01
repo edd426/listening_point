@@ -8,6 +8,7 @@ import math
 import numpy as np
 
 import astro
+from season import bump
 
 # the sailing boat's round trip on the bay, as fractions of the frame, starting and ending at the mooring
 MOORED = (0.886, 0.789)
@@ -96,6 +97,7 @@ class Schedule:
         self.geese = [(r2.uniform(self.sunrise + 0.5, self.sunset - 0.5), int(r2.choice([-1, 1])), r2.uniform(0.08, 0.3))
                       for _ in range(int(r2.integers(1, 4) if r2.random() < se.geese else 0))]
         self.cat = self._cat_plan(np.random.default_rng([self.seed, 5]))
+        self._air()
 
     # ------------------------------------------------------------------ cat --
     def _cat_plan(self, r):
@@ -156,7 +158,8 @@ class Schedule:
 
     # ---------------------------------------------------------------- birds --
     def sky_gulls(self, t):
-        """Gulls in the air at time t: list of (x, y, size, wing)."""
+        """Gulls in the air at time t, each wheeling round its own circle over the bay:
+        list of (index, x, y, size, angle round the circle, +1 or -1 for the way it turns)."""
         out = []
         for i, (t0, dur, cx, cy, rad, spd, ph) in enumerate(self.gulls):
             if not t0 <= t <= t0 + dur:
@@ -164,8 +167,7 @@ class Schedule:
             a = ph + spd * (t - t0) * 2 * math.pi
             x = cx + rad * math.cos(a) + 0.02 * (t - t0)
             y = cy + rad * 0.45 * math.sin(a)
-            wing = math.sin(t * 60 * 1.7 + i)
-            out.append((x, y, 0.8 + 0.4 * ((i * 7) % 5) / 4, wing))
+            out.append((i, x, y, 0.8 + 0.4 * ((i * 7) % 5) / 4, a, 1 if spd > 0 else -1))
         return out
 
     def pier_gulls(self, m):
@@ -245,3 +247,109 @@ class Schedule:
     # ----------------------------------------------------------- lighthouse --
     def beam_angle(self, m):
         return math.radians((m * 137.508 + 30) % 360)
+
+    # ------------------------------------------------------------------ air --
+    def _air(self):
+        """Things in the air, drawn by air.py: aircraft and their contrails, starlings at dusk, a
+        hot-air balloon on a calm morning, a kite on a windy day, and the shape of each skein of geese.
+        Each has its own seeded stream, so none of them moves anything that was already scheduled."""
+        wx, doy = self.day.wx, self.day.season.doy
+        n = len(wx.wind_ms)
+
+        def span(a, b):
+            return slice(min(n - 1, max(0, int(a * 60))), min(n, max(1, int(b * 60) + 1)))
+
+        def dry(sl):
+            return (wx.rain[sl].max() < 0.05 and wx.drizzle[sl].max() < 0.15 and wx.snow[sl].max() < 0.05
+                    and wx.thunder[sl].max() == 0)
+
+        # aircraft cross all day and night, busiest from 05:30 to 22:30: (closest-approach time h, heading
+        # deg, offset of the track km, height km, speed km/min, a seed in [0, 1))
+        r = np.random.default_rng([self.seed, 20])
+        sl = span(6, 21)
+        moist = float(np.clip(1.4 * wx.cloud_high[sl].mean() + 0.25 * self.day.season.sea_winter
+                              + 0.5 * max(0.0, float(wx.rh[sl].mean()) - 0.55), 0, 1))
+        # a contrail day: the upper air is moist enough (cirrus about, a cold season) for trails to form;
+        # persist runs from short-lived trails (0) to long ones that spread into bands (1)
+        self.contrails = bool(r.random() < 0.15 + 0.55 * moist and wx.cloud_low[sl].mean() < 0.8)
+        self.persist = moist * float(r.uniform(0.55, 1.0))
+        self.flights, t = [], -0.6
+        while True:
+            t += r.exponential(1 / (2.2 if 5.5 < t % 24 < 22.5 else 0.8))
+            if t > 24.4:
+                break
+            if r.random() < 0.75:   # two airways cross the sky; a few go their own way
+                hd = float(r.choice([128.0, 72.0]) + r.normal(0, 8) + 180 * r.integers(2))
+            else:
+                hd = float(r.uniform(0, 360))
+            self.flights.append((t, hd % 360, float(r.uniform(10, 85) * r.choice([-1, 1])), float(r.uniform(9.4, 11.9)),
+                                 float(r.uniform(12.6, 14.6)), float(r.random())))
+
+        # a starling murmuration over the far side of the bay on some autumn and winter evenings
+        r = np.random.default_rng([self.seed, 21])
+        self.starlings = None
+        go = r.random() < 0.4 * bump(doy, 268, 292, 365 + 40, 365 + 65)
+        a, b = self.sunset - float(r.uniform(0.55, 0.85)), self.sunset + float(r.uniform(0.1, 0.25))
+        sl = span(a, b)
+        if go and dry(sl) and wx.wind_ms[sl].max() < 9 and wx.visibility_m[sl].min() > 5000 and wx.fog[sl].max() < 0.3:
+            self.starlings = dict(t0=a, t1=b, x0=float(r.uniform(0.60, 0.68)), x1=float(r.uniform(0.64, 0.74)),
+                                  y=float(r.uniform(0.47, 0.505)), n=int(r.integers(8000, 16000)),
+                                  size=float(r.uniform(0.8, 1.15)), seed=int(r.integers(1 << 30)))
+
+        # a hot-air balloon (now and then two) on some calm, clear mornings in the warmer half of the year
+        r = np.random.default_rng([self.seed, 22])
+        self.balloons = []
+        if r.random() < 0.28 * bump(doy, 95, 120, 262, 290):
+            for k in range(1 if r.random() < 0.85 else 2):
+                t0, dur = self.sunrise + float(r.uniform(0.05, 0.6)) + 0.2 * k, float(r.uniform(0.9, 1.6))
+                x = float(r.uniform(0.06, 0.24) if r.random() < 0.6 else r.uniform(0.60, 0.72))
+                b = dict(t0=t0, dur=dur, x=x, top=float(r.uniform(0.39, 0.49)), size=float(r.uniform(0.85, 1.15)),
+                         colours=int(r.integers(4)), seed=int(r.integers(1 << 30)))
+                sl = span(t0 - 0.2, t0 + dur)
+                if (wx.wind_ms[sl].max() < 4 and wx.gust_ms[sl].max() < 7.5 and dry(sl) and wx.fog[sl].max() < 0.2
+                        and wx.visibility_m[sl].min() > 8000 and wx.cloud_low[sl].mean() < 0.5):
+                    self.balloons.append(b)
+
+        # a kite on some windy, dry days, flown from just beyond the frame on the side the wind comes from
+        r = np.random.default_rng([self.seed, 23])
+        self.kite = None
+        t0 = max(float(r.uniform(10.0, 15.0)), self.sunrise + 1.0)
+        t1 = min(t0 + float(r.uniform(1.0, 2.8)), self.sunset - 0.4)
+        go, x, style, cols, seed = r.random() < 0.45, float(r.random()), int(r.integers(3)), int(r.integers(4)), int(r.integers(1 << 30))
+        sl = span(t0, t1)
+        if go and t1 - t0 > 0.75:
+            ws, th = wx.wind_ms[sl], np.radians(np.asarray(wx.wind_dir_deg[sl], np.float64))
+            se, ce = float(np.mean(np.sin(th))), float(np.mean(np.cos(th)))
+            frm = math.degrees(math.atan2(se, ce)) % 360          # where the wind comes from, on average
+            if (ws.mean() >= 5 and ws.min() > 3.5 and ws.max() < 13 and wx.gust_ms[sl].max() < 18 and dry(sl)
+                    and wx.fog[sl].max() < 0.2 and math.hypot(se, ce) > 0.8 and not 140 < frm < 220):
+                # an east wind blows toward the right of the frame, so the flyer stands off to the left
+                side = -1 if se > 0.15 else 1 if se < -0.15 else (-1 if x < 0.5 else 1)
+                self.kite = dict(t0=t0, t1=t1, side=side, x=x, style=style, colours=cols, seed=seed)
+
+        # the shape of each skein of geese: how many, how the V is drawn up, whether one lags behind
+        r = np.random.default_rng([self.seed, 24])
+        self.skeins = [dict(n=int(r.integers(9, 24)), near=float(r.uniform(0.3, 0.7)), half=float(r.uniform(25, 40)),
+                            psi=float(r.uniform(15, 45) * r.choice([-1, 1])), mins=float(r.uniform(11, 17)), size=float(r.uniform(0.85, 1.2)),
+                            straggler=bool(r.random() < 0.7), seed=int(r.integers(1 << 30))) for _ in self.geese]
+
+    def plane_enu(self, f, t):
+        """Where flight f is at clock time t (hours, scalar or array): east, north, up in km."""
+        tc, hd, off, h, v, _ = f
+        s = (np.asarray(t, np.float64) - tc) * 60 * v
+        a = math.radians(hd)
+        return off * math.cos(a) + s * math.sin(a), -off * math.sin(a) + s * math.cos(a), h + 0 * s
+
+    def balloon(self, b, t):
+        """(x, y, burner) of balloon b at clock time t, as fractions of the frame, or None when it is down.
+        It rises from behind the land, drifts with the wind and sinks back out of sight."""
+        tau, T = (t - b["t0"]) * 60, b["dur"] * 60
+        if not 0 <= tau <= T:
+            return None
+        k = smoothstep(tau / 14) * (1 - smoothstep((tau - (T - 16)) / 16))
+        y = 0.592 + (b["top"] - 0.592) * k + 0.006 * vnoise(b["seed"], tau, 9) * k
+        d = self.day
+        m0, m1 = min(1440, int(b["t0"] * 60)), min(1440, int(t * 60))
+        x = b["x"] - 0.004 * (d.drift_e[m1] - d.drift_e[m0]) + 0.004 * vnoise(b["seed"] + 1, tau, 13)
+        burn = np.random.default_rng([b["seed"], int(t * 60)]).random() < (0.35 if tau < 14 else 0.12)
+        return x, y, bool(burn)

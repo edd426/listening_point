@@ -104,6 +104,7 @@ class SkyMixin:
         self.sun_disk(full)
         self.moon_disk(full)
         self.comet(full)
+        self.high_air(full)         # contrails and aircraft (air.py), under the clouds
         self.clouds(full)
         self.c[:hz] = full
 
@@ -349,29 +350,7 @@ class SkyMixin:
 
     def sky_extras(self):
         s, W, H = self.s, self.W, self.H
-        gulls = self.day.events.sky_gulls(self.t)
-        if gulls:
-            L = Layer(self, 0.40 * W, 0.05 * H, W, 0.50 * H)
-            gc = np.array([70, 72, 82], np.float32) * (0.7 + 0.3 * self.amb / self.amb.max())
-            for (gx, gy, sz, f) in gulls:
-                gx, gy, sz = gx * W, gy * H, sz * 14 * s
-                pts = [(gx - sz, gy - 0.1 * sz * f), (gx - 0.5 * sz, gy - 0.45 * sz * f), (gx, gy),
-                       (gx + 0.5 * sz, gy - 0.45 * sz * f), (gx + sz, gy - 0.1 * sz * f)]
-                L.line(pts, gc, 2.0 * s)
-            L.composite()
-        for (t0, d, yh) in self.day.events.geese:   # a skein of geese, a quarter of an hour to cross
-            u = (self.t - t0) * 60 / 14
-            if 0 <= u <= 1:
-                L = Layer(self, 0, 0, W, 0.5 * H)
-                gx, gy = (-0.05 + 1.1 * u if d > 0 else 1.05 - 1.1 * u) * W, (yh + 0.03 * math.sin(u * 3)) * H
-                c = np.array([40, 40, 46], np.float32) * (0.6 + 0.4 * self.amb.mean() / 0.45)
-                for i in range(11):
-                    side = 1 if i % 2 else -1
-                    j = (i + 1) // 2
-                    bx, by = gx - d * j * 14 * s, gy + side * j * 7 * s + j * 2 * s
-                    flap = math.sin(self.m * 2.1 + i)
-                    L.line([(bx - 5 * s, by - 2 * s * flap), (bx, by), (bx + 5 * s, by - 2 * s * flap)], c, 1.3 * s)
-                L.composite()
+        self.flocks()               # balloons, starlings, gulls and geese (air.py)
         met = self.day.events.meteor(self.m) if self.limiting_mag() > 2.5 else None
         if met:
             (ax, ay), (bx, by), bright = met
