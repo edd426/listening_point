@@ -460,10 +460,10 @@ class LandMixin:
                     foot, h = c_[1], c_[2]
                     pts = foot + [(x_ + sx * h, y_ + sy * h) for x_, y_ in foot]
                     dsh.polygon([(x_, y_ - y0) for x_, y_ in hull(pts)], fill=255)
-                elif kind == "box":       # a footprint and the top corners above it (a shed)
-                    foot, tops = c_[1], c_[2]
+                elif kind == "box":       # a footprint, the top corners, and the ground point under each top
+                    foot, tops, under = c_[1], c_[2], c_[3]
                     pts = list(foot)
-                    for (x_, y_), (xt, yt) in zip(foot + foot[:2], tops):
+                    for (x_, y_), (xt, yt) in zip(under, tops):
                         h = y_ - yt
                         pts.append((x_ + sx * h, y_ + sy * h))
                     dsh.polygon([(x_, y_ - y0) for x_, y_ in hull(pts)], fill=255)

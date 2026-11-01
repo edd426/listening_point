@@ -357,8 +357,9 @@ class HillsideMixin:
         self.hs_cast([(bx - r, by), (bx + r, by), (bx, by - r * 0.4)], hb)
         # its shadow and its foot
         foot = [g(a0, b0), g(a1, b0), g(a1, b1), g(a0, b1)]
+        # each top corner with the ground point under it: the eaves over the foot, the ridge over the middle
         self._hs_casters.append(("box", foot, [g(a0, b0, he), g(a1, b0, he), g(a1, b1, he), g(a0, b1, he),
-                                               g(a0, bm, hr), g(a1, bm, hr)]))
+                                               g(a0, bm, hr), g(a1, bm, hr)], foot + [g(a0, bm), g(a1, bm)]))
         self._hs_feet.append((foot[0], foot[1]))
         self._hs_feet.append((foot[1], foot[2]))
         self._hsWM.poly([g(a0 - ov, b0, 0), g(a1 + ov, b0, 0), g(a1 + ov, b1, 0), g(a1 + ov, bm, hr), g(a0 - ov, bm, hr)], (255, 255, 255))
