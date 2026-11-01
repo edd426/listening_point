@@ -3,72 +3,52 @@
 From Evan's interview on 2026-11-01, held after the shore went live. These are his answers; the
 phases are their order. Every step gets a look test before it is installed.
 
-## HANDOFF — pickup after Evan's macOS restart (written 2026-11-01 ~15:20 CET)
+## HANDOFF — state at 2026-11-01 ~17:00 CET (after the macOS 27.2 restart)
 
-**The plan, in Evan's words:** "don't start the animals and instead I restart my computer to update
-the MacOs version, then come back and you make sure everything works, then we continue."
-The session that ran phases 1–3 ended with the restart. Its agents are gone; their work is on the
-branches below, and each branch's doc has a "Status at pause" section. Read this section, then
-`## Status` at the bottom, then the part docs.
+**Verified after the update** (macOS 27.2, 26B123): both venvs still import numpy 2.0.2, scipy 1.13.1
+and Pillow 11.3.0 on Xcode's Python 3.9.6; both launchd jobs are loaded; frames render; the
+desktop shows the live frame (captured); `shore/sync.json` holds r2 `7cbee1f4…`, `error` null; the
+Keychain key works (`shore_sync.py --force`); `main` still rebuilds r2 bit-identically; the waypost
+carrier is green. The lock screen was not checked (needs Evan's eye).
 
-### Step 1 — make sure everything works after the update
+**Merged on `main` and pushed:**
 
-APP=`~/Library/Application Support/The Listening Point`, ROOT=`~/Pictures/Wallpapers/The Listening Point`.
+| Part | Merge | Installed? |
+|---|---|---|
+| 2 sky: clouds (heaps parked behind `cumulus.HEAPS = False`) | `8b07231` | yes, 16:28 |
+| 2 sky: air (geese, murmuration, gulls, contrails, balloon, kite) | `3a971cb` | **no**, see below |
+| 3 hillside part 1: land (garden, shed, hives, gates, outcrops, gorse, heather, puddles) | `70ea7f3` | **no**, see below |
 
-1. **Python is the likeliest break.** Both venvs point at Xcode's Python. Before the update:
-   - Xcode's Python was 3.9.6, with numpy 2.0.2, scipy 1.13.1 and Pillow 11.3.0, on macOS 27.0.1 (26A434).
-   - The two venvs are `$APP/venv` (installed) and `~/Documents/Projects/listening_point/venv` (dev).
+Probes were re-run on each merged head (tests, determinism, r2 digest): all PASS. The details are in
+each part's doc under `docs/v3/`.
 
-   Check:
-   - `"$APP/venv/bin/python" -c "import numpy, scipy, PIL; print('ok')"`, and the same for the dev venv.
-   - If either fails, move that venv to the Trash and run `tools/install.sh` from `listening_point`
-     `main`. It rebuilds `$APP/venv` only when `venv/bin/python` is missing. Rebuild the dev venv
-     with `python3 -m venv venv && venv/bin/pip install -r requirements.txt`.
-2. **Jobs:** `launchctl list | grep listening-point` shows both `.live` and `.render`. If not, re-run
-   `tools/install.sh` from `main`.
-3. **Frames:**
-   - `ls "$ROOT/days/$(date +%F)" | wc -l` grows, and the current minute's `HHMM.jpg` exists.
-   - `tail ~/Library/Logs/listening-point.log` shows renders and no tracebacks.
-   - Before the restart, 2026-11-01 had 777 frames and 2026-11-02 had 901, rendering.
-4. **What Evan sees:**
-   - The desktop shows the live frame, through the helper `$APP/live_wallpaper`.
-   - The lock screen and Mission Control show `$ROOT/The Listening Point.heic`.
-   - An OS update can reset the wallpaper store; `tools/install.sh` sets it again and backs up
-     `Index.plist`. Ask Evan to glance at the desktop and the lock screen.
-5. **Shore on the Mac:** `$APP/shore/sync.json` should have:
-   - `reference` = `r2` / `7cbee1f442afce967826b8e6f6aaffddd8921391b138a487f359b4d9024d35fa`;
-   - `error` null;
-   - `last_ok` recent.
+**Paused for a game.** At 16:43, Evan's Slay the Spire 2 co-op run was stalling. The two game
+sessions (`sts2-coop-*`) asked for the CPU, so the wallpaper render job was SIGSTOPped
+(`kill -STOP`, nightly.py and its worker). The job holds its render lock while stopped, so no
+new render starts. Resume with `kill -CONT` on those PIDs (`pgrep -f "The Listening Point/src/tools/nightly.py"`
+and its child), once the game sessions say "resume".
 
-   Only `r2` is in `$APP/shore/reference/` (r1 is in `$APP/shore/retired/`). The Keychain key
-   (service `listening-point-github`, account `listener`) must still be readable: check with
-   `"$APP/venv/bin/python" -I "$APP/src/tools/shore_sync.py" --force`.
-6. **The dev environment still reproduces r2.** Check from `listening_point` `main`:
-   `venv/bin/python tools/shore_reference.py /tmp/r2check --reference r2` → digest `7cbee1f4…`.
-   - If a new numpy changes it, the phase probes' "r2 unchanged" baseline must be re-taken from
-     `main` on the new setup.
-   - The Mac's published r2 stays what counts; do not republish.
-7. **Nothing else depends on the Mac.** The carrier (waypost, GitHub Actions) runs at 22:17, 23:17
-   and 05:11 UTC. Wren's first shore reading is about 00:09 UTC and Gnomon's about 02:02 UTC.
-   Check with `gh run list -R edd426/waypost --workflow carrier.yml`.
+**Next, in order:**
+1. **Install air + hillside together** (one re-render instead of two). This needs the CPU back:
+   - move today's remaining frames and all of tomorrow's out of `$ROOT/days/` to the Trash;
+   - run `tools/install.sh`;
+   - check that a new frame appears (`tools/capture_wallpaper.sh`).
+2. **Phase 3 part 2, animals:**
+   - a fox, hares, crows on the new gates and walls, bigger sheep;
+   - use the coordinates in `docs/v3/phase3-hillside.md`;
+   - **depth order:** animals are drawn in `front()` over all the near scenery, so they must be
+     hidden behind the gate leaf and the garden walls where they stand behind them;
+   - same probes, time ratio ≤1.15.
+3. Suggested pause (not yet decided by Evan): let him live with phases 2 and 3 for a few days
+   before phase 4 (sea) and phase 5 (story).
 
-### Step 2 — then continue (Evan's standing go-ahead: build, merge, install, report; no need to ask)
-
-Install recipe, the same every time:
-1. `git merge --no-ff` the part into `main`, run the tests, push.
-2. Move today's remaining frames and tomorrow's out of `$ROOT/days/` to the Trash, so they re-render.
-3. Run `tools/install.sh`.
-4. Check that a new frame appears.
-
-| Part | Branch / worktree | State at pause | Next |
-|---|---|---|---|
-| 2 sky: clouds | `v3/clouds`, `~/Documents/Projects/lp-v3-clouds` | v2 at `202b860` reviewed. Heaped cumulus parked behind `cumulus.HEAPS = False` (code `096a314`, head `98f4885`). All four probes PASS on `096a314`: 45 tests; 60/60 frames identical; r2 `7cbee1f4…`; ratio ≈1.01 because the heaps read as CG bells. Ships: cover that follows the forecast, sunrise and sunset colour on every layer, mid-layer cloudlets, beams through cloud, paler sea reflections | Glance at `scratchpad/v3/clouds/{1,3,6b,7,8,9}-*-d-v3.jpg` (re-render if the scratchpad is gone), then **merge first** and install |
-| 2 sky: air | `v3/air`, `~/Documents/Projects/lp-v3-air` | `0a18623`: all six done (geese, murmuration, gulls, contrails and aircraft, balloon, kite). Tests PASS, r2 PASS on `e6e8869`, timing 0.76–0.85 | Run determinism and the r2 digest on the head, do a look-test review at full and half size, then merge. Conflict: air's line beside `self.clouds(full)` in `sky()` must stay *before* the clouds are drawn. Watch the old contrails that curve into faint dusk arcs. Then install |
-| 3 hillside: land | `v3/hillside`, `~/Documents/Projects/lp-v3-hillside` | `a3b7cd7`: walled garden (4 staged beds, shed, 3 hives, wicket gate, a new wall in 5 staged stretches), open field gate, outcrops, gorse, heather, wildflowers, puddles; `GardenStage`/`WallStage` for phase 5. Tests (52), determinism and r2 PASS; timing ~1.03–1.09 | Fix the shed-shadow anchoring, re-run probes 2–3, render the before/after look test (script ready), review it, then merge and install. For Evan to judge: the garden's size and place (upper left); the gorse in spring; puddles that might read as blue dots on the path |
-| 3 hillside: animals | not started (Evan: not before the restart) | — | Once the land part is in: a fox, hares, crows on the new gates and walls, bigger sheep, using the coordinates in `docs/v3/phase3-hillside.md`. Same probes, ratio ≤1.15. **Depth order:** animals are drawn over all the near scenery today, so a sheep behind the new gate or garden wall would show in front of it. Part 2 must fix that |
-
-The scratchpad look tests are in `/private/tmp/claude-501/.../scratchpad/v3/`. They may not survive
-the restart; re-render from the scripts and recipes in the part docs if they are gone.
+**For Evan to judge** (look tests in `out/look/v3/<part>/` of this checkout, top = before, bottom = after):
+- clouds: `pair-*`, half size;
+- air: `half-*`; a faint contrail arc in the upper right of `half-2026-11-05-1243` could read as a
+  pale rainbow;
+- hillside: `crop-*`, `wl-*`. Things to look at: the garden's size and place (upper left); the
+  puddles on the path, which read as pale ovals (`wl-2027-04-06-1300`); the snow-covered gorse, which
+  reads as grey-blue mounds (`wl-2027-01-27-1100`); the faceted outcrops up close.
 
 **Review bar:**
 - Restraint: Evan found the first grass "a bit distracting".
@@ -77,12 +57,13 @@ the restart; re-render from the scripts and recipes in the part docs if they are
 - No people.
 - Reject anything that reads as pasted-on CG; the parked heaps are the example.
 
-**Suggested pause** (my recommendation, not yet decided by Evan): once phases 2 and 3 are installed,
-let him live with them for a few days before phase 4 (sea) and phase 5 (story).
-
 **Unfinished ideas:** a second try at heaped cumulus with a painted 2D approach (see "v3: heaps off"
 in `docs/v3/phase2-clouds.md`). The aircraft should fly behind heaps above their height, if the heaps
 come back.
+
+**Where things live:** new worktrees go in `.claude/worktrees/<name>` inside this checkout (it is
+gitignored), never as sibling folders in `~/Documents/Projects`. The old `lp-*` worktrees were all
+merged and moved to the Trash on 2026-11-01. Their branches remain in git.
 
 ## What Evan asked for
 
@@ -162,8 +143,8 @@ come back.
 
 - **2026-11-01: phase 1 started** (Evan: "Yes, start"). Two parallel pieces, each in its own worktree
   and branch:
-  - `v3/ground` (`~/Documents/Projects/lp-v3-ground`): grass, the path, the walls.
-  - `v3/objects` (`~/Documents/Projects/lp-v3-objects`): the tower, the tree, the bench, the lamp.
+  - `v3/ground`: grass, the path, the walls.
+  - `v3/objects`: the tower, the tree, the bench, the lamp.
 
   Each writes `docs/v3/phase1-<part>.md`, plus look-test images under the session scratchpad's
   `v3/<part>/`. They hold to these probes:
@@ -187,8 +168,8 @@ come back.
   for him. Each look test is still rendered and left for him, and he can veto after the fact. A
   reference change (rN) follows the waypost README's "Changing the reference set".
 - **2026-11-01: phase 2 (sky) started.** Two parallel parts from `main` `4192c35`:
-  - `v3/clouds` (`~/Documents/Projects/lp-v3-clouds`): shaped clouds, sunbeams, sunrise/sunset on clouds.
-  - `v3/air` (`~/Documents/Projects/lp-v3-air`): geese, starlings, gulls, aircraft and contrails, a
+  - `v3/clouds`: shaped clouds, sunbeams, sunrise/sunset on clouds.
+  - `v3/air`: geese, starlings, gulls, aircraft and contrails, a
     balloon, a kite.
 
   Probes: the tests pass; renders are deterministic; the reference r2 digest stays `7cbee1f4…`
@@ -197,7 +178,7 @@ come back.
 
   Evan: "merge them in as they come. You can also start on the next phase." So each phase-2 part is
   merged and installed as soon as it passes its probes and its look test.
-- **2026-11-01: phase 3 (hillside) started**, part 1 on `v3/hillside` (`~/Documents/Projects/lp-v3-hillside`):
+- **2026-11-01: phase 3 (hillside) started**, part 1 on `v3/hillside`:
   built things (garden, shed, hives, gate, more wall) and land detail (outcrops, gorse, heather,
   wildflowers, puddles). The garden and wall are drawn from a stage parameter, for phase 5. Part 2
   (animals: a fox, hares, crows, bigger sheep) follows once part 1 lands, using its gate, walls and
@@ -207,3 +188,6 @@ come back.
   (no bright lit tops or cauliflower edges, clip-art rows on the horizon, flat discs overhead), and
   fair days lost their soft cloud texture, against Evan's "upper sky is empty". Rework requested on
   the same branch.
+- **2026-11-01 evening: after the macOS 27.2 restart.** Checks passed. Clouds, air and hillside
+  part 1 were merged (`8b07231`, `3a971cb`, `70ea7f3`); only clouds is installed so far. Renders were
+  paused for Evan's StS2 run. See the HANDOFF at the top.

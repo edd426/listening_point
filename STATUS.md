@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-11-01._
+_Last updated 2026-11-01 (evening). v3 progress and handoff: `docs/V3-PLAN.md`._
 
 ## Current state
 
@@ -162,6 +162,11 @@ the owner controls and the shore sync: `/usr/bin/python3 -m unittest tests.test_
 - Reading the store, or `get picture of every desktop`, isn't proof of what's on screen. Capture
   the window instead (`tools/capture_wallpaper.sh`, which prefers the helper's window). The terminal
   needs Screen Recording permission.
+
+- 2026-11-01: v3 look tests and probes (several renders at once, up to `--jobs 3`), the render job and
+  macOS's post-update indexing drove the load to about 30, with swap at 6.3 of 8 GB. They stalled Evan's
+  Slay the Spire 2 co-op run: the host's API timed out and the client dropped. Share the Mac: one
+  render at a time, `--jobs 1`, `nice`; SIGSTOP the render job when a game needs the CPU.
 
 ## Known weaknesses
 
