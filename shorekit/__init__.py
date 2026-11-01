@@ -16,3 +16,6 @@ MAX_CHANNEL = 240        # no albedo channel above this
 MAX_SCALE = 4            # pixels per cell side, 1-4 (look B: big enough to notice at desktop size)
 MAX_LABEL = 8            # look B: at most a very short name
 GLOW_MAX_PX = 64         # look B: the most frame pixels one object may light at night (one palette key)
+FAINT_D = 48             # look C: an object's mean colour stands at least this far (redmean) from the ground
+FAINT_RING = 6           #   around it, out to this many px past its box, at each of these conditions
+FAINT_CONDITIONS = ("noon", "golden")

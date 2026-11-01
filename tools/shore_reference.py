@@ -58,11 +58,11 @@ DRY_V = (0.53, 1.0)      # the dry band, as fractions of the beach from low wate
 STONE_H = 12             # stones on the dry band at least this tall (px) are kept out; smaller ones are
                          # pebbles an object may stand over (keeping them out leaves no room for a label)
 DRY_MIN = 4              # columns with a thinner dry band have none
-MAX_H = 44               # the tallest object, in pixels, at a perspective of 1 (look B: about the pier's
-                         # end post at the far end of the deck, and 60 px on the nearest shingle)
-MIN_H = 18               # the least a thing standing on the shingle or the pier may average across its width
-                         # and height, likewise: 17 px at the pier's end, 25 on the near shingle (about 9-13
-                         # points on a 2x display)
+MAX_H = 96               # the tallest object, in pixels, at a perspective of 1 (look C: twice look B's 44,
+                         # about two of the pier's end posts; 130 px, 65 points, on the nearest shingle)
+MIN_H = 36               # the least a thing standing on the shingle or the pier may average across its width
+                         # and height, likewise (look C: twice look B's 18): 34 px at the pier's end, 49 on
+                         # the near shingle (about 17-25 points on a 2x display)
 D = 40                   # how far (redmean) a maker's colour may stray from the nearest albedo below
 # The albedos the renderer paints the shore and its neighbours with (land.py, props.py, tower.py,
 # life.py): what an object's colours must stay close to. Flowers are left out on purpose: in the
@@ -84,6 +84,9 @@ PALETTE = [
     ("grass-dry", (156, 142, 92)), ("tuft", (84, 112, 48)), ("tuft-light", (108, 124, 60)),
     ("straw", (176, 160, 104)), ("leaf-gold", (196, 150, 58)), ("leaf-rust", (170, 90, 40)),
     ("leaf-brown", (120, 84, 46)),
+    # look C: boat paint, as a maker might have in a tin on the pier, so a thing can stand out from the stones
+    ("paint-white", (232, 230, 222)), ("paint-red", (196, 52, 40)), ("paint-blue", (44, 92, 156)),
+    ("paint-green", (40, 116, 84)), ("paint-yellow", (226, 186, 52)), ("tar", (28, 26, 26)),
 ]
 # The light colours a glow key may take (look B): a lamp's flame, lamplight through glass, a lit window
 GLOW = [("lamp-flame", (240, 214, 150)), ("lamplight", (236, 186, 104)), ("lit-window", (220, 150, 80))]

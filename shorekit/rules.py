@@ -4,7 +4,7 @@ Every comparison is between integers; a percentage threshold t is tested as 100*
 """
 from array import array
 
-from . import GLOW_MAX_PX, MAX_CHANNEL, MAX_OPAQUE, MIN_OPAQUE
+from . import FAINT_CONDITIONS, FAINT_D, FAINT_RING, GLOW_MAX_PX, MAX_CHANNEL, MAX_OPAQUE, MIN_OPAQUE
 from .errors import ShoreError
 from .font import check_label
 from .geometry import SURFACE_PIER, SURFACE_SHINGLE, check_height, check_resting, place
@@ -172,6 +172,61 @@ def occlusion(new, live, ref):
     return errs
 
 
+def check_stand_out(p, ref):
+    """Look C, rule 7 (E_FAINT): a thing must be noticeable against the ground it stands on. Its body
+    (not its label), lit as the kit lights it, averages a colour; the reference crop around it (its box
+    grown by FAINT_RING px, less its own pixels and its shadow) averages another; at each of
+    FAINT_CONDITIONS the two must be at least FAINT_D apart (redmean). A grey cairn on grey shingle fails;
+    the same cairn whitewashed, or on the grass, passes."""
+    from .compose import shade      # compose imports this module, so not at the top
+    body = sorted(i for i in p.solid if i not in p.label)
+    if not body or p.bbox is None:
+        return []
+    cw, ch = ref.cw, ref.ch
+    x0, y0, x1, y1 = p.bbox
+    x0, y0 = max(0, x0 - FAINT_RING), max(0, y0 - FAINT_RING)
+    x1, y1 = min(cw - 1, x1 + FAINT_RING), min(ch - 1, y1 + FAINT_RING)
+    skip = set(p.solid)
+    skip.update(p.shadow)
+    conds = {c.name: c for c in ref.conditions}
+    n = len(body)
+    for name in FAINT_CONDITIONS:
+        cond = conds.get(name)
+        if cond is None:
+            continue
+        crop = ref.crop(name)
+        o = [0, 0, 0]
+        for i in body:
+            y = i // cw
+            x = i - y * cw
+            rgb, L = p.solid[i], cond.lights[p.face.get(i, 0)]
+            for c in range(3):
+                o[c] += shade(rgb[c], L[c], cond.lut[c], cond.veil_alpha[y], cond.veil_rgb[c], ref.vignette[y >> 4][x >> 4])
+        g = [0, 0, 0]
+        m = 0
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                i = y * cw + x
+                if i in skip:
+                    continue
+                for c in range(3):
+                    g[c] += crop[3 * i + c]
+                m += 1
+        if m == 0:
+            continue
+        om = tuple(v // n for v in o)
+        gm = tuple(v // m for v in g)
+        d = redmean512(om, gm)
+        if d < 512 * FAINT_D * FAINT_D:
+            y = body[0] // cw
+            x = body[0] - y * cw
+            return [ShoreError("E_FAINT", "at %s it averages (%d,%d,%d) against (%d,%d,%d) around it, %d apart, min %d:"
+                               " too like the ground to notice (first px at (%d,%d))"
+                               % (name, om[0], om[1], om[2], gm[0], gm[1], gm[2], isqrt(d // 512), FAINT_D,
+                                  x + ref.cx, y + ref.cy))]
+    return []
+
+
 def evaluate(m, ref, live, seq, taken=()):
     """Rules 1-6 for manifest m as the next object (sequence number seq) on a shore holding `live`
     (Placed objects, any order). Returns (errors, placed); placed is None if it could not be laid out."""
@@ -191,6 +246,9 @@ def evaluate(m, ref, live, seq, taken=()):
     errs = list(p.region_errors)
     errs += check_height(p, ref)
     errs += check_resting(p, ref, support)
+    if errs:
+        return errs, p
+    errs = check_stand_out(p, ref)
     if errs:
         return errs, p
     return occlusion(p, live, ref), p
