@@ -76,3 +76,20 @@ phases are their order. Every step gets a look test before it is installed.
 - **The Dock.** It is auto-hidden since 2026-11-01. If Evan goes back to a visible Dock, his fallback is to
   re-frame the view so the shore sits higher. That conflicts with "the layout must not change", so it
   would need his call then.
+
+## Status
+
+- **2026-11-01: phase 1 started** (Evan: "Yes, start"). Two parallel pieces, each in its own worktree
+  and branch:
+  - `v3/ground` (`~/Documents/Projects/lp-v3-ground`): grass, the path, the walls.
+  - `v3/objects` (`~/Documents/Projects/lp-v3-objects`): the tower, the tree, the bench, the lamp.
+
+  Each writes `docs/v3/phase1-<part>.md`, plus look-test images under the session scratchpad's
+  `v3/<part>/`. They hold to these probes:
+  - the tests pass;
+  - renders are deterministic;
+  - the shore strip and deck are pixel-identical in the reference crops;
+  - the render time is at most 2x.
+
+  Next: merge both into one branch, run the look test at real point size, and get Evan's go before
+  installing.
