@@ -7,6 +7,104 @@ gradient, the layout, the real sun and moon and the real forecast are unchanged;
 cloud comes from the scene's own sun, moon and sky. Flocks, gulls, geese, aircraft, balloons and
 kites are the `v3/air` part and are not touched here.
 
+## v3: heaps off (what ships)
+
+The lead's verdict on v2: everything ships except the heaps. At native size they still read as
+quilted CG bells with flat brims (`1-heaps-crop.png`, pair 3). So the heaps are parked behind one
+constant, off by default, and their code stays in the tree for a later attempt. This is the state of
+`v3/clouds` from `096a314` on; the v1 and v2 sections below describe the heaps as they were.
+
+### What ships
+
+- **Sunrise and sunset colour on every cloud layer** (`sky.clouds`). Each layer keeps the sun for as
+  long as its height sees it (`DIP`): gold on the sun's side, rose away from it, and the thin edges
+  near a low sun glow. The clear-sky gradient is untouched.
+- **The mid layer as cloudlets**: crisper edges (`soft` 0.75), lit and shaded tones drawn apart.
+- **Cover that follows the forecast** (`sky.layer_threshold`). Each noise layer's threshold is set
+  from the sky in view, so each layer's visible density matches its forecast cover. With the heaps
+  off, the whole low cover is the low noise layer again (`cumulus.regime` gives `share = 0`).
+  Measured on the sky grid with heaps off (cover / seen):
+
+  | frame | high | mid | low |
+  |---|---|---|---|
+  | 2026-11-01 fair 12:00 | 0.20 / 0.20 | 0.14 / 0.13 | 0.05 / 0.08 |
+  | 2027-06-08 synthetic 14:00 | 0.29 / 0.29 | 0.23 / 0.23 | 0.48 / 0.47 |
+  | 2026-11-11 synthetic 12:00 | 0.40 / 0.40 | 0.71 / 0.69 | 0.88 / 0.87 |
+  | 2027-06-02 synthetic 15:30 | 0.62 / 0.60 | 0.30 / 0.30 | 0.55 / 0.50 |
+
+  The fair days keep the soft veil and wisps of `main` (pairs 8, 9). Pair 1's sky is mostly cloud
+  again: low 0.48 drawn at 0.47 instead of chance.
+- **Beams through cloud** (`weatherfx.cloud_beams`): unchanged. They need a cloud near the sun with
+  sky around it. At pair 6's minute (2027-10-15 17:00) the sun is in a clear patch of the noise
+  layer, so `6-…-d-v3.jpg` shows little. `6b-beams-low-sun-d-v3.jpg` (2026-11-23 08:36, synthetic,
+  sun 12 degrees behind the low layer) shows them fanning from behind the tower.
+- **Paler sea reflections of heaps** (`sea.py`): kept, but with the heaps off it never runs.
+  `heap_occ` stays None, and the sea's reflection is `main`'s.
+
+### What is parked, and why
+
+The heaps (`cumulus.population`, `render`, `shade`), the horizon band (`horizon_band`) and the rain
+curtains (`shafts`). The rain curtains hang from heaps, so they go with them.
+
+The look was not right. Ray-cast spheres, even with knobs, a billow texture and a sunward lining,
+read as smooth CG solids: bells with straight flanks and a flat brim, a quilted surface, and
+silhouettes that stay simple at native size. Each fix (more puffs, turrets, tilting heaps side-on)
+traded one artefact for another and cost render time.
+
+### How to turn them back on
+
+Set `HEAPS = True` at the top of `renderers/procedural/cumulus.py`. Nothing else is needed. The low
+cover is then shared again between heaps and the noise layer (`regime.share`). The heaps, horizon
+band, rain curtains, the overhead share in the low layer (`OVERHEAD`) and the sea's paler heap
+reflections all come back. With heaps on, v2 measured a time ratio of about 1.15; with them off,
+about 1.01.
+
+### For whoever tries again
+
+A painted 2D approach may suit this scene better than ray-cast spheres:
+
+- **The heap as a silhouette.** Draw each heap as a stack of 2D silhouettes in screen space (a big
+  mass, then lobes and turrets on it), each edge pushed in and out by noise at two or three scales.
+  That gives the crisp cauliflower outline directly, instead of hoping spheres produce it.
+- **Three or four flat value bands**, posterised and placed by a simple light direction from the
+  real sun: lit warm white, mid, blue-grey shade, and a darker core. Keep a hard edge between bands,
+  as a painter would.
+- **A hard, flat base line** under each heap, darker, fading into the horizon haze with distance.
+- **The same drift, cover and regime.** Keep the cell grid, `regime()` and the sun-visibility
+  coupling from `cumulus.py`, which work. Only the drawing changes.
+- **Cost.** It should be cheaper than the ray cast: polygon fills and a few noise samples per heap.
+
+### Probes with heaps off (`096a314`)
+
+1. Tests: `Ran 45 tests in 5.042s` / `OK`. **PASS.**
+2. Determinism: 2027-07-07 `--weather synthetic` 12:00-12:59 (low 0.49-0.59, the heaviest heap
+   hour in v2), the probe-4 command run twice on the branch. All 60 frames `cmp`-identical. **PASS.**
+3. Shore reference: `$PY tools/shore_reference.py OUT --reference r2` gives
+   `digest 7cbee1f442afce967826b8e6f6aaffddd8921391b138a487f359b4d9024d35fa`. **PASS.**
+4. Render time: the probe-4 command, main (`4192c35`) and this branch started together, load 6.9-8.5.
+
+   | pair | date | main real / cpu s | branch real / cpu s | ratio real / cpu |
+   |---|---|---|---|---|
+   | 1 | 2027-07-07 | 173.9 / 166.1 | 174.7 / 166.6 | 1.00 / 1.00 |
+   | 2 | 2027-06-08 | 168.4 / 165.6 | 171.9 / 167.2 | 1.02 / 1.01 |
+   | 3 | 2027-07-07 | 184.0 / 175.5 | 186.2 / 178.0 | 1.01 / 1.01 |
+
+   About **1.01**. **PASS.**
+
+### Look test (heaps off)
+
+`<n>-<scene>-d-v3.jpg` beside the earlier pairs in
+`/private/tmp/claude-501/-Users-eddelord-Documents-Projects-cozy-cabin-claude/b85a93cd-3703-4aff-b84b-d9b69db72a54/scratchpad/v3/clouds/`.
+Same dates, times and weather as the table under "Look test" below, at `--scale 0.75`, quality 90:
+
+- 1 cumulus-afternoon;
+- 3 showery-towers;
+- 6 beams-sun-behind-cloud;
+- 7 sunset-broken-cloud;
+- 8 fair-noon;
+- 9 fair-golden;
+- the extra `6b-beams-low-sun-d-v3.jpg` (2026-11-23 08:36 synthetic).
+
 ## Version 2 (after the lead's review of the first look test)
 
 The lead kept the beams (6) and the sunset colour on the noise layers (7) and sent the heaps back:
