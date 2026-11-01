@@ -3,7 +3,7 @@
 From Evan's interview on 2026-11-01, held after the shore went live. These are his answers; the
 phases are their order. Every step gets a look test before it is installed.
 
-## HANDOFF — state at 2026-11-01 ~17:00 CET (after the macOS 27.2 restart)
+## HANDOFF — state at 2026-11-01 ~19:30 CET (phase 3 done and installed)
 
 **Verified after the update** (macOS 27.2, 26B123): both venvs still import numpy 2.0.2, scipy 1.13.1
 and Pillow 11.3.0 on Xcode's Python 3.9.6; both launchd jobs are loaded; frames render; the
@@ -18,6 +18,7 @@ carrier is green. The lock screen was not checked (needs Evan's eye).
 | 2 sky: clouds (heaps parked behind `cumulus.HEAPS = False`) | `8b07231` | yes, 16:28 |
 | 2 sky: air (geese, murmuration, gulls, contrails, balloon, kite) | `3a971cb` | yes, 16:52 |
 | 3 hillside part 1: land (garden, shed, hives, gates, outcrops, gorse, heather, puddles) | `70ea7f3` | yes, 16:52 |
+| 3 hillside part 2: animals (fox, hares, crows, bigger sheep; depth order behind walls, posts, gate, shed, hives, rocks, gorse) | `4ea34f2` | yes, 19:20 |
 
 Probes were re-run on each merged head (tests, determinism, r2 digest): all PASS. The details are in
 each part's doc under `docs/v3/`.
@@ -27,16 +28,19 @@ Spire 2 co-op run recovered. The game sessions (`sts2-coop-*`) and Evan agreed o
 16:51: the render job as usual (nice 10), other renders one at a time, `--jobs 1`, `nice -n 15`, no
 parallel batches. If a game session says "pause", `kill -STOP` the render job again.
 
+Animals: the lead re-ran the probes on the branch head `5384596` (64 tests OK; `tests/test_shore_reference.py`
+4/4; 6 frames rendered twice, 0 differ; r2 digest unchanged) and again after the merge (64 OK). Cost ratio
+0.99 (the delegate's measure; ≤1.15 required). The worktree and the local branch were removed after the merge.
+
+**Known broken, not from v3:** `tests/test_shore_render.py` (run as a script; `unittest discover` does not
+collect it) fails 5 of 7 on `main` with `no spot passes for 2027-03-18-cairn`: its synthetic cairn finds no
+spot that passes against r2. Checked on `main` `9d21022`, before the animals merge. It belongs to the
+shore work.
+
 **Next, in order:**
-1. Air + hillside installed at 16:52 (frames re-rendering).
-2. **Phase 3 part 2, animals**, started 16:55 on `v3/animals` (`.claude/worktrees/v3-animals`):
-   - a fox, hares, crows on the new gates and walls, bigger sheep;
-   - use the coordinates in `docs/v3/phase3-hillside.md`;
-   - **depth order:** animals are drawn in `front()` over all the near scenery, so they must be
-     hidden behind the gate leaf and the garden walls where they stand behind them;
-   - same probes, time ratio ≤1.15.
-3. Suggested pause (not yet decided by Evan): let him live with phases 2 and 3 for a few days
+1. Suggested pause (not yet decided by Evan): let him live with phases 2 and 3 for a few days
    before phase 4 (sea) and phase 5 (story).
+2. If he finds an animal look wrong (below), fix it on a new branch before phase 4.
 
 **For Evan to judge** (look tests in `out/look/v3/<part>/` of this checkout, top = before, bottom = after):
 - clouds: `pair-*`, half size;
@@ -45,6 +49,11 @@ parallel batches. If a game session says "pause", `kill -STOP` the render job ag
 - hillside: `crop-*`, `wl-*`. Things to look at: the garden's size and place (upper left); the
   puddles on the path, which read as pale ovals (`wl-2027-04-06-1300`); the snow-covered gorse, which
   reads as grey-blue mounds (`wl-2027-01-27-1100`); the faceted outcrops up close.
+- animals: `pair-*`, `crop-*` (what each shows is in `docs/v3/phase3-animals.md`). Things to look at:
+  - the ewes stand about twice the height of the field walls and gate, which are drawn at half scale;
+  - an animal about one wall-height beyond a wall can seem to stand on its coping (`snow`; main is worse);
+  - at dawn and dusk the ewes are flat pale shapes, a little bright for the light (`fox-dusk`,
+    `behind-gate-fox`).
 
 **Review bar:**
 - Restraint: Evan found the first grass "a bit distracting".
