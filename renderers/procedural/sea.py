@@ -62,6 +62,12 @@ class SeaMixin:
         for k in (0.5, 1.0, 1.7):
             ri = np.clip((2 * VH * H - rows[:, None] - off * k).astype(np.int32), 0, hz - 1)
             refl = refl + self.c[ri, xj] / 3
+        if getattr(self, "heap_occ", None) is not None:
+            # the heaps' reflections: their dark bases would read as blots on the water, so the sea
+            # shows them paler, half lost in the haze of the horizon
+            ho = self.heap_occ
+            ha = ho[np.minimum(ri // 2, ho.shape[0] - 1), np.minimum(xj // 2, ho.shape[1] - 1)][..., None]
+            refl = refl * (1 - 0.55 * ha) + self.hor_col * (0.55 * ha)
         f = (0.1 + 0.85 * np.exp(-ad / 5.5))[:, None, None] * (1 - 0.3 * max(wx.rain, 0.5 * wx.drizzle)) * (1 - 0.25 * sm(6, 14, wx.wind_ms))
         body = WATER * (self.amb + 0.35 * self.sun_col * self.sun_str + 0.2 * MOON_COL * self.moon_str)
         sea = refl * f * 0.95 + body * (1 - f)
