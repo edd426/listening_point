@@ -142,16 +142,30 @@ class LandMixin:
     def wall(self, A, N, seg, r, persp, r2, WM):
         """A dry-stone wall along a curve: three courses of stones, big footings to small, each its own
         shade with a lit top and dark joints, under a row of upright coping stones. WM gets its outline."""
+        d = np.cumsum(np.r_[0, np.linalg.norm(np.diff(seg, axis=0), axis=1)])
+        self.wall_draws(seg, d, r, persp)
+        self.wall_body(A, N, seg, persp, r2, WM)
+
+    def wall_body(self, A, N, seg, persp, r2, WM, courses=None, height=1.0, X=None):
+        """The stones of a wall along seg, from generator r2. courses (0..4: three courses, then the
+        coping; None = finished) builds a wall only so far, a fraction of a course along the wall from its
+        start, with the same stones at every stage; height scales it; X (if given) marks it as built."""
         s = self.s
         d = np.cumsum(np.r_[0, np.linalg.norm(np.diff(seg, axis=0), axis=1)])
         dirs = np.gradient(seg, axis=0)
         dirs /= np.linalg.norm(dirs, axis=1, keepdims=True) + 1e-6
-        self.wall_draws(seg, d, r, persp)
+        full = courses is None
+        laid = lambda row, u: full or courses >= row + 1 or (courses > row and u < (courses - row) * d[-1])
+        top_f = 1.0 if full else (0.0, 0.37, 0.67, 0.9, 1.0)[int(min(4, max(0, math.floor(courses))))]
         # the dark body of the wall, seen in the joints between the stones
-        top = [(x, y - 26 * s * persp(y)) for x, y in seg]
-        A.poly([tuple(p) for p in seg] + top[::-1], (30, 29, 27))
-        N.poly([tuple(p) for p in seg] + top[::-1], enc((0, 0.9, 0.3)))
-        WM.poly([tuple(p) for p in seg] + [(x, y - 31 * s * persp(y)) for x, y in seg][::-1], (255, 255, 255))
+        if top_f > 0:
+            top = [(x, y - 26 * s * persp(y) * height * top_f) for x, y in seg]
+            A.poly([tuple(p) for p in seg] + top[::-1], (30, 29, 27))
+            N.poly([tuple(p) for p in seg] + top[::-1], enc((0, 0.9, 0.3)))
+            body = [tuple(p) for p in seg] + [(x, y - 31 * s * persp(y) * height * top_f) for x, y in seg][::-1]
+            WM.poly(body, (255, 255, 255))
+            if X is not None:
+                X.poly(body, (0, 0, 255))
 
         def at(u):
             i = min(int(np.searchsorted(d, u)), len(seg) - 1)
@@ -167,7 +181,7 @@ class LandMixin:
             u = r2.uniform(0, 12) * s
             while u < d[-1]:
                 x, y, dx, dy, nx, ny = at(u)
-                hgt = 26 * s * persp(y)
+                hgt = 26 * s * persp(y) * height
                 sw_ = r2.uniform(9, 17) * s * persp(y) * (1.12 - 0.12 * row)
                 ch = (f1 - f0) * hgt * r2.uniform(0.86, 0.98)
                 yb = y - hgt * f0
@@ -182,11 +196,12 @@ class LandMixin:
                 elif k < 0.26 and row == 0:
                     c = c * 0.7 + moss * 0.3
                 tilt = (-nx * 0.75 + r2.normal(0, 0.16), ny * 0.75, 0.55 + r2.normal(0, 0.1))   # battered back
-                A.poly(pts, c)
-                N.poly(pts, enc(tilt))
-                cap = [pts[1], pts[2], pts[3], pts[4]]           # the top edge, turned up to the sky
-                A.poly(cap, c * 1.12)
-                N.poly(cap, enc((-nx * 0.3, ny * 0.3, 0.9)))
+                if laid(row, u):
+                    A.poly(pts, c)
+                    N.poly(pts, enc(tilt))
+                    cap = [pts[1], pts[2], pts[3], pts[4]]           # the top edge, turned up to the sky
+                    A.poly(cap, c * 1.12)
+                    N.poly(cap, enc((-nx * 0.3, ny * 0.3, 0.9)))
                 u += sw_ * r2.uniform(0.97, 1.08)
         # coping: a row of stones set on edge along the top, each with a lit top
         cope = np.array([150, 146, 136], np.float32)
@@ -194,21 +209,23 @@ class LandMixin:
         while u < d[-1]:
             x, y, dx, dy, nx, ny = at(u)
             p_ = persp(y)
-            hgt = 26 * s * p_
+            hgt = 26 * s * p_ * height
             w_ = r2.uniform(3.2, 5.6) * s * p_
-            yb, yt = y - hgt * 0.86, y - hgt - r2.uniform(2.0, 5.0) * s * p_
+            yb, yt = y - hgt * 0.86, y - hgt - r2.uniform(2.0, 5.0) * s * p_ * height
             lean = r2.normal(0, 0.18) * (yb - yt)
             pts = [(x - w_ / 2, yb + dy * w_ * -0.5), (x + w_ / 2, yb + dy * w_ * 0.5),
                    (x + w_ * 0.42 + lean, yt + dy * w_ * 0.4), (x - w_ * 0.4 + lean, yt - dy * w_ * 0.4)]
             c = cope * r2.uniform(0.7, 1.15)
             if r2.random() < 0.15:
                 c = c * 0.75 + lichen * 0.25
-            A.poly(pts, c * 0.92)
-            N.poly(pts, enc((-nx * 0.75 + r2.normal(0, 0.2), ny * 0.75, 0.55)))
-            tp = [pts[3], pts[2], (pts[2][0] - lean * 0.25, pts[2][1] + (yb - yt) * 0.25),
-                  (pts[3][0] - lean * 0.25, pts[3][1] + (yb - yt) * 0.25)]
-            A.poly(tp, c * 1.08)
-            N.poly(tp, enc((0, 0.25, 0.95)))
+            nc = enc((-nx * 0.75 + r2.normal(0, 0.2), ny * 0.75, 0.55))
+            if laid(3, u):
+                A.poly(pts, c * 0.92)
+                N.poly(pts, nc)
+                tp = [pts[3], pts[2], (pts[2][0] - lean * 0.25, pts[2][1] + (yb - yt) * 0.25),
+                      (pts[3][0] - lean * 0.25, pts[3][1] + (yb - yt) * 0.25)]
+                A.poly(tp, c * 1.08)
+                N.poly(tp, enc((0, 0.25, 0.95)))
             u += w_ * r2.uniform(1.0, 1.25)
 
     def tuft(self, A, N, x, y, h, rng, dark, light):
@@ -257,7 +274,7 @@ class LandMixin:
         # The ground's fine structure (ground.py) covers the whole hill, but stops a few rows short of the
         # shingle: the shingle, the sea and the pier stay exactly as they always were (and so does every
         # draw from r, which places the shore's stones), so the shore kit's reference frames still hold.
-        xk, xw = W, int(math.ceil(0.4 * W))     # the ground's columns, and the walls'
+        xk, xw = W, int(math.ceil(0.46 * W))    # the ground's columns, and the walls' (and the hillside's)
         grass_y = lambda xn: self.edge(xn) * H + band(xn)     # where the grass starts (the top of the hill
         F = ground.fields(W, H, y0, xk, (p, 0.038 * W, 0.009 * W), (q, 0.007 * W, 0.004 * W), grass_y)  # left)
         r2 = np.random.default_rng(32)          # everything new draws from here, never from r
@@ -362,6 +379,7 @@ class LandMixin:
         walls = (self.bezier((-0.02 * W, 0.742 * H), (0.04 * W, 0.76 * H), (0.10 * W, 0.79 * H), (0.148 * W, 0.812 * H), 90),
                  self.bezier((0.196 * W, 0.826 * H), (0.25 * W, 0.845 * H), (0.30 * W, 0.88 * H), (0.34 * W, 0.95 * H), 90))
         WM = Layer(self, 0, y0, xw, H)          # where the walls stand, so they don't fall in their own shadow
+        HSL = Layer(self, 0, y0, xw, H)           # the hillside's built things (blue) and puddles (red, green)
         for seg in walls:
             self.wall(A, N, seg, r, persp, r2, WM)
         for seg in walls:                        # grass grown up against the foot of the wall
@@ -394,6 +412,9 @@ class LandMixin:
             c = tuft[r.integers(0, 4)] * r.uniform(0.85, 1.1)
             A.line([(x, y), (x + lean, y - ln)], c, 1.3 * s)
             M.line([(x, y), (x + lean, y - ln)], (255, 255, 255), 1.3 * s)
+        # the hillside's built things and land detail (hillside.py): the garden, its shed and hives, the
+        # field gate, outcrops, gorse, heather, wildflowers, puddles
+        casters, feet = self.hillside(A, N, HSL, WM, persp)
         # shade it in strips of rows, so the big per-pixel arrays never exist for the whole hill at once
         G1 = fnoise(hh, hw, 2.4, 1.6, 101)
         G2 = fnoise(hh, hw, 1.0, 1.0, 102)
@@ -430,6 +451,28 @@ class LandMixin:
                 if src:
                     ha, hb = 29 * s * persp(ya), 29 * s * persp(yb)
                     dsh.polygon([(xa, ya - y0), (xb, yb - y0), (xb + sx * hb, yb - y0 + sy * hb), (xa + sx * ha, ya - y0 + sy * ha)], fill=255)
+        for (xa, ya), (xb, yb) in feet:           # and the hillside's things, at their foot
+            dao.line([(xa, ya - y0 + s), (xb, yb - y0 + s)], fill=200, width=max(2, int(5 * s * persp(ya))))
+        if src:
+            for c_ in casters:
+                kind = c_[0]
+                if kind == "poly":
+                    foot, h = c_[1], c_[2]
+                    pts = foot + [(x_ + sx * h, y_ + sy * h) for x_, y_ in foot]
+                    dsh.polygon([(x_, y_ - y0) for x_, y_ in hull(pts)], fill=255)
+                elif kind == "box":       # a footprint and the top corners above it (a shed)
+                    foot, tops = c_[1], c_[2]
+                    pts = list(foot)
+                    for (x_, y_), (xt, yt) in zip(foot + foot[:2], tops):
+                        h = y_ - yt
+                        pts.append((x_ + sx * h, y_ + sy * h))
+                    dsh.polygon([(x_, y_ - y0) for x_, y_ in hull(pts)], fill=255)
+                elif kind == "wall":
+                    (xa, ya), (xb, yb), ha, hb = c_[1], c_[2], c_[3], c_[4]
+                    dsh.polygon([(xa, ya - y0), (xb, yb - y0), (xb + sx * hb, yb - y0 + sy * hb), (xa + sx * ha, ya - y0 + sy * ha)], fill=255)
+                else:                     # a bar: a rail or a pole
+                    (xa, ya), (xb, yb), ha, hb, w_ = c_[1], c_[2], c_[3], c_[4], c_[5]
+                    dsh.line([(xa + sx * ha, ya - y0 + sy * ha), (xb + sx * hb, yb - y0 + sy * hb)], fill=255, width=max(1, int(round(w_))))
         WSH = ndi.gaussian_filter(np.asarray(wsh, np.float32) / 255, 1.2 * s) * (src[2] if src else 0)
         WAO = ndi.gaussian_filter(np.asarray(wao, np.float32) / 255, 3.0 * s)
         shore_cols = sm(0.54, 0.56, xn)[None, :]
@@ -493,6 +536,13 @@ class LandMixin:
             dny = -0.13 * f["hum_y"] * (1 - p0) + f["rut_y"]
             nrm[:, :xk, :2] += kk * np.stack([dnx, dny], -1)
             nrm = normalize(nrm * (1 - nal) + (nrgb / 127.5 - 1) * nal)
+            # the hillside's built things take no grass shading; the wet rims of its puddles are darker
+            xr, _ = HSL.arrays_rows(r0, r1)
+            xr *= 1 / 255
+            obj, hpud, rim = xr[..., 2], xr[..., 0], xr[..., 1]
+            dnx[:, :xw] *= 1 - obj
+            dny[:, :xw] *= 1 - obj
+            alb[:, :xw] *= (1 - 0.32 * rim)[..., None]
             # weather on the ground: lying snow on whatever faces up, rime on the grass, wet darkening
             buried = 0.0                 # how far lying snow has filled in the tufts and the ruts
             if PATCH is not None:
@@ -517,11 +567,13 @@ class LandMixin:
             _, wal = WM.arrays_rows(r0, r1)
             d0 = f["dense"]
             occ = ((1 - t0) * (1 - p0) * 0.4 * d0 + t0 * (1 - f["tip"]) * 0.3) * TUFT_SHOW * (1 - buried)
+            occ[:, :xw] *= 1 - obj
             sk = 1 - (1 - shade[:, :xk]) * (1 - occ)
             sk[:, :xw] = np.maximum(sk[:, :xw], WSH[sl] * (1 - wal[..., 0]))
             shade[:, :xk] += wk * (sk - shade[:, :xk])
             oa = (1 - t0) * ((1 - 0.3 * d0) * (1 - p0) + p0 * (1 - 0.2 * f["rut"])) + t0 * (0.72 + 0.28 * f["tip"])
             oa = 1 + (oa - 1) * TUFT_SHOW
+            oa[:, :xw] = 1 + (oa[:, :xw] - 1) * (1 - obj)
             oa = oa * (1 - 0.1 * sm(0.5, -1.5, f["hum"]))
             oa[:, :xw] *= 1 - 0.45 * WAO[sl] * (1 - wal[..., 0])
             amb[:, :xk] *= 1 + wk * (oa - 1) * (1 - 0.8 * buried)
@@ -537,6 +589,8 @@ class LandMixin:
                 pud = wx.wet * sm(0.55, 0.95, f["rut"]) * sm(0.2, 1.2, g3[:, :xk]) * f["path"]
                 pud = (pud * (1 - oal[:, :xk, 0]) * (1 - buried) * sm(0.6, 0.95, nrm[:, :xk, 2]))[..., None] * kk
                 col[:, :xk] = col[:, :xk] * (1 - 0.35 * pud) + pud * self.hor_col * 0.09
+            if wx.wet > 0.01 and hpud.any():
+                self.puddle_light(col, hpud, Yg, xw, L, buried)
             crest = (sm(0.05 * H, 0, Yg - ey_row) * 0.12 * (1 - on_shore))[..., None]
             col = col * (1 - crest) + self.hor_col * crest
             # the sea covers the lower beach as the tide comes in
