@@ -95,3 +95,6 @@ phases are their order. Every step gets a look test before it is installed.
   installing.
 - **2026-11-01: phase 1 merged** on `v3/phase1` (probes pass, see `docs/v3/phase1.md` there). Look
   test shown to Evan. The install moves the shore to reference r2. Waiting on Evan's go.
+  Evan's verdict: "It looks fine. A little better. The grass is a bit distracting, but I like what you
+  did with everything else." So the next step is to calm the grass (lower tuft contrast and density,
+  less yellow in summer) and show that scene again before installing.
