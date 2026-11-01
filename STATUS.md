@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-10-31._
+_Last updated 2026-11-01._
 
 ## Current state
 
@@ -26,6 +26,19 @@ _Last updated 2026-10-31._
   this Mac into heavy swap; don't go back to 3.
 
 ## The shore (branch work, not installed)
+
+**Branch `shore/look-b` is a look experiment, not for merging as-is.** Variant A's objects were
+specks at desktop size (10-24 px tall in the 2880x1800 frame, 5-12 points), its label plaque read as
+a UI chip, nothing glowed and objects were lit as one dark face. Look B, for comparing against A:
+`scale` 1-4 with a size floor beside the height cap, both scaled by perspective (`max_h` = 44 x persp,
+`min_h` = 18 x persp: an object's width and height must average at least 25 px on the near shingle);
+labels of at most 8 characters cut 1 px per font pixel into a small board that leans back and is lit
+like the beach; one optional `glow` key (at most 64 px) that emits from dusk with a halo, a pool and,
+on the pier, a reflection; every pixel lit by the face it shows (top, front, east, west, read off the
+bitmap); the strip above the pier deck's far edge opened, so things on the deck can rise in front of
+it. See the look B note at the top of `shorekit/SCHEMA.md`. The renderer and kit agree at the
+reference minutes except where only the renderer draws: lamp pools and halos, and cast shadows of the
+scenery on objects' sunlit faces.
 
 Small objects that makers far away leave on the beach and the pier, judged by `shorekit/` (see
 `shorekit/README.md` and `SCHEMA.md`), plus a lamp the owner can light. Phases 2 and 3 are built:

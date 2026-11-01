@@ -10,9 +10,12 @@ events, no grain, the tide at high water, the same weather all day) and writes i
   keepout.png      where nothing may stand: the pier's posts and rails, its bollards and lantern, the
                    gulls' perches, the moored boat and its line, the big stones on the dry shingle,
                    and every column left of the shore
-  surfaces.json    the always-dry band per column, the pier deck, the tallest thing each row allows
-  palette.json     the renderer's own albedos, the distance D a colour may stray from them, the plaque
-  conditions.json  per minute: the light on an upright object, the tone curve, the vignette, the fog
+  surfaces.json    the always-dry band per column, the pier deck, the tallest and the smallest thing
+                   each row allows (look B: big enough to notice at desktop size, never dominating)
+  palette.json     the renderer's own albedos, the distance D a colour may stray from them, the light
+                   colours a glow key may take, the label board's wood
+  conditions.json  per minute: the light on each face of an object, how far the lamps are lit, the
+                   tone curve, the vignette, the fog
   context.jpg      the noon frame, small, for people (the kit ignores it)
 
 Two runs write the same bytes. Reference sets are shore data: write them outside this repository
@@ -37,7 +40,7 @@ sys.path.insert(1, ROOT)
 import listening_point as lp  # noqa: E402
 from core import AZ_SPAN, PIER3, hill_edge_y, normalize, shore_band  # noqa: E402
 from day import Day  # noqa: E402
-from shore import SHADOW, UPRIGHT  # noqa: E402
+from shore import FACES, SHADOW  # noqa: E402
 from shorekit.png import write_png  # noqa: E402
 from shorekit.reference import load_reference, point_in_polygon  # noqa: E402
 
@@ -55,7 +58,11 @@ DRY_V = (0.53, 1.0)      # the dry band, as fractions of the beach from low wate
 STONE_H = 12             # stones on the dry band at least this tall (px) are kept out; smaller ones are
                          # pebbles an object may stand over (keeping them out leaves no room for a label)
 DRY_MIN = 4              # columns with a thinner dry band have none
-MAX_H = 64               # the tallest object, in pixels, at the nearest rows' perspective of 1
+MAX_H = 44               # the tallest object, in pixels, at a perspective of 1 (look B: about the pier's
+                         # end post at the far end of the deck, and 60 px on the nearest shingle)
+MIN_H = 18               # the least a thing standing on the shingle or the pier may average across its width
+                         # and height, likewise: 17 px at the pier's end, 25 on the near shingle (about 9-13
+                         # points on a 2x display)
 D = 40                   # how far (redmean) a maker's colour may stray from the nearest albedo below
 # The albedos the renderer paints the shore and its neighbours with (land.py, props.py, tower.py,
 # life.py): what an object's colours must stay close to. Flowers are left out on purpose: in the
@@ -78,9 +85,12 @@ PALETTE = [
     ("straw", (176, 160, 104)), ("leaf-gold", (196, 150, 58)), ("leaf-rust", (170, 90, 40)),
     ("leaf-brown", (120, 84, 46)),
 ]
-# The driftwood plaque a label is carved on: weathered grey-brown wood, the letters a shade darker, carved
-# rather than inked, so a label reads up close and does not shout across the desktop
-PLAQUE = {"wood": (136, 127, 110), "grain": (112, 104, 90), "ink": (74, 66, 56)}
+# The light colours a glow key may take (look B): a lamp's flame, lamplight through glass, a lit window
+GLOW = [("lamp-flame", (240, 214, 150)), ("lamplight", (236, 186, 104)), ("lit-window", (220, 150, 80))]
+# The driftwood board a label is cut into (look B): bleached wood a little paler than the shingle it leans
+# on, lit like the beach, the letters a shade darker, so at desktop size it is a scrap of driftwood and the
+# name only reads up close
+PLAQUE = {"wood": (142, 135, 120), "grain": (128, 121, 108), "ink": (102, 95, 84)}
 
 
 def minute(hhmm):
@@ -183,12 +193,13 @@ def deck_polygon(fr):
     return [[rint(x + (1 if x < cx else -1)), rint(y + (1 if y < cy else -1))] for x, y in pts]
 
 
-def max_heights():
+def heights(k):
+    """k px scaled by the perspective of each region row."""
     H = round(2400 * SCALE)
     out = []
     for y in range(REGION["y0"], REGION["y1"] + 1):
         persp = 0.35 + 1.3 * min(1.0, max(0.0, ((y + 0.5) / H - 0.6) / 0.4))
-        out.append(max(1, rint(MAX_H * persp)))
+        out.append(max(1, rint(k * persp)))
     return out
 
 
@@ -266,7 +277,13 @@ def keepout(fr, deck, top, bot):
     keep[:, :REGION["x0"] - CROP["x"]] = True
     # the pier: posts, rails, stringer and set stones (its deck is open ground), then what stands on the deck
     pier = crop(drawn(fr, "pier", last=True)) > 0.05
-    keep |= ndi.binary_dilation(pier, iterations=1) & ~deck_mask
+    pier = ndi.binary_dilation(pier, iterations=1) & ~deck_mask
+    # look B: a thing standing on the deck rises in front of the deck's far edge, as one on the dry shingle
+    # rises in front of the tidal band, so the edge above the deck is open (its bollards, the gulls' perches
+    # and the end post are kept out below); otherwise nothing taller than the deck looks deep could stand there
+    cols = deck_mask.any(0)
+    above = np.arange(CROP["h"])[:, None] < np.argmax(deck_mask, 0)[None, :]
+    keep |= pier & ~(above & cols[None, :])
     deck_h = PIER3["deck"]
     things = [(u, v, deck_h, deck_h + h, 0.0075) for u, v, h in ((0.985, 0.92, 0.022), (0.62, 0.92, 0.018),
                                                                     (0.25, 0.92, 0.018))]
@@ -330,11 +347,12 @@ def build(out, rid="r1", log=print):
         c = np.ascontiguousarray(crop(img))
         crops[name] = c
         fr = lp.Frame(day, m, SCALE)
-        light = fr.light(normalize(UPRIGHT))
+        lights = [[rint(256 * v) for v in fr.light(normalize(n))] for n in FACES]
         alpha, F = veil(fr)
         lut = tone_lut(fr.night)
-        conds.append(dict(name=name, m=m, fr=fr, light=[rint(256 * v) for v in light], lut=lut, alpha=alpha, F=F))
-        log("%s %s: sun %.1f deg, light x256 %s" % (name, hhmm, fr.sun_alt, conds[-1]["light"]))
+        conds.append(dict(name=name, m=m, fr=fr, lights=lights, lamps=rint(256 * fr.lights_on), lut=lut, alpha=alpha, F=F))
+        log("%s %s: sun %.1f deg, light x256 front/top/east/west %s, lamps %d"
+            % (name, hhmm, fr.sun_alt, lights, conds[-1]["lamps"]))
     gday, gm = day_for("clear"), minute(CONDITIONS[0][1])
     fr = lp.Frame(gday, gm, SCALE)
     top, bot = dry_band()
@@ -352,16 +370,18 @@ def build(out, rid="r1", log=print):
         has_veil = bool(k["alpha"].max() > 0)
         s_alpha = shadow_alpha(crops[k["name"]], k["lut"], vig, k["alpha"], k["F"], fall)
         cond_json.append({
-            "name": k["name"], "light": k["light"], "lut": [list(map(int, t)) for t in k["lut"]],
+            "name": k["name"], "light": k["lights"][0], "top": k["lights"][1], "east": k["lights"][2],
+            "west": k["lights"][3], "lamps": k["lamps"], "lut": [list(map(int, t)) for t in k["lut"]],
             "veil": {"rgb": [rint(v) for v in k["F"]] if has_veil else [0, 0, 0],
                      "alpha": [rint(256 * a) for a in k["alpha"]] if has_veil else [0] * CROP["h"]},
             "shadow": {"rgb": [0, 0, 0], "alpha": s_alpha}})
         log("%s: shadow alpha %d/256%s" % (k["name"], s_alpha, ", fog veil %s" % cond_json[-1]["veil"]["rgb"] if has_veil else ""))
     surfaces = {"shore_surfaces": 1, "reference": rid, "frame": {"w": fr.W, "h": fr.H}, "crop": CROP,
                 "region": REGION, "dry": {"x0": REGION["x0"], "top": top, "bottom": bot}, "deck": deck,
-                "max_h": {"y0": REGION["y0"], "h": max_heights()}}
+                "max_h": {"y0": REGION["y0"], "h": heights(MAX_H)}, "min_h": {"y0": REGION["y0"], "h": heights(MIN_H)}}
     palette = {"shore_palette": 1, "reference": rid, "d": D,
                "entries": [{"name": n, "rgb": list(c)} for n, c in PALETTE],
+               "glow": [{"name": n, "rgb": list(c)} for n, c in GLOW],
                "plaque": {k: list(v) for k, v in PLAQUE.items()}}
     conditions = {"shore_conditions": 1, "reference": rid, "cell": CELL, "vignette": vig_cells, "conditions": cond_json}
     blobs = {"surfaces.json": canonical(surfaces), "palette.json": canonical(palette),

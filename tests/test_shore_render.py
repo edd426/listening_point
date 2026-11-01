@@ -85,7 +85,7 @@ def test_no_shore_and_empty_shore_are_byte_identical_to_the_renderer_before():
     # objects that land only after the day, and a lamp lit on another day: nothing to draw either
     later = S.new_shore(S.reference())
     m, _ = S.place_first(later, lambda x, y: S.manifest("2027-03-17-cairn", "maker-a", S.CAIRN, S.STONES, "shingle",
-                                                        x, y), S.dry_spots(S.reference(), 2400, 2800))
+                                                        x, y, scale=4), S.dry_spots(S.reference(), 2400, 2800))
     later.accept(m, "2027-03-18T04:30:00Z", "2027-03-18T04:30:00Z", "world-1", "0" * 40)
     later = S.write_cache(os.path.join(TMP, "later"), ref_dir, later)
     lamp = os.path.join(TMP, "lamp-other-day.json")
