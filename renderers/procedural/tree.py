@@ -151,7 +151,7 @@ def leaf_set(W, H):
     tone = (1 + 0.14 * (q.uniform(0, 1, nc) - 0.5))[lab]      # each clump a shade of its own
     # a clump's leaves sit a little closer together than the twigs' spread, and mostly share its
     # colour, and a twig's leaves turn together, so the crown reads in clumps rather than as confetti
-    lx, ly = C[lab, 0] + 0.88 * (lx - C[lab, 0]), C[lab, 1] + 0.88 * (ly - C[lab, 1])
+    lx, ly = C[lab, 0] + 0.92 * (lx - C[lab, 0]), C[lab, 1] + 0.92 * (ly - C[lab, 1])
     pal = np.where(q.uniform(0, 1, len(lx)) < 0.55, q.integers(0, 5, nc)[lab], A[:, 5].astype(int))
     turn = 0.55 * A[:, 3] + 0.45 * q.uniform(0, 1, nc)[lab]
     # the crown as a whole: an ellipsoid; front clumps face the camera, back ones away from it
@@ -173,7 +173,7 @@ def leaf_set(W, H):
     zl = zk * 0.7 + (lz - 0.5) * 0.5 + q.uniform(-0.08, 0.08, len(lx))
     # gaps where the sky shows through, more of them toward the edge, which they break up
     gn = sample(fnoise(128, 128, 2.0, 1.0, 83), (ly - ccy) / s * 0.26, (lx - ccx) / s * 0.26)
-    gap = gn > 1.75 - 0.5 * sm(0.4, 0.9, edge) + 0.6 * sm(0.9, 1.05, edge)
+    gap = gn > 1.85 - 0.5 * sm(0.4, 0.9, edge) + 0.6 * sm(0.9, 1.05, edge)
     return dict(lx=lx, ly=ly, appear=A[:, 2], turn=turn, fall=A[:, 4], pal=pal, rot=A[:, 6],
                 N=N.astype(np.float32), tone=tone.astype(np.float32), G=G.astype(np.float32), Lc=Lc.astype(np.float32), ao=ao.astype(np.float32),
                 edge=edge, rim=rr, zl=zl, back=zl < -0.12, gap=gap, ny=ny)
