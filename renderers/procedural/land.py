@@ -7,6 +7,8 @@ from scipy import ndimage as ndi
 
 from core import *  # noqa: F401,F403
 import ground
+from events import FIELD_WALLS
+from fauna import Tee
 
 # How strongly the grass's fine structure reads (1 = the first phase-1 look, which Evan found a bit
 # distracting): the tufts' light tips against their dark feet, the shade between them, the blades' lean.
@@ -78,6 +80,11 @@ class LandMixin:
         ao = ndi.gaussian_filter(np.asarray(aim, np.float32) / 255, 2.5)
         up = lambda a: np.asarray(Image.fromarray(a).resize((W, H), Image.BILINEAR), np.float32)
         return up(shade), up(ao)
+
+    def field_walls(self):
+        """The two field walls' foot lines in frame pixels (events.FIELD_WALLS)."""
+        W, H = self.W, self.H
+        return tuple(self.bezier(*[(x * W, y * H) for x, y in p], 90) for p in FIELD_WALLS)
 
     def bezier(self, p0, p1, p2, p3, n=120):
         t = np.linspace(0, 1, n)[:, None]
@@ -376,12 +383,18 @@ class LandMixin:
             A.ellipse(fx * W, fy * H, rr, rr, cols[n])
             n += 1
         # a dry-stone wall across the lower field, open where the path crosses
-        walls = (self.bezier((-0.02 * W, 0.742 * H), (0.04 * W, 0.76 * H), (0.10 * W, 0.79 * H), (0.148 * W, 0.812 * H), 90),
-                 self.bezier((0.196 * W, 0.826 * H), (0.25 * W, 0.845 * H), (0.30 * W, 0.88 * H), (0.34 * W, 0.95 * H), 90))
+        walls = self.field_walls()
         WM = Layer(self, 0, y0, xw, H)          # where the walls stand, so they don't fall in their own shadow
         HSL = Layer(self, 0, y0, xw, H)           # the hillside's built things (blue) and puddles (red, green)
-        for seg in walls:
-            self.wall(A, N, seg, r, persp, r2, WM)
+        # what stands up from the ground is also recorded (fauna.py), once a day, so animals behind it hide
+        rec = self.occl_recorder()
+        At = Tee(A, rec) if rec else A
+        for name, seg in zip(("wall-upper", "wall-lower"), walls):
+            if rec:
+                rec.begin(name, seg)
+            self.wall(At, N, seg, r, persp, r2, WM)
+        if rec:
+            rec.end()
         for seg in walls:                        # grass grown up against the foot of the wall
             for x_, y_ in seg[1:-1:2]:
                 for _ in range(2):
@@ -414,7 +427,9 @@ class LandMixin:
             M.line([(x, y), (x + lean, y - ln)], (255, 255, 255), 1.3 * s)
         # the hillside's built things and land detail (hillside.py): the garden, its shed and hives, the
         # field gate, outcrops, gorse, heather, wildflowers, puddles
-        casters, feet = self.hillside(A, N, HSL, WM, persp)
+        casters, feet = self.hillside(At, N, HSL, WM, persp)
+        if rec:
+            self.occl_store(rec)
         # shade it in strips of rows, so the big per-pixel arrays never exist for the whole hill at once
         G1 = fnoise(hh, hw, 2.4, 1.6, 101)
         G2 = fnoise(hh, hw, 1.0, 1.0, 102)

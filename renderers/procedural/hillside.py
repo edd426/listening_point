@@ -178,18 +178,34 @@ class HillsideMixin:
         shadow). Returns what casts shadows on the grass and where it darkens the grass at its foot."""
         self._hsA, self._hsN, self._hsX, self._hsWM = A, N, X, WM
         self._hs_casters, self._hs_feet = [], []
+        self._hs_rec = getattr(A, "rec", None)       # what stands up is recorded for the animals (fauna.py)
         se = self.season
         d = se.doy
         self.hs_puddles(persp)
         self.hs_heather(d)
         self.hs_meadows()
         for i, o in enumerate(OUTCROPS):
+            self.hs_occ(f"outcrop-{i}", [(o[0] * self.W, o[1] * self.H)])
             self.hs_outcrop(*o)
-        for g in GORSE:
+        for i, g in enumerate(GORSE):
+            self.hs_occ(f"gorse-{i}", [(g[0] * self.W, g[1] * self.H)])
             self.hs_gorse(*g, bloom=gorse_bloom(d))
+        self.hs_occ()
         self.hs_garden(self.hs_garden_stage(), d)
         self.hs_field_gate(FIELD_GATE["open_deg"])
+        self.hs_occ()
         return self._hs_casters, self._hs_feet
+
+    def hs_occ(self, name=None, foot=None):
+        """Start recording what is drawn next as the standing thing `name`, whose foot runs along the
+        points `foot` (or stop recording, with no name). Nothing happens unless a recorder is listening."""
+        rec = getattr(self, "_hs_rec", None)
+        if rec is None:
+            return
+        if name is None:
+            rec.end()
+        else:
+            rec.begin(name, foot)
 
     # ------------------------------------------------------------ the garden --
     def hs_garden_stage(self):
@@ -228,8 +244,11 @@ class HillsideMixin:
         # the back row: the hives, the shed
         tiers = hive_tiers(doy)
         for i, a_ in enumerate(HIVES_A[::-1]):
+            self.hs_occ(f"hive-{i}", [g(a_, HIVES_B)])
             self.hs_hive(*g(a_, HIVES_B), tiers, hive_wrapped(doy), np.random.default_rng(310 + i))
+        self.hs_occ("shed", [g(SHED_AB[0], SHED_AB[2]), g(SHED_AB[1], SHED_AB[2])])
         self.hs_shed(rng)
+        self.hs_occ()
         # the left wall, whose inner face you see, then the beds front to back over it
         self.hs_wall("garden-left", [g(0.0, b_) for b_ in np.linspace(0.0, SHED_AB[2] + 0.01, 30)])
         for k in range(len(BEDS) - 1, -1, -1):
@@ -239,7 +258,9 @@ class HillsideMixin:
         a0, a1 = GATE_GAP
         self.hs_wall("garden-front", [g(a_, 0.0) for a_ in np.linspace(0.0, a0, 40)])
         self.hs_wall("garden-front-east", [g(a_, 0.0) for a_ in np.linspace(a1, 1.0, 10)])
+        self.hs_occ("wicket", [g(a0, 0.0), g(a1, 0.0)])
         self.hs_wicket(g(a0, 0.0), g(a1, 0.0))
+        self.hs_occ()
 
     def hs_wall(self, name, pts, height=1.25):
         """The new wall's stretch `name` (WALLS) along pts: land.py's stonework with its own stones, a
@@ -248,8 +269,10 @@ class HillsideMixin:
         seg = np.array(pts, np.float64)
         persp = lambda y: 0.35 + 1.3 * np.clip((np.asarray(y) / self.H - 0.6) / 0.4, 0, 1)
         r2 = np.random.default_rng(360 + WALLS.index(name))
+        self.hs_occ(name, pts)
         self.wall_body(self._hsA, self._hsN, seg, persp, r2, self._hsWM, courses=stage.courses, height=height,
                        X=self._hsX)
+        self.hs_occ()
         hgt = lambda y: 29 * self.s * float(persp(y)) * height * min(1.0, stage.courses / 4)
         if stage.courses <= 0:
             return
@@ -561,6 +584,31 @@ class HillsideMixin:
     def hs_field_gate(self, open_deg):
         """A five-barred wooden gate hung on a stone post at the end of the upper wall, standing open, swung
         back toward you into the field; its latch post stands at the end of the lower wall."""
+        s = self.s
+        G = self.hs_gate_geom(open_deg)
+        hx, hy, lx, ly, ex, ey, per = G["hx"], G["hy"], G["lx"], G["ly"], G["ex"], G["ey"], G["per"]
+        n_face, hgt0, hgt1 = G["n"], G["h0"], G["h1"]
+        wood = np.array((156, 150, 136), np.float32)
+        # the latch post first (it is the farther), then the leaf, then the post it hangs on
+        self.hs_occ("latch-post", [(lx, ly)])
+        self.hs_gate_post(lx, ly, per(ly), 1)
+        self.hs_occ("gate-leaf", [(hx, hy), (ex, ey)])
+        self.hs_gate_leaf(hx, hy, ex, ey, hgt0, hgt1, wood, n_face)
+        iron = (36, 34, 34)
+        for f in (0.22, 0.8):             # the hinges' straps
+            self.hs_line([(hx, hy - hgt0 * f), (hx + (ex - hx) * 0.14, hy + (ey - hy) * 0.14 - hgt0 * f)], iron, n_face, max(1.0, 0.9 * s))
+        self.hs_occ("hinge-post", [(hx, hy)])
+        self.hs_gate_post(hx, hy, per(hy), 2)
+        self.hs_occ("gate-grass", [(hx, hy), (ex, ey)])
+        rng = np.random.default_rng(345)
+        for _ in range(14):               # grass grown up round the bottom rail
+            t = rng.uniform(0.05, 1)
+            x, y = hx + (ex - hx) * t, hy + (ey - hy) * t + rng.uniform(0.5, 3) * s
+            self.tuft(self._hsA, self._hsN, x, y, rng.uniform(5, 9) * s, rng, np.array((52, 84, 36)), np.array((104, 124, 58)))
+
+    def hs_gate_geom(self, open_deg=FIELD_GATE["open_deg"]):
+        """The field gate on the screen: its posts' feet (hinge h, latch l), the leaf's far end (e), the
+        leaf's face normal, its height at each end, and the field walls' height function `per`."""
         W, H, s = self.W, self.H, self.s
         hx, hy = FIELD_GATE["hinge"][0] * W, FIELD_GATE["hinge"][1] * H
         lx, ly = FIELD_GATE["latch"][0] * W, FIELD_GATE["latch"][1] * H
@@ -573,20 +621,7 @@ class HillsideMixin:
         ex, ey = hx + L * ux, hy + L * uz * KF          # the latch end of the leaf, on the screen
         n_face = (uz * 0.35, abs(ux) * 0.9 + 0.2, 0.15)      # facing you, a little toward the open side
         per = lambda y: 26 * s * (0.35 + 1.3 * min(1.0, max(0.0, (y / H - 0.6) / 0.4)))
-        hgt0, hgt1 = per(hy) * 1.18, per(ey) * 1.18
-        wood = np.array((156, 150, 136), np.float32)
-        # the latch post first (it is the farther), then the leaf, then the post it hangs on
-        self.hs_gate_post(lx, ly, per(ly), 1)
-        self.hs_gate_leaf(hx, hy, ex, ey, hgt0, hgt1, wood, n_face)
-        iron = (36, 34, 34)
-        for f in (0.22, 0.8):             # the hinges' straps
-            self.hs_line([(hx, hy - hgt0 * f), (hx + (ex - hx) * 0.14, hy + (ey - hy) * 0.14 - hgt0 * f)], iron, n_face, max(1.0, 0.9 * s))
-        self.hs_gate_post(hx, hy, per(hy), 2)
-        rng = np.random.default_rng(345)
-        for _ in range(14):               # grass grown up round the bottom rail
-            t = rng.uniform(0.05, 1)
-            x, y = hx + (ex - hx) * t, hy + (ey - hy) * t + rng.uniform(0.5, 3) * s
-            self.tuft(self._hsA, self._hsN, x, y, rng.uniform(5, 9) * s, rng, np.array((52, 84, 36)), np.array((104, 124, 58)))
+        return dict(hx=hx, hy=hy, lx=lx, ly=ly, ex=ex, ey=ey, n=n_face, h0=per(hy) * 1.18, h1=per(ey) * 1.18, per=per)
 
     def hs_gate_post(self, px, py, wall_h, seed):
         """A squared stone gatepost at a wall's end, half as tall again as the wall, lichened."""
