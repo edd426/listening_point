@@ -33,6 +33,7 @@ from air import AirMixin
 from core import FrameBase
 from day import Day
 from distant import DistantMixin
+from fauna import FaunaMixin
 from hillside import HillsideMixin
 from land import LandMixin
 from life import LifeMixin
@@ -47,7 +48,7 @@ from weatherfx import WeatherFxMixin
 
 
 class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, HillsideMixin, TowerMixin, TreeMixin, PropsMixin, LifeMixin,
-            WeatherFxMixin, MysteryMixin, ShoreMixin, AirMixin):
+            FaunaMixin, WeatherFxMixin, MysteryMixin, ShoreMixin, AirMixin):
     def background(self):
         """Everything behind the near scenery, rendered every minute."""
         self.sky()
@@ -87,12 +88,16 @@ class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, HillsideMixi
         self.tower()
         self.shore()
         if not self.reference:      # creatures and rare events, in front of the shore's objects
+            self._life = []         # the animals drawn so far, which hide the ones behind them (fauna.py)
             self.door_light()
             self.pier_gulls()
             self.footprints()
             self.bottle()
             self.book()
             self.sheep()
+            self.hares()
+            self.fox()
+            self.crows()
             self.critters()
             self.cat()
             self.heron()

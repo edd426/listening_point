@@ -86,6 +86,7 @@ class Day:
         ev.heron, ev.owl = False, False
         ev.flights, ev.contrails, ev.starlings, ev.balloons, ev.kite, ev.skeins = [], False, None, [], None, []
         ev.cat = [(0, "inside", 0.0, 0.0)]
+        ev.fox, ev.hares, ev.boxing, ev.crow_visits = [], [], [], []
         for k in ("comet", "ghost", "cottage", "lantern", "prints", "whale", "bottle", "book"):
             setattr(my, k, None)
         my.clock_stopped, my.door = False, False

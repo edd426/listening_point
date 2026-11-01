@@ -119,8 +119,10 @@ together on `shore/sync` (2026-11-01), not installed:
 
 ## Modules
 
-`renderers/procedural/` holds mixins on one `Frame`: `sky`, `sea`, `land`, `tree`, `tower`, `props`,
-`life`, `distant`, `weatherfx`, `mystery`, `shore`. `day.py` builds one date's per-minute astronomy, weather,
+`renderers/procedural/` holds mixins on one `Frame`: `sky`, `sea`, `land`, `hillside`, `tree`, `tower`, `props`,
+`life`, `fauna`, `distant`, `weatherfx`, `mystery`, `shore`, `air`. `fauna` (v3 phase 3 part 2,
+`docs/v3/phase3-animals.md`) draws the sheep, fox, hares and crows, and hides any animal standing behind the
+walls, the gate, the shed, the hives, the rocks or the gorse (masks recorded while the hill is drawn). `day.py` builds one date's per-minute astronomy, weather,
 season (`season.py`), schedule (`events.py`) and mysteries. `astro.py` and `weather.py` are
 self-contained. Tests (offline): `./venv/bin/python tests/test_astro.py` and `tests/test_weather.py`;
 the owner controls and the shore sync: `/usr/bin/python3 -m unittest tests.test_listener tests.test_shore_sync`
@@ -171,7 +173,10 @@ the owner controls and the shore sync: `/usr/bin/python3 -m unittest tests.test_
 ## Known weaknesses
 
 - Still recognisably computer-made: flat-shaded polygons, noise textures.
-- Creatures are small and simple at this scale (sheep, cat, heron, owl).
+- The cat, the heron and the owl are still small and simple; the sheep, fox, hares and crows were redrawn
+  in v3 (`docs/v3/phase3-animals.md`, Known issues).
+- `tests/test_shore_render.py` fails 5 of 7 on `main` (found 2026-11-01): its synthetic cairn finds no spot
+  that passes against reference r2.
 - Mid-level clouds near the horizon streak toward the vanishing point (the plane projection).
 - Weather can jump where separately rendered spans of a day meet (battery renders, a forecast
   refreshed mid-day).

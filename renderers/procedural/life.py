@@ -1,4 +1,6 @@
-"""Living things and night lights: sheep, moths, fireflies, glows."""
+"""Living things and night lights: the cat, the heron, the owl, small life, moths, fireflies, glows.
+
+The sheep, the fox, the hares and the crows are in fauna.py, with what hides animals standing behind things."""
 import math
 
 import numpy as np
@@ -6,66 +8,34 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage as ndi
 
 from core import *  # noqa: F401,F403
+from events import FIELD_WALLS
 
 
 class LifeMixin:
     def persp(self, y):
         return 0.35 + 1.3 * min(1.0, max(0.0, (y / self.H - 0.6) / 0.4))
 
-    # ---------------------------------------------------------------- sheep --
-    def sheep(self):
-        s, W, H = self.s, self.W, self.H
-        se = self.season
-        flock = self.day.events.sheep(self.t, lambs=se.lambs)
-        for i, (x, y, f, grazing, size) in enumerate(flock):
-            x, y = x * W, y * H
-            lamb = size < 1
-            k = 30 * s * self.persp(y) * size
-            standing = self.sun_alt > -4 or lamb
-            shorn = se.shorn and not lamb
-            fleece = np.array((242, 238, 228) if lamb else (204, 198, 186) if shorn else (228, 224, 212), np.float32)
-            face = self.lit((40, 36, 34), [f * -0.3, 0.8, 0.4], x, y)
-            L = Layer(self, x - 2 * k, y - 2.2 * k, x + 2 * k, y + k)
-            L.ellipse(x, y + 0.08 * k, 1.15 * k, 0.24 * k, np.array([24, 32, 20]) * (self.amb + 0.25), a=0.5)
-            lift = 0.55 * k if standing else 0.08 * k
-            if standing:
-                for lx in (-0.55, -0.32, 0.38, 0.6):
-                    L.line([(x + lx * k, y - lift), (x + lx * k + 0.04 * k * f, y)], face * 0.9, 0.15 * k)
-            bw = 0.85 if shorn else 1.0
-            by = y - lift - 0.45 * k
-            L.ellipse(x, by, 1.0 * k * bw, 0.55 * k * bw, self.lit(fleece * 0.8, [0, 0.7, 0.5], x, y))
-            r = np.random.default_rng(700 + i)
-            for _ in range(16 if not shorn else 9):   # tufts of fleece, each lit as a little dome
-                dx, dy = r.uniform(-0.8, 0.8) * bw, r.uniform(-0.48, 0.25) * bw
-                nrm = normalize([-dx * 0.8, 0.55, -dy * 1.2 + 0.35])
-                rr = r.uniform(0.22, 0.34) * k * bw
-                L.ellipse(x + dx * k, by + dy * k, rr, rr * 0.85, self.lit(fleece * r.uniform(0.92, 1.05), nrm, x, y))
-            hx, hy = x + f * 0.92 * k * bw, by + (0.38 * k if grazing else -0.18 * k)
-            L.ellipse(hx, hy, 0.27 * k, 0.21 * k, face)
-            L.ellipse(hx + f * 0.18 * k, hy + 0.05 * k, 0.16 * k, 0.12 * k, face)
-            for e in (-1, 1):   # ears out sideways
-                L.ellipse(hx - f * 0.12 * k + e * 0.2 * k, hy - 0.12 * k, 0.13 * k, 0.05 * k, face)
-            L.composite()
-
     # ------------------------------------------------------------------ cat --
     def cat_spot(self, spot, seeds):
-        """Screen position (x, y) of the cat's feet, and the pose, for a named spot."""
+        """Screen position (x, y) of the cat's feet, the pose, and the frame row of the ground it stands
+        over (what hides it is what stands nearer than that), for a named spot."""
         s, W, H = self.s, self.W, self.H
         a, b = seeds
-        if spot == "wall":
+        if spot == "wall":            # sitting on the upper field wall's coping
             t = 0.25 + 0.6 * a
-            p0, p1, p2, p3 = [np.array(v) for v in ((-0.02, 0.742), (0.04, 0.76), (0.10, 0.79), (0.148, 0.812))]
+            p0, p1, p2, p3 = [np.array(v) for v in FIELD_WALLS[0]]
             x, y = (1 - t) ** 3 * p0 + 3 * (1 - t) ** 2 * t * p1 + 3 * (1 - t) * t ** 2 * p2 + t ** 3 * p3
             x, y = x * W, y * H
-            return x, y - 27 * s * self.persp(y), "sit"
+            top = self.occl_top("wall-upper", x, 0.3 * 30 * s * self.persp(y))
+            return x, (top + 0.5 if top is not None else y - 27 * s * self.persp(y)), "sit", y + 1.5
         if spot == "step":
-            return self.tw["cx"] + 30 * s, self.tw["yb"] + 18 * s, "sit"
+            return self.tw["cx"] + 30 * s, self.tw["yb"] + 18 * s, "sit", self.tw["yb"] + 18 * s
         if spot == "bench":
-            return BENCH[0] * W - 40 * s + 70 * s * a, BENCH[1] * H - 40 * s, "curl"
+            return BENCH[0] * W - 40 * s + 70 * s * a, BENCH[1] * H - 40 * s, "curl", BENCH[1] * H + 2 * s
         if spot == "lamp":
-            return LAMP[0] * W + 18 * s, LAMP[1] * H + 4 * s, "sit"
+            return LAMP[0] * W + 18 * s, LAMP[1] * H + 4 * s, "sit", LAMP[1] * H + 4 * s
         if spot == "grass":
-            return (0.27 + 0.16 * a) * W, (0.745 + 0.06 * b) * H, "crouch"
+            return (0.27 + 0.16 * a) * W, (0.745 + 0.06 * b) * H, "crouch", (0.745 + 0.06 * b) * H
         return None
 
     def cat(self):
@@ -79,17 +49,20 @@ class LifeMixin:
         if since < walk and here and there and prev != spot:
             u = (since + 0.5) / walk
             x, y = there[0] + (here[0] - there[0]) * u, there[1] + (here[1] - there[1]) * u
+            depth = there[3] + (here[3] - there[3]) * u
             pose, f = "walk", (1 if here[0] > there[0] else -1)
         elif here is None:
             return
         else:
-            x, y, pose = here
+            x, y, pose, depth = here
             f = 1 if (seeds[0] * 10) % 2 > 1 else -1
         k = 30 * s * self.persp(y) * 0.36
         fur = self.lit((30, 28, 30), [0, 0.8, 0.5], x, y)
         rim = self.lit((60, 56, 58), [f * -0.6, 0.4, 0.7], x, y)
+        S = Layer(self, x - 1.2 * k, y - 0.3 * k, x + 1.2 * k, y + 0.4 * k)
+        S.ellipse(x, y + 0.05 * k, 1.0 * k, 0.18 * k, np.array([20, 24, 18]) * (self.amb + 0.25), a=0.45)
+        self.life_put(S, depth, solid=False, xc=x)
         L = Layer(self, x - 3 * k, y - 3.4 * k, x + 3 * k, y + 0.6 * k)
-        L.ellipse(x, y + 0.05 * k, 1.0 * k, 0.18 * k, np.array([20, 24, 18]) * (self.amb + 0.25), a=0.45)
         if pose == "sit":
             L.ellipse(x, y - 0.9 * k, 0.62 * k, 0.95 * k, fur)
             L.line([(x - f * 0.5 * k, y - 0.1 * k), (x - f * 1.1 * k, y - 0.05 * k), (x - f * 1.3 * k, y - 0.4 * k)], fur, 0.16 * k)
@@ -113,7 +86,7 @@ class LifeMixin:
         for e in (-1, 1):
             ex = hx + e * 0.24 * k
             L.poly([(ex - 0.14 * k, hy - 0.2 * k), (ex + 0.14 * k, hy - 0.2 * k), (ex + e * 0.06 * k, hy - 0.62 * k)], fur)
-        L.composite()
+        self.life_put(L, depth, xc=x)
         # eyes: a glint of green-gold when a lamp is near, as a cat's do
         if pose != "curl":
             near = self.lights_on * (1.0 if spot in ("lamp", "step") or pose == "walk" else 0.4)
@@ -180,7 +153,7 @@ class LifeMixin:
 
     # ----------------------------------------------------------- small life --
     def critters(self):
-        """Bats at dusk, rabbits at dawn and dusk, swallows and butterflies in summer."""
+        """Bats at dusk, swallows and butterflies in summer (the hares are in fauna.py)."""
         s, W, H, t = self.s, self.W, self.H, self.t
         ev, se, wx = self.day.events, self.season, self.wx
         r = self.rng
@@ -194,21 +167,6 @@ class LifeMixin:
                 w = r.uniform(5, 8) * s
                 up = r.uniform(-0.6, 0.8)
                 L.line([(bx - w, by - up * w * 0.5), (bx - w * 0.4, by - w * 0.35), (bx, by), (bx + w * 0.4, by - w * 0.35), (bx + w, by - up * w * 0.5)], c, 1.3 * s)
-                drew = True
-        dawn_dusk = (ev.sunrise - 0.4 < t < ev.sunrise + 1.2) or (ev.sunset - 1.0 < t < ev.sunset + 0.3)
-        if dawn_dusk and se.winter < 0.5 and fair:
-            rr = np.random.default_rng([self.day.date.toordinal(), 11])
-            for i in range(int(rr.integers(1, 4))):
-                x = (0.14 + 0.2 * rr.random()) * W + 3 * s * math.sin(self.m * 0.4 + i)
-                y = (0.83 + 0.07 * rr.random()) * H
-                k = 30 * s * self.persp(y) * 0.22
-                fur = self.lit((112, 88, 64), [0, 0.8, 0.5], x, y)
-                f = 1 if (self.m // 5 + i) % 2 else -1
-                L.ellipse(x, y - 0.5 * k, 1.0 * k, 0.6 * k, fur)
-                L.ellipse(x + f * 0.8 * k, y - 0.95 * k, 0.45 * k, 0.4 * k, fur)
-                for e in (0, 1):
-                    L.ellipse(x + f * (0.65 + 0.2 * e) * k, y - 1.65 * k, 0.12 * k, 0.45 * k, fur * 0.9)
-                L.ellipse(x - f * 0.95 * k, y - 0.5 * k, 0.22 * k, 0.2 * k, self.lit((230, 228, 222), [0, 0.8, 0.5], x, y))
                 drew = True
         if se.swallows > 0.3 and fair and self.sun_alt > 8:
             c = self.lit((28, 34, 60), [0, 0.5, 0.8])
