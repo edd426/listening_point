@@ -33,6 +33,7 @@ from air import AirMixin
 from core import FrameBase
 from day import Day
 from distant import DistantMixin
+from hillside import HillsideMixin
 from land import LandMixin
 from life import LifeMixin
 from props import PropsMixin
@@ -45,7 +46,7 @@ from shore import ShoreMixin
 from weatherfx import WeatherFxMixin
 
 
-class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, TowerMixin, TreeMixin, PropsMixin, LifeMixin,
+class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, HillsideMixin, TowerMixin, TreeMixin, PropsMixin, LifeMixin,
             WeatherFxMixin, MysteryMixin, ShoreMixin, AirMixin):
     def background(self):
         """Everything behind the near scenery, rendered every minute."""
