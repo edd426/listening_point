@@ -275,14 +275,14 @@ class Schedule:
         self.persist = moist * float(r.uniform(0.55, 1.0))
         self.flights, t = [], -0.6
         while True:
-            t += r.exponential(1 / (2.2 if 5.5 < t % 24 < 22.5 else 0.8))
+            t += r.exponential(1 / (2.6 if 5.5 < t % 24 < 22.5 else 0.8))
             if t > 24.4:
                 break
             if r.random() < 0.75:   # two airways cross the sky; a few go their own way
                 hd = float(r.choice([128.0, 72.0]) + r.normal(0, 8) + 180 * r.integers(2))
             else:
                 hd = float(r.uniform(0, 360))
-            self.flights.append((t, hd % 360, float(r.uniform(10, 85) * r.choice([-1, 1])), float(r.uniform(9.4, 11.9)),
+            self.flights.append((t, hd % 360, float(r.uniform(15, 90) * (1 if r.random() < 0.75 else -1)), float(r.uniform(9.4, 11.9)),
                                  float(r.uniform(12.6, 14.6)), float(r.random())))
 
         # a starling murmuration over the far side of the bay on some autumn and winter evenings

@@ -69,8 +69,8 @@ class AirMixin:
             return
         t = self.t
         live = []
-        life = 0.5 + 45 * ev.persist ** 1.5           # minutes a trail stays (e-folding)
-        reach = min(4 * life, 120) / 60 if trails else 0
+        life = 0.5 + 30 * ev.persist ** 1.5           # minutes a trail stays (e-folding)
+        reach = min(3 * life, 75) / 60 if trails else 0
         for i, f in enumerate(ev.flights):
             # a flight matters while it is within ~110 km, or its trail still is
             tc, v = f[0], f[4]
@@ -100,12 +100,12 @@ class AirMixin:
         aircraft, then drifting with the upper wind, spreading and thinning until it is gone."""
         ev, s, W, hz, m = self.day.events, self.s, self.W, self.hz, self.m
         persist = ev.persist
-        spread = 0.012 + 0.10 * persist                 # km of width gained per minute
+        spread = 0.006 + 0.05 * persist                 # km of width gained per minute
         w0, tau0 = 0.06, 1.1
         ppr = W / math.radians(AZ_SPAN)                 # pixels per radian
-        A = min(4 * life, 120.0)
+        A = min(3 * life, 75.0)
         de0, dn0 = self.high_drift(np.array([m], np.float64))
-        patch = fnoise(256, 256, 2.6, 1.0, 91)       # one texel is 4 km of the upper air
+        patch = fnoise(256, 256, 2.0, 1.0, 91)       # one texel is 4 km of the upper air
         oy, ox = (ev.seed * 0.37) % 256, (ev.seed * 0.61) % 256
         thr = float(ndtri(1 - (0.12 + 0.5 * persist)))       # the share of the sky where trails persist
         xs, ys, sg, wt = [], [], [], []
@@ -132,7 +132,8 @@ class AirMixin:
             # optical depth across the trail: forms a moment behind the aircraft, thins as it spreads, fades
             # with age; older trails break into lumps
             lump = 1 + (0.25 + 0.2 * persist) * sm(1, 6, age) * np.sin(age * 9.0 + i) * np.sin(age * 2.3 + 2 * i)
-            od = tau0 * sm(0.0, 0.025, age) * (w0 / width) ** (0.55 - 0.25 * persist) * np.exp(-age / loc) * lump
+            lump *= 1 - 0.8 * sm(3, 15, age) * sm(0.2, 0.9, np.sin(age * 0.9 + 3 * i) * np.sin(age * 0.37 + i))
+            od = tau0 * sm(0.0, 0.025, age) * (w0 / width) ** (0.35 - 0.2 * persist) * np.exp(-age / loc) * lump
             step = np.hypot(np.gradient(x), np.gradient(y))
             step = np.minimum(step, 3 * sig)
             w = od * math.sqrt(2 * math.pi) * sig * step
