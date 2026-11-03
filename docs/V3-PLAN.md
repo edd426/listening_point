@@ -3,7 +3,7 @@
 From Evan's interview on 2026-11-01, held after the shore went live. These are his answers; the
 phases are their order. Every step gets a look test before it is installed.
 
-## HANDOFF — state at 2026-11-03 ~12:40 CET (phase 4 merged and installed; phase 5 not started)
+## HANDOFF — state at 2026-11-03 ~18:50 CET (phase 4 installed; phase 5 part 1 building)
 
 **Verified after the update** (macOS 27.2, 26B123): both venvs still import numpy 2.0.2, scipy 1.13.1
 and Pillow 11.3.0 on Xcode's Python 3.9.6; both launchd jobs are loaded; frames render; the
@@ -66,9 +66,18 @@ a bit darker than the path (he wanted them darker than the sky, not the ground):
 **Next, in order:**
 1. Phase 4 is done: part 1 (water) `caa3231`, part 2 (boats and sea life) `94b8d87`, both installed on 2026-11-03.
    Docs `docs/v3/phase4-water.md`, `docs/v3/phase4-sea-life.md`; look tests `out/look/v3/water/`, `out/look/v3/sea-life/`.
-2. **Phase 5, story over weeks**: not started; offered to Evan on 2026-11-03, waiting for his go. It builds on
-   phase 3's stage parameter (the garden and wall) and on part 2's recognisable seal (the pale cow, always on
-   the skerry's middle knob).
+2. **Phase 5, story over weeks**: Evan gave the go on 2026-11-03 ("Go ahead and start phase 5"). Three parts,
+   one after another (memory is tight with the live render job and games, so one build agent at a time):
+   - part 1 `v3/story-land` (worktree `.claude/worktrees/story-land`, started 18:50): `story.py`, the story
+     calendar (the date plus the cached weather of earlier days, offline; nothing in reference mode); work on the
+     land done offstage (a wall rebuilt course by course on workable days, the garden through phase 3's
+     `GardenStage`/`WallStage`); weather marks (a gale's branch until cleared, driftwood, snow drifts). Doc
+     `docs/v3/phase5-land.md`, look test `out/look/v3/story-land/`, `tools/story_calendar.py`.
+   - part 2, animal lives: lambs grow up, the cat's kittens, the pale cow seal (seal 0, `SEAL_SPOTS[0]`) leaves
+     and returns to her knob. Extends `story.py`.
+   - part 3, echoes of the worlds: the listener's boat and life answer the shore's history (the live ledger).
+     Touches the shore: anything that depends on the ledger must also be re-rendered by `nightly.py`'s
+     shore re-render rule, and must stay off in reference mode.
 
 **For Evan to judge** (look tests in `out/look/v3/<part>/` of this checkout, top = before, bottom = after):
 - clouds: `pair-*`, half size;
