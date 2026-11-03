@@ -58,6 +58,10 @@ def catmull(pts, u):
 # front of them, the bottom left of the frame).
 FIELD_WALLS = (((-0.02, 0.742), (0.04, 0.76), (0.10, 0.79), (0.148, 0.812)),
                ((0.196, 0.826), (0.25, 0.845), (0.30, 0.88), (0.34, 0.95)))
+# The lower wall carried on from its old end, along its own line, out past the bottom of the frame, so the
+# lower field is closed (until v3 it stopped short in the open grass). Drawn apart from FIELD_WALLS, from a
+# generator of its own, so every other stone and tuft keeps its place.
+FIELD_WALL_END = ((0.34, 0.95), (0.358, 0.9817), (0.376, 1.0133), (0.394, 1.045))
 
 
 def bezier(p, n=200):
@@ -67,7 +71,7 @@ def bezier(p, n=200):
 
 
 WALL_LINES = tuple(bezier(p) for p in FIELD_WALLS)
-_WL = np.concatenate(WALL_LINES)            # the gateway is the straight line between the two
+_WL = np.concatenate(WALL_LINES + (bezier(FIELD_WALL_END),))   # the gateway is the straight line between the two
 
 
 def wall_y(x):
