@@ -62,7 +62,8 @@ YACHT_LANES = {"far": ((-0.07, 0.5915), (0.565, 0.5958)), "bay": ((0.625, 0.6175
 # spots on the skerry (a across, b along it, as skerry_field): the pale cow's knob first; the cormorant has
 # the top knob (a -0.29, b 0.15)
 SEAL_SPOTS = ((0.23, 0.08), (0.65, 0.22), (-0.56, -0.08), (-0.09, -0.29))
-SEAL_P = (0.85, 0.55, 0.45, 0.35)      # how often each comes to a low water
+SEAL_P = (0.65, 0.4, 0.3, 0.2)      # how often each comes to a low water
+SEAL_THR = ((0.018, 0.04), (0.004, 0.016), (0.004, 0.016), (0.004, 0.016))   # how far the water must drop below it
 CORMORANT_KNOB = (-0.29, 0.15)
 
 
@@ -211,7 +212,7 @@ class SeaPlan:
     def clear_of(self, boxes_at, m0, m1, others):
         """Whether a thing whose boxes (a function of the minute) keep clear of every box in `others` (functions
         of the minute returning a box, a list of boxes or None) from minute m0 to m1."""
-        for m in range(int(m0), int(m1) + 1, 2):
+        for m in range(int(m0), int(m1) + 1):
             mine = boxes_at(m)
             if not mine:
                 continue
@@ -549,11 +550,14 @@ class SeaPlan:
         (a head near its spot, waiting for the rock to dry, or just slipped off it). Seal 0 is the pale cow, who
         comes to her own knob most low waters. wl: the water level (world units)."""
         n, g = self.low_water(m)
-        wind = float(self.day.wx.wind_ms[min(int(m), 1439)])
+        mm = min(int(m), 1439)
+        wind = float(self.day.wx.wind_ms[mm])
+        tide = self.day.tide
+        moving = abs(float(tide[min(1440, mm + 5)] - tide[max(0, mm - 5)])) / 10 > 0.0012     # not near slack water
         out = []
         for j, (a, b) in enumerate(SEAL_SPOTS):
             r = np.random.default_rng([n % 2 ** 32, 96, j])
-            comes, thr, face, wait = r.random(), r.uniform(0.004, 0.016), r.random() < 0.5, r.uniform(0.002, 0.005)
+            comes, thr, face, wait = r.random(), r.uniform(*SEAL_THR[j]), r.random() < 0.5, r.uniform(0.002, 0.005)
             if comes > SEAL_P[j] * (1.0 if wind < 11 else 0.4 if wind < 15 else 0.0):
                 continue
             _, _, h = skerry_point(a, b)
@@ -563,7 +567,7 @@ class SeaPlan:
                 q = np.random.default_rng([n % 2 ** 32, 97, j, int(m) // 6]).random()
                 pose = "flat" if q < 0.45 else "banana" if q < 0.75 else "head" if q < 0.92 else "scratch"
                 out.append((j, "rock", pose, f, a, b))
-            elif margin > thr - wait:
+            elif margin > thr - wait and moving:
                 out.append((j, "water", "wait" if g < 0 else "off", f, a, b))
         return out
 
