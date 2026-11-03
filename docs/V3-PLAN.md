@@ -3,7 +3,7 @@
 From Evan's interview on 2026-11-01, held after the shore went live. These are his answers; the
 phases are their order. Every step gets a look test before it is installed.
 
-## HANDOFF — state at 2026-11-03 ~18:50 CET (phase 4 installed; phase 5 part 1 building)
+## HANDOFF — state at 2026-11-03 ~22:50 CET (phase 5 part 1 installed; part 2 building)
 
 **Verified after the update** (macOS 27.2, 26B123): both venvs still import numpy 2.0.2, scipy 1.13.1
 and Pillow 11.3.0 on Xcode's Python 3.9.6; both launchd jobs are loaded; frames render; the
@@ -23,6 +23,7 @@ carrier is green. The lock screen was not checked (needs Evan's eye).
 | 4 sea part 1: water (cloud shadows, wind lanes, glitter, whitecaps; channel beacon, buoys, pot floats; a tidal skerry; fix: phase 2's cloud-beam glow no longer ends in a hard line below the horizon) | `caa3231` | yes, 2026-11-03 11:05 |
 | fix: puddles read as water, not snow (brightness capped against the wet ground; `PUDDLE_CAP` 2.0) | `b7728e4`, `bc3c3e9` | yes, 2026-11-03 11:53 |
 | 4 sea part 2: boats and sea life (ferry on a timetable, creel boat at the pots, extra yachts; seals and a cormorant on the skerry, gannets, dolphins) | `94b8d87` | yes, 2026-11-03 12:35 |
+| 5 story part 1: land and weather marks (`story.py` calendar from cached weather; a wall that falls in a winter gale and is rebuilt on workable days; the garden stepping with the work; a gale's branch, then logs by the shed; driftwood; snow drifts) | `09fe743` | yes, 2026-11-03 22:43 |
 
 Probes were re-run on each merged head (tests, determinism, r2 digest): all PASS. The details are in
 each part's doc under `docs/v3/`.
@@ -73,12 +74,19 @@ a bit darker than the path (he wanted them darker than the sky, not the ground):
      land done offstage (a wall rebuilt course by course on workable days, the garden through phase 3's
      `GardenStage`/`WallStage`); weather marks (a gale's branch until cleared, driftwood, snow drifts). Doc
      `docs/v3/phase5-land.md`, look test `out/look/v3/story-land/`, `tools/story_calendar.py`.
-     At ~19:40 `story.py`, `marks.py` and `tools/story_calendar.py` were committed (`1d1e92a`); probes and the look
-     test not yet run. Paused then: the data volume was full (1.1 GB free; the lead deleted its own superseded
-     frame folders from the Trash, 4 GB) and swap was at 17.7 of 18.9 GB under an iOS Simulator and Xcode run
-     from another session. Resume when memory allows.
-   - part 2, animal lives: lambs grow up, the cat's kittens, the pale cow seal (seal 0, `SEAL_SPOTS[0]`) leaves
-     and returns to her knob. Extends `story.py`.
+     Merged `09fe743` and installed 22:43. The lead re-ran the probes on the branch head `dcd9658` (106 tests OK;
+     `tests/test_shore_reference.py` 4/4; 6 frames rendered twice, 0 differ; r2 digest unchanged) and after the
+     merge (106 OK). Cost ratio 1.02 CPU (the delegate's measure, under load 12-170). From the real cache the
+     story shows almost nothing yet (a small garden lag on 6 days of Oct 1 to Nov 5). Worktree and branch removed.
+     The build ran during a full disk (the lead deleted its own superseded frame folders from the Trash, 4 GB) and
+     another session's iOS Simulator and Xcode runs; a "pause" reached the delegate only after it had finished.
+   - part 2 `v3/story-lives` (worktree `.claude/worktrees/story-lives`, started 22:40 from `09fe743`): lambs born
+     and growing up, weaned and sold by autumn; the cat's kittens some years; the pale cow seal (seal 0,
+     `SEAL_SPOTS[0]`) away for weeks and back to her knob. Extends `story.py`. Doc `docs/v3/phase5-lives.md`, look
+     test `out/look/v3/story-lives/`. Every render or test run waits on `gate2.sh` in the lead's scratchpad
+     (memorystatus >= 35 and load <= 12 for 5 minutes, or a `gate.open` file beside it), because the ClaudeLifter
+     session's Xcode and Simulator runs will go on for some hours; that session will message `projects-8a` when
+     it is done.
    - part 3, echoes of the worlds: the listener's boat and life answer the shore's history (the live ledger).
      Touches the shore: anything that depends on the ledger must also be re-rendered by `nightly.py`'s
      shore re-render rule, and must stay off in reference mode.
@@ -106,6 +114,15 @@ a bit darker than the path (he wanted them darker than the sky, not the ground):
   - the animals are drawn larger than life (seals and cormorant 1.9x, dolphins 2x, gannets 3x), and even so the
     grey seals and flying gannets are subtle at desktop size;
   - boats move slower than life so nothing jumps between minutes; yachts sail one leg and don't tack.
+
+- story, land and weather (`out/look/v3/story-land/`, `docs/v3/phase5-land.md`): `pair-*`, `crop-*`, `seq-wall`,
+  `seq-branch`. Things to look at:
+  - at desktop size the marks are faint: the wall gap and the branch read if you look; the stakes, the spade
+    and the logs only up close;
+  - the fallen stones and the heap are faceted grey rocks like the outcrops (pasted-on CG?); the driftwood is
+    clean-edged up close;
+  - how often: in the synthetic year the logs show on about 110 days and the wall gap on about 114 (late
+    November to March in a weak winter).
 
 **Review bar:**
 - Restraint: Evan found the first grass "a bit distracting".
