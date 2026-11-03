@@ -44,11 +44,12 @@ from tower import TowerMixin
 from tree import TreeMixin
 from mystery import MysteryMixin
 from shore import ShoreMixin
+from water import WaterMixin
 from weatherfx import WeatherFxMixin
 
 
 class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, HillsideMixin, TowerMixin, TreeMixin, PropsMixin, LifeMixin,
-            FaunaMixin, WeatherFxMixin, MysteryMixin, ShoreMixin, AirMixin):
+            FaunaMixin, WeatherFxMixin, MysteryMixin, ShoreMixin, AirMixin, WaterMixin):
     def background(self):
         """Everything behind the near scenery, rendered every minute."""
         self.sky()
@@ -62,10 +63,15 @@ class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, HillsideMixi
         self.beams()
         self.plan_emitters()
         self.sea()
+        if not self.reference:
+            self.beacon()           # beyond the whale's waters
         self.whale()
         self.mist()
-        self.boats()
-        self.moored_boat()
+        if self.reference:
+            self.boats()
+            self.moored_boat()
+        else:
+            self.bay()              # the skerry, floats, buoys and boats, far to near (water.py)
         self.foam()
 
     def foreground(self):
@@ -131,6 +137,8 @@ class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, HillsideMixi
         """fg is (lit colour, coverage, colour with the sun hidden or None), already blended in time."""
         self.background()
         self.fog_far()
+        if not self.reference:
+            self.beacon_glow()      # the beacon's light, through the fog (water.py)
         self.ghost_ship()
         C, A, Cs = fg
         if Cs is not None:

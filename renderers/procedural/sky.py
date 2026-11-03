@@ -386,14 +386,17 @@ class SkyMixin:
             self._heaps = cumulus.population(self, self.cloud_regime())
         return self._heaps
 
-    def _layer_field(self, i, alt, az):
+    def _layer_field(self, i, alt, az, shift=None):
         """Layer i's noise toward the given directions, drifting with the wind, and its patchiness
-        (an offset to the threshold): (n0, offset, rows, cols, texture)."""
+        (an offset to the threshold): (n0, offset, rows, cols, texture). shift (km east, km north) moves
+        the point the directions are seen from, as for a cloud's shadow on the sea (water.py)."""
         name, tx, K, hk, wf, op, soft = CLOUD_LAYERS[i]
         a = np.radians(np.maximum(alt, 0.8))
         zr = np.radians(az)
         u, ca = np.sin(a), np.cos(a)
         Xp, Zp = ca * np.sin(zr) / u, -ca * np.cos(zr) / u
+        if shift is not None:
+            Xp, Zp = Xp + shift[0] / hk, Zp - shift[1] / hk
         de, dn = self.day.drift_e[self.m], self.day.drift_n[self.m]
         Xp = Xp - de * wf / hk
         Zp = Zp + dn * wf / hk
@@ -422,7 +425,7 @@ class SkyMixin:
             got[key] = float(np.quantile(m, 1 - cover)) - 0.175 * CLOUD_LAYERS[i][6]
         return got[key]
 
-    def cloud_layer(self, i, alt, az, detail=False):
+    def cloud_layer(self, i, alt, az, detail=False, shift=None):
         """Density of cloud layer i (0 high, 1 mid, 2 low) toward the given directions, drifting with the
         wind. Overhead the low layer carries the heaps' share of the low cover too, since heaps are
         only drawn lower down (cumulus.population)."""
@@ -431,7 +434,7 @@ class SkyMixin:
         top = self.wx.cloud_low if i == 2 else cover
         if max(cover, top) < 0.01:
             return None
-        n0, off, rows, cols, tex = self._layer_field(i, alt, az)
+        n0, off, rows, cols, tex = self._layer_field(i, alt, az, shift)
         th = (self.layer_threshold(i, cover) if cover >= 0.01 else 9.0) + off * (1 - cover)
         if top > cover + 0.005:      # overhead: the whole low cover
             w = sm(OVERHEAD - 4, OVERHEAD + 6, alt)
