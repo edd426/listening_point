@@ -214,14 +214,19 @@ class WeatherFxMixin:
         s_glow = 0.35 * sm(-1, 3, sa) * sm(35, 15, sa) * max(self.sun_vis, 0.8 * broken) * (1 - 0.6 * self.overcast)
         s_beam = sm(-4, 0, sa) * sm(50, 22, sa) * broken * haze * (1 - 0.5 * self.overcast)
         add = upsample(g * s_glow, (rows, W))[..., None] * keys(GLOW_COL, max(sa, 0))
+        # on the sea the glow and the shafts fade out before the band ends, so it leaves no edge
+        # across the bay (v3 water: it stopped in a hard line 10% of the frame below the horizon)
+        tail = np.ones((rows, 1, 1), np.float32)
+        tail[hz:, 0, 0] = sm(sea_rows, 0.25 * sea_rows, np.arange(rows - hz, dtype=np.float32))
+        add *= tail
         if s_beam > 0.01:
             sea = np.ones((h, 1), np.float32)
             sea[hz // k:, 0] = np.exp(-(np.arange(h - hz // k, dtype=np.float32) * k) / (0.035 * H)) * 0.6
             dk = np.where(inside, ndi.map_coordinates(dark_p, [T, R], order=1, mode="grid-wrap"), 0) * sea * s_beam
             lf = np.where(inside, ndi.map_coordinates(lift_p, [T, R], order=1, mode="grid-wrap"), 0) * sea * s_beam
             free = 1 - cover[:rows, :, None]
-            self.c[:rows] *= 1 - np.clip(0.6 * upsample(dk, (rows, W)), 0, 0.55)[..., None] * free
-            add += upsample(lf, (rows, W))[..., None] * keys(CLOUD_SUN, sa + 1.0) * 0.8 * free
+            self.c[:rows] *= 1 - np.clip(0.6 * upsample(dk, (rows, W)), 0, 0.55)[..., None] * free * tail
+            add += upsample(lf, (rows, W))[..., None] * keys(CLOUD_SUN, sa + 1.0) * 0.8 * free * tail
         self.c[:rows] += add
 
     def precipitation(self):

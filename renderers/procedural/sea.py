@@ -32,6 +32,9 @@ class SeaMixin:
             px, py = self.pier_lantern()
             self.emitters.append((px, py, np.array([255, 196, 120], np.float32), 1.2 * self.lights_on, self.pier_water_y()))
             self.shore_emitters()
+        if self.lights_on > 0 and not self.reference:     # the beacon's steady red light (water.py)
+            bx, ly, yw = self.beacon_light()
+            self.emitters.append((bx, ly, np.array([255, 70, 56], np.float32), 0.3 * self.lights_on, yw))
         if self.day.events.boat(self.t) is None:
             bx, by = MOORED[0] * W, MOORED[1] * H
             sz = 170 * s
@@ -50,17 +53,25 @@ class SeaMixin:
         W, H, hz, s = self.W, self.H, self.hz, self.s
         rows, ad, R, C, fade, wa, wb, ra, rb = sea_fields(W, H)
         wx = self.wx
+        v3 = not self.reference     # the water of v3 phase 4 (water.py); the reference frames keep the old sea
         rough = 0.7 + 0.06 * wx.wind_ms + 0.4 * self.season.sea_winter * min(1.0, wx.wind_ms / 8)
         # the waves change a little each minute: two fixed wave fields mixed in a slowly turning ratio
         p1, p2 = 2 * math.pi * self.m / 37.0, 2 * math.pi * self.m / 23.0
         w = (wa * math.cos(p1) + wb * math.sin(p1)) * rough
+        if v3:
+            # the wind's marks: cat's paws, lanes and slicks roughen the waves here and smooth them there
+            lr, lift = self.sea_wind(rows)
+            w = w * lr
         rp = ra * math.cos(p2) + rb * math.sin(p2)
         spark = np.clip(rp - 0.9, 0, None) ** 1.5 * 2.0
         off = w * (1.0 + ad[:, None] * 2.0) * s * 1.5
         xj = np.clip((np.arange(W)[None, :] + (w * 2 + rp * (1 + ad[:, None] * 0.25)) * s * 2).astype(np.int32), 0, W - 1)
         refl = 0
         for k in (0.5, 1.0, 1.7):
-            ri = np.clip((2 * VH * H - rows[:, None] - off * k).astype(np.int32), 0, hz - 1)
+            if v3:
+                ri = np.clip((2 * VH * H - rows[:, None] - off * k - lift).astype(np.int32), 0, hz - 1)
+            else:
+                ri = np.clip((2 * VH * H - rows[:, None] - off * k).astype(np.int32), 0, hz - 1)
             refl = refl + self.c[ri, xj] / 3
         if getattr(self, "heap_occ", None) is not None:
             # the heaps' reflections: their dark bases would read as blots on the water, so the sea
@@ -69,8 +80,26 @@ class SeaMixin:
             ha = ho[np.minimum(ri // 2, ho.shape[0] - 1), np.minimum(xj // 2, ho.shape[1] - 1)][..., None]
             refl = refl * (1 - 0.55 * ha) + self.hor_col * (0.55 * ha)
         f = (0.1 + 0.85 * np.exp(-ad / 5.5))[:, None, None] * (1 - 0.3 * max(wx.rain, 0.5 * wx.drizzle)) * (1 - 0.25 * sm(6, 14, wx.wind_ms))
-        body = WATER * (self.amb + 0.35 * self.sun_col * self.sun_str + 0.2 * MOON_COL * self.moon_str)
-        sea = refl * f * 0.95 + body * (1 - f)
+        if v3:
+            # glassy water mirrors more of the bright low sky; rippled patches less, and show the water's own darker body
+            f = np.clip(f * (1 - 0.45 * (lr - 1) * sm(0.5, 3.0, ad)[:, None])[..., None], 0.04, 0.97)
+        T = Tm = None
+        if v3:
+            # cloud shadows: the sun's light in the water, where each cloud lets it through
+            self.sea_T = T = self.sea_shadow("sun") if self.sun_str > 0 or self.sun_alt > -1 else None
+            self.sea_Tm = Tm = self.sea_shadow("moon") if self.night > 0 and self.moon_alt > -1 else None
+        if T is not None:
+            body = WATER * (self.amb + 0.2 * MOON_COL * self.moon_str)
+            sea = refl * f * 0.95 + body * (1 - f)
+            sea += (WATER * 0.35 * self.sun_col * sm(-2.5, 6, self.sun_alt)) * (T[..., None] * (1 - f))
+            # seen this low, the water mostly mirrors the sky, so the shadows would barely show; drawn
+            # as a painter would, the shaded water is darker and the lit water brighter than the bay as a
+            # whole (so an even sky, clear or overcast, leaves the sea as it was), fading out far off
+            tm = float(np.median(T[::8, ::8]))
+            sea *= (1 + 0.25 * sm(0, 0.3, self.sun_str) * (0.4 + 0.6 * sm(2, 10, self.sun_alt)) * (T - tm) * sm(0.6, 5.0, ad)[:, None])[..., None]
+        else:
+            body = WATER * (self.amb + 0.35 * self.sun_col * self.sun_str + 0.2 * MOON_COL * self.moon_str)
+            sea = refl * f * 0.95 + body * (1 - f)
         sea *= (1 + 0.10 * w)[..., None]
         spark = np.clip(rp - 0.9, 0, None) ** 1.5 * 2.0
         Xs = np.arange(W, dtype=np.float32)[None, :]
@@ -82,11 +111,21 @@ class SeaMixin:
             vert = np.exp(-((ad[:, None] - ctr) / spread) ** 2) + 0.25 * np.exp(-ad[:, None] / (3 + ctr))
             return (horiz * vert * (0.25 + spark) * k)[..., None] * np.asarray(colr, np.float32)
 
-        if self.sun_alt > -1:
+        if self.sun_alt > -1 and v3:
+            sx = to_screen(self.sun_alt, self.sun_az)[0] * W
+            k = 1.2 * sm(-1, 3, self.sun_alt) * (1.2 - 0.5 * sm(10, 40, self.sun_alt))
+            sea += self.glitter(self.sun_alt, sx, keys(SUN_DISK, self.sun_alt), k * (self.sun_vis ** 1.5 if T is None else 1.0),
+                                1.0, ad, rp, lr, T)
+        elif self.sun_alt > -1:
             sx = to_screen(self.sun_alt, self.sun_az)[0] * W
             sea += path(self.sun_alt, sx, keys(SUN_DISK, self.sun_alt),
                         1.2 * sm(-1, 3, self.sun_alt) * (1.2 - 0.5 * sm(10, 40, self.sun_alt)) * self.sun_vis ** 1.5, 1.0)
-        if self.moon_alt > -1 and self.night > 0:
+        if self.moon_alt > -1 and self.night > 0 and v3:
+            mx = to_screen(self.moon_alt, self.moon_az)[0] * W
+            k = 0.65 * self.night * sm(-1, 6, self.moon_alt) * self.moon_bright ** 0.5
+            sea += self.glitter(self.moon_alt, mx, (225, 230, 245), k * ((1 - 0.9 * self.overcast) if Tm is None else 1.0),
+                                0.8, ad, rp, lr, Tm)
+        elif self.moon_alt > -1 and self.night > 0:
             mx = to_screen(self.moon_alt, self.moon_az)[0] * W
             sea += path(self.moon_alt, mx, (225, 230, 245), 0.65 * self.night * sm(-1, 6, self.moon_alt) * self.moon_bright ** 0.5 * (1 - 0.9 * self.overcast), 0.8)
         for (ex, ey, ecol, es, wy) in self.emitters:
@@ -101,9 +140,9 @@ class SeaMixin:
             sigx = 2.5 * s + rr * 0.03
             hx = np.exp(-((np.arange(c0, c1, dtype=np.float32)[None, :] - ex) / sigx) ** 2)
             sea[ra:rb, c0:c1] += (prof * hx * (0.35 + spark[ra:rb, c0:c1] * 1.5) * es)[..., None] * ecol
-        # whitecaps when the wind gets up
+        # whitecaps when the wind gets up (in v3 drawn as crests instead, by whitecaps(), below)
         caps = sm(7, 14, wx.wind_ms)
-        if caps > 0:
+        if caps > 0 and not v3:
             wc = sample(fnoise(256, 1024, 1.8, 3.0, 12), R * 1.6 + self.m * 0.7, C * 1.6) * fade
             foam = (sm(1.6 - 0.5 * caps, 2.6 - 0.5 * caps, wc) * caps * 0.8)[..., None]
             sea = sea * (1 - foam) + np.array([215, 222, 226], np.float32) * (self.amb + 0.4 * self.sun_col * self.sun_str) * foam
@@ -121,6 +160,8 @@ class SeaMixin:
         sea = sea * (1 - tint) + shallow * tint
         self.c[hz:] = sea
         self.wave = w
+        if v3:
+            self.whitecaps()
 
     def mist(self):
         ev, wx = self.day.events, self.wx

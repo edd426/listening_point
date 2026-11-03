@@ -120,7 +120,8 @@ together on `shore/sync` (2026-11-01), not installed:
 ## Modules
 
 `renderers/procedural/` holds mixins on one `Frame`: `sky`, `sea`, `land`, `hillside`, `tree`, `tower`, `props`,
-`life`, `fauna`, `distant`, `weatherfx`, `mystery`, `shore`, `air`. `fauna` (v3 phase 3 part 2,
+`life`, `fauna`, `distant`, `weatherfx`, `mystery`, `shore`, `air`, `water`. `water` (v3 phase 4 part 1,
+`docs/v3/phase4-water.md`) draws the light on the sea and the marks in the bay. `fauna` (v3 phase 3 part 2,
 `docs/v3/phase3-animals.md`) draws the sheep, fox, hares and crows, and hides any animal standing behind the
 walls, the gate, the shed, the hives, the rocks or the gorse (masks recorded while the hill is drawn). `day.py` builds one date's per-minute astronomy, weather,
 season (`season.py`), schedule (`events.py`) and mysteries. `astro.py` and `weather.py` are

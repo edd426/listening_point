@@ -34,7 +34,7 @@ TOOL = os.path.join(ROOT, "tools", "shore_reference.py")
 # Every method that draws a creature, a rare event or a passing thing. In reference mode none may draw.
 DRAWERS = ("comet", "ghost_ship", "far_lights", "whale", "footprints", "bottle", "book", "door_light", "pier_gulls",
            "sheep", "critters", "cat", "heron", "owl", "sky_extras", "boats", "falling_leaves", "high_air", "air_kite",
-           "fox", "hares", "crows")
+           "fox", "hares", "crows", "beacon", "beacon_glow", "sea_marks", "skerry", "whitecaps")
 # (date, time, weather, what normal mode draws then): each a day when it really happens (2027's schedule)
 CASES = [
     (D(2027, 1, 25), "02:05", "fair", {"far_lights"}),                    # the light in the empty cottage
@@ -57,6 +57,8 @@ CASES = [
     (D(2027, 1, 15), "16:00", "fair", {"sky_extras"}),                    # starlings at dusk
     (D(2027, 5, 3), "06:20", "fair", {"sky_extras"}),                     # a balloon
     (D(2027, 4, 25), "15:00", "synthetic", {"air_kite"}),
+    (D(2027, 1, 20), "12:00", "synthetic", {"beacon", "sea_marks", "skerry", "whitecaps"}),   # the water in a blow
+    (D(2026, 11, 13), "12:00", "synthetic", {"beacon", "sea_marks", "skerry"}),                 # low water, a calm
 ]
 SMALL = 0.25
 
@@ -126,7 +128,7 @@ def test_reference_mode_draws_no_creature_or_rare_event():
         assert specks == 0, (date, hhmm, "moths or fireflies in reference mode")
     assert seen >= {"comet", "ghost_ship", "far_lights", "whale", "bottle", "book", "door_light", "pier_gulls",
                     "sheep", "critters", "cat", "heron", "owl", "falling_leaves", "high_air", "air_kite",
-                    "fox", "hares", "crows"}, seen
+                    "fox", "hares", "crows", "beacon", "beacon_glow", "sea_marks", "skerry", "whitecaps"}, seen
     # the moths and fireflies of a warm summer night show only in normal mode
     day = Day(D(2027, 7, 6), weather="fair")
     assert render_with_spies(day, minute("23:30"))[1] > 0
