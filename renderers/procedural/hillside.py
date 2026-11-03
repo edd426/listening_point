@@ -120,6 +120,7 @@ MEADOW = ((0.260, 0.905, 90, 22, 70, 1), (0.330, 0.800, 70, 14, 46, 2), (0.060, 
 # puddles on the path: (along 0..1, across -1..1, size); and in hollows: (x, y, rx at scale 1)
 PATH_PUDDLES = ((0.12, 0.40, 1.1), (0.31, 0.38, 1.1), (0.335, -0.40, 0.9), (0.52, 0.41, 0.8), (0.70, -0.40, 0.7))
 HOLLOW_PUDDLES = ((0.170, 0.834, 30),)
+PUDDLE_CAP = 1.15      # a puddle is at most this much brighter than the wet ground round it
 
 
 def enc(n):
@@ -895,6 +896,10 @@ class HillsideMixin:
         here = col[:, :xw]
         sky = sky * 0.8 + sky.mean(-1, keepdims=True) * 0.2        # muddy water: a little greyer than the sky
         water = sky * 0.6 + here * 0.4
+        # The sky mirrored, but never much brighter than the wet ground round it. Under a bright grey sky they mirrored it
+        # whole and read as snow or dropped wool, not water (Evan, 2026-11-03); under a blue sky they stay blue.
+        lw, lh = water.mean(-1, keepdims=True), here.mean(-1, keepdims=True)
+        water = water * np.minimum(1.0, (PUDDLE_CAP * lh + 2.0) / np.maximum(lw, 1e-3))
         water = water * (1 - 0.75 * bank) + here * 0.55 * 0.75 * bank
         if self.wx.frost > 0.3 and self.wx.temp_c < 0.5:     # frozen over: pale, lit like the ground
             water = water * 0.45 + np.array((196, 204, 212), np.float32) * L[:, :xw] * 0.55
