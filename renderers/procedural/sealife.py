@@ -16,8 +16,9 @@ import math
 import numpy as np
 
 from core import *  # noqa: F401,F403
+from events import catmull, smoothstep
 from fauna import Sprite
-from seaplan import (CREEL_B, CREEL_FROM, CREEL_L, CORMORANT_KNOB, FERRY_B, FERRY_L, SEAL_SPOTS, ferry_way,
+from seaplan import (CREEL_B, CREEL_FROM, CREEL_IN, CREEL_L, CREEL_OUT, CORMORANT_KNOB, FERRY_B, FERRY_L, SEAL_SPOTS, ferry_way,
                      heading_of, skerry_point)
 from water import sea_point
 
@@ -242,13 +243,16 @@ class SeaLifeMixin:
             # the bow wave, hugging the hull
             bw = [(half_l * 0.9 - d, 0.05, zs * beam_m * (0.15 + 0.35 * min(1, d / (0.3 * length_m)))) for d in np.linspace(0, 0.45 * length_m, 5)]
             L.line([tuple(p) for p in pl.screen(bw)], foam, max(0.6 * self.s, 0.35 * pl.ky), a=0.7 * a0)
-        # the churned water astern, widening and fading
+        # the churned water astern: broken streaks that widen and fade
         ds = np.linspace(0, reach * 0.7, n)
-        for i in range(n - 1):
-            w0 = beam_m * (0.3 + 0.25 * ds[i] / max(1.0, length_m))
-            w1 = beam_m * (0.3 + 0.25 * ds[i + 1] / max(1.0, length_m))
-            q = pl.screen([(-half_l - ds[i], 0, -w0), (-half_l - ds[i + 1], 0, -w1), (-half_l - ds[i + 1], 0, w1), (-half_l - ds[i], 0, w0)])
-            L.poly([tuple(p) for p in q], foam, a=0.45 * a0 * (1 - i / (n - 1)) ** 1.6)
+        for zf in (-1.0, -0.4, 0.3, 0.9):
+            for i in range(n - 1):
+                if (i + int(3 * zf)) % 3 == 2:
+                    continue          # gaps, so it reads as broken water and not a band
+                w0 = beam_m * (0.3 + 0.25 * ds[i] / max(1.0, length_m)) * zf
+                w1 = beam_m * (0.3 + 0.25 * ds[i + 1] / max(1.0, length_m)) * zf
+                q = pl.screen([(-half_l - ds[i], 0, w0), (-half_l - ds[i + 1], 0, w1)])
+                L.line([tuple(q[0]), tuple(q[1])], foam, max(0.6 * self.s, 0.22 * pl.ky), a=0.5 * a0 * (1 - i / (n - 1)) ** 1.5)
 
     def waterline(self, M, pl, L, shade, wash=0.25):
         """The wet dark line where the hull meets the water and a little lap of foam along it."""
@@ -362,8 +366,10 @@ class SeaLifeMixin:
         out = []
         if rel < 112.5:
             out.append(((5.6, 15.1, 0), (255, 246, 226), 1.0))
-            side = (5.6, 9.2, 3.1) if pl.port_seen else (5.6, 9.2, -3.1)
-            out.append((side, (255, 64, 52) if pl.port_seen else (70, 255, 120), 0.9))
+            if pl.port_seen or rel < 6:
+                out.append(((5.6, 9.2, 3.1), (255, 64, 52), 0.9))         # red to port
+            if not pl.port_seen or rel < 6:
+                out.append(((5.6, 9.2, -3.1), (70, 255, 120), 0.9))       # green to starboard
         else:
             out.append(((-17.8, 3.6, 0), (255, 246, 226), 0.9))
         lights = []
@@ -482,12 +488,14 @@ class SeaLifeMixin:
             d = (math.atan2(b[1], b[0]) - ang + math.pi) % (2 * math.pi) - math.pi
             ang += d * t
             return math.cos(ang), math.sin(ang)
+        def along(pts, t):
+            pos, tan = catmull(pts, min(1.0, max(0.0, t)))
+            return float(pos[0]), float(pos[1]), heading_of(float(tan[0]), float(tan[1]))
         if what == "come":
-            Xp, Zp = at_pot(0)
-            t = 1 - (1 - u) ** 2
-            X, Z = Xs + (Xp - Xs) * t, Zs + (Zp - Zs) * t
-            h_mv = heading_of(Xp - Xs, Zp - Zs)
-            return X, Z, lerp_h(h_mv, h_set, smoothstep((u - 0.6) / 0.4)), 0.12 * (1 - t) + 0.02, what
+            way = [(Xs, Zs)] + [sea_point(*q)[:2] for q in CREEL_IN] + [at_pot(0)]
+            t = 1 - (1 - u) ** 1.6
+            X, Z, h_mv = along(way, t)
+            return X, Z, lerp_h(h_mv, h_set, smoothstep((u - 0.75) / 0.25)), 0.1 * (1 - t) + 0.02, what
         if what in ("alongside", "haul", "set"):
             X, Z = at_pot(pot)
             if what == "alongside":
@@ -498,14 +506,14 @@ class SeaLifeMixin:
             Xb, Zb = at_pot(pot + 1)
             t = smoothstep(u)
             return Xa + (Xb - Xa) * t, Za + (Zb - Za) * t, h_set, 0.03, what
+        way = [at_pot(4)] + [sea_point(*q)[:2] for q in CREEL_OUT] + [(Xs, Zs)]
         if what == "turn":
             X, Z = at_pot(4)
-            h_go = heading_of(Xs - X, Zs - Z)
-            return X, Z, lerp_h(h_set, h_go, smoothstep(u)), 0.02, what
+            return X, Z, lerp_h(h_set, along(way, 0.02)[2], smoothstep(u)), 0.02, what
         if what == "go":
-            X4, Z4 = at_pot(4)
-            t = u * u
-            return X4 + (Xs - X4) * t, Z4 + (Zs - Z4) * t, heading_of(Xs - X4, Zs - Z4), 0.04 + 0.12 * t, what
+            t = u ** 1.25
+            X, Z, h_mv = along(way, t)
+            return X, Z, h_mv, 0.04 + 0.08 * t, what
         return None
 
     def creel_y(self):
@@ -528,7 +536,7 @@ class SeaLifeMixin:
         x, yw = pl.screen([(0, 0, 0)])[0]
         shade = self.local_shade(x, yw)
         L, R, yw = self.model_layers(pl, M, 10 * self.s + 4 * pl.kx)
-        self.wake(pl, L, speed * 4, CREEL_L, CREEL_B, shade, k=1.0)
+        self.wake(pl, L, speed * 2.5, CREEL_L, CREEL_B, shade, k=1.0)
         if what == "set" and c[2] < 0.7:
             # the pot going back over the side: a splash and a ring
             sp = pl.screen([(-0.5, 0, -1.9 if not pl.port_seen else -1.9)])[0]

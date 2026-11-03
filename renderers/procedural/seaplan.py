@@ -32,9 +32,10 @@ JD0 = 2461000.0 - 0.335 * T_M2         # a low water: low waters are counted fro
 # --------------------------------------------------------------- the ferry --
 # The island ferry's way, mainland to island, as frame fractions of its waterline: in from beyond the right
 # edge (the mainland slip is just out of sight), across the bay, past the channel beacon on its far side
-# (keeping it to port), then a turn to starboard and away to the island's harbour on the horizon.
+# (keeping it to port), on a little way, then a turn to starboard and away into the island's harbour on the
+# horizon, whose mouth opens to the east.
 FERRY_WAY = [(1.075, 0.5912), (0.95, 0.5955), (0.84, 0.5995), (0.73, 0.6035), (0.645, 0.6085), (0.597, 0.6105),
-             (0.5855, 0.6005)]
+             (0.577, 0.6085), (0.5695, 0.6035)]
 FERRY_HARBOUR = (0.5812, 0.5817)
 FERRY_L, FERRY_B = 36.0, 9.0           # length and beam, metres
 FERRY_OMEGA = (0.10, 0.25)             # its pace: radians a minute across the view, then the fraction of its
@@ -50,7 +51,9 @@ FERRY_TABLES = (
 
 # ------------------------------------------------------------ the creel boat --
 CREEL_L, CREEL_B = 7.5, 2.8
-CREEL_FROM = (0.556, 0.733)            # out of sight behind the point (the hill), where it comes and goes
+CREEL_FROM = (0.50, 0.687)             # behind the point (the hill), where it comes and goes
+CREEL_IN = ((0.585, 0.697), (0.625, 0.716))                    # round the point and in to the dahn
+CREEL_OUT = ((0.705, 0.729), (0.625, 0.712), (0.578, 0.695))   # out beyond the floats and back round the point
 CREEL_DAYS = (1, 3, 5)                 # Tuesday, Thursday, Saturday in the season; Saturday in winter
 
 # ------------------------------------------------------------------ yachts --
@@ -243,8 +246,8 @@ class SeaPlan:
             legs = [l for l in legs if l[0] not in (table[2][0], table[3][0])]
         for m0, back in sorted(legs):
             jitter = int(r.integers(0, 4))
-            if not self.wx_ok(m0, m0 + way.T, wind=15.0, gust=22.0):
-                continue                     # a gale: the crossing is cancelled
+            if not self.wx_ok(m0, m0 + way.T, wind=15.0, gust=22.0, fog=0.5):
+                continue                     # a gale or a thick fog: the crossing is cancelled
             for late in range(jitter, jitter + 27, 3):
                 start = m0 + late
                 if self.is_quiet(start, start + way.T):
@@ -303,7 +306,7 @@ class SeaPlan:
         plan.append(("turn", 4, t))
         t += 3
         plan.append(("go", 4, t))
-        t += 7
+        t += 10
         plan.append(("gone", 4, t))
         lo = max(self.sunrise + 0.5, 6.0) * 60
         hi = 10.5 * 60
