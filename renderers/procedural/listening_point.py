@@ -39,6 +39,7 @@ from land import LandMixin
 from life import LifeMixin
 from props import PropsMixin
 from sea import SeaMixin
+from sealife import SeaLifeMixin
 from sky import SkyMixin
 from tower import TowerMixin
 from tree import TreeMixin
@@ -49,7 +50,7 @@ from weatherfx import WeatherFxMixin
 
 
 class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, HillsideMixin, TowerMixin, TreeMixin, PropsMixin, LifeMixin,
-            FaunaMixin, WeatherFxMixin, MysteryMixin, ShoreMixin, AirMixin, WaterMixin):
+            FaunaMixin, WeatherFxMixin, MysteryMixin, ShoreMixin, AirMixin, WaterMixin, SeaLifeMixin):
     def background(self):
         """Everything behind the near scenery, rendered every minute."""
         self.sky()
@@ -64,6 +65,7 @@ class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, HillsideMixi
         self.plan_emitters()
         self.sea()
         if not self.reference:
+            self.far_sea()          # the ferry, the yachts and the gannets, beyond the beacon (sealife.py)
             self.beacon()           # beyond the whale's waters
         self.whale()
         self.mist()
@@ -139,6 +141,7 @@ class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, HillsideMixi
         self.fog_far()
         if not self.reference:
             self.beacon_glow()      # the beacon's light, through the fog (water.py)
+            self.sea_lights()       # the ferry's lights (sealife.py)
         self.ghost_ship()
         C, A, Cs = fg
         if Cs is not None:

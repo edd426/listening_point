@@ -13,6 +13,7 @@ import numpy as np
 
 import astro
 import events
+import seaplan
 import shore as shore_mod
 import weather as wxmod
 from mystery import Mysteries
@@ -53,6 +54,9 @@ class Day:
         ha = np.radians((self.lst - ra) * 15)
         spring = 0.72 + 0.28 * np.cos(2 * np.radians(np.asarray(ill["elongation_deg"], np.float64)))
         self.tide = 0.5 + 0.5 * spring * np.cos(2 * (ha - np.radians(45)))
+        # where in its half-day cycle the tide is: 0 at low water, 0.5 at high water (seaplan.py counts the
+        # low waters with it, so a haul-out that spans midnight is the same on both days)
+        self.tide_phase = ((np.degrees(ha) - 135.0) % 180.0) / 180.0
         self.moon_frac = np.asarray(ill["fraction"], np.float64)
         self.moon_waxing = np.asarray(ill["waxing"])
         self.moon_age = float(np.asarray(ill["age_days"])[720])
@@ -76,6 +80,8 @@ class Day:
         self.reference = bool(reference)
         if self.reference:
             self._hold_still()
+        # the bay's boats and animals (seaplan.py): none in reference mode
+        self.sea = seaplan.NoPlan() if self.reference else seaplan.SeaPlan(self)
         self.shore = shore_mod.load_shore(shore, self) if shore else None
         self.lamp_lit = shore_mod.lamp_lit(lamp, date, self.tz) if lamp else None
 

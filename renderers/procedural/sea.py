@@ -35,6 +35,8 @@ class SeaMixin:
         if self.lights_on > 0 and not self.reference:     # the beacon's steady red light (water.py)
             bx, ly, yw = self.beacon_light()
             self.emitters.append((bx, ly, np.array([255, 70, 56], np.float32), 0.3 * self.lights_on, yw))
+        if self.lights_on > 0 and not self.reference:     # the ferry's lights (sealife.py)
+            self.sea_emitters()
         if self.day.events.boat(self.t) is None:
             bx, by = MOORED[0] * W, MOORED[1] * H
             sz = 170 * s
