@@ -97,8 +97,9 @@ whichever date asks, so the story never contradicts itself from one day to the n
   4. the heap goes down as the stones go in (to an eighth of it), and the leftovers are taken away the next
      workable day.
 
-  So a wall stands whole again 16 workable days into March, three to four weeks in a typical spring; a wet or
-  frozen week holds it up. The stones in the wall are the same stones at every stage (phase 3's rule).
+  So a wall is whole again after 15 workable days of March and its last stones go after the 16th: two and a half
+  weeks in the dry synthetic March of 2027, three to four in a typical spring; a wet or frozen week holds it up.
+  The stones in the wall are the same stones at every stage (phase 3's rule).
 
 ### The garden, stepping with the work
 
@@ -152,7 +153,7 @@ bed is dug (39 days in the synthetic 2027).
   ten minutes, comes within 0.015 of the beach's height of the lowest piece; it is also hidden while the sea is
   round it), or the night after the 2nd-6th workable day after it came (taken for the fire), or after 21 days.
 - **Look** (`driftwood()`): a bent, tapering trunk of bleached silver-grey wood worn smooth, 1.0-1.9 m long at
-  the hillside's scale (about 45-90 px on the far stretch, 90-130 px on the near one), lumpy where branches were,
+  the hillside's scale (about 35-90 px on the far stretch, 70-135 px on the near one), lumpy where branches were,
   its top catching the light, cracks and paler streaks along the grain, often a gnarled root end, a splintered
   broken end, a shadow on the stones under it; darker when wet.
 
@@ -255,7 +256,88 @@ days showing: wall 114, branch 46, logs 112, driftwood 22, drifts 25, spade 39, 
 
 ## Probes
 
-PROBES
+All run on the branch head's code (`cd134cd`; the doc commits after it change no code), one at a time,
+`nice -n 15`, `--jobs 1`. The Mac was heavily shared throughout: load 12-170 (an iOS Simulator and Xcode
+builds), swap 12-13 GB, and for an hour the data volume was full (1.1 GB free).
+
+1. **Tests.** `$PY -m unittest discover -s tests`:
+   ```
+   Ran 106 tests in 385.126s
+
+   OK
+   ```
+   That is 96 before, plus 10 in `tests/test_story.py`:
+   - calendar: no cache means nothing happened (and a gale in a made-up cache brings a branch down the next
+     morning, but not from a forecast fetched after the date began); fair weather is phase 3's garden to the bit;
+     the wall changes only after workable days, and goes down, steps up and stands whole; the garden never runs
+     ahead of phase 3 or back, and moves on only after workable days (or unknown ones); the gap, the branch and the
+     driftwood keep their places from day to day; driftwood lies below the shore kit's dry band; deterministic,
+     and nothing in reference mode;
+   - drawing: the branch in the same pixels on consecutive days and gone once cleared; snow drifts against the
+     walls; an empty story draws exactly what phase 3 drew.
+
+   (An earlier full run, while the disk was full, had 16 `test_shore_sync` errors, all `OSError: [Errno 28] No
+   space left on device` in `tempfile.mkdtemp`; they passed again, 18/18, once there was room.)
+
+   `$PY tests/test_shore_reference.py`: `driftwood` is now one of the watched drawers, with a new case,
+   2026-12-09 12:00 synthetic (the driftwood of the onshore gale of 7 December), which normal mode draws and
+   reference mode must not; the reference test also asserts the story is empty and phase 3's stages unset.
+   ```
+   ok    test_reference_mode_draws_no_creature_or_rare_event (49.4s)
+   ok    test_reference_mode_has_no_grain_and_holds_the_tide (0.3s)
+   ok    test_reference_build_is_deterministic_and_leaves_the_tree_clean (111.5s)
+   ok    test_existing_set (0.0s)
+   4/4 passed
+   ```
+   **PASS** (106 tests in about 6.5 minutes on the loaded Mac; 4/4).
+2. **Determinism.** Each set rendered twice into two folders, one after the other, every frame compared with
+   `cmp` (`--scale 0.375 --jobs 1 --quality 90`):
+   - A: 2027-03-24 `--minutes 1058-1063 --weather fair` (the lead's; the spade shows);
+   - B: 2027-03-08 `--minutes 720-725 --weather synthetic` (the wall half rebuilt with its heap and stakes, the spade,
+     a log, the scar);
+   - C: 2027-10-13 `--minutes 780-785 --weather synthetic` (two pieces of driftwood, the branch).
+
+   ```
+   18 frames compared, 0 differ
+   A: 1738.jpg ... 1743.jpg  (first frame's md5 5a7f246120a137f89f6d64085f102a16)
+   B: 1200.jpg ... 1205.jpg  (d8b02e2e4e3e4f32fa8b34f5c4113c51)
+   C: 1300.jpg ... 1305.jpg  (23370b843cd0a367fc05d276e39cead8)
+   ```
+   **PASS.**
+3. **Shore reference.** `$PY tools/shore_reference.py OUT --reference r2`:
+   ```
+   reference r2 written to .../r2f: digest 7cbee1f442afce967826b8e6f6aaffddd8921391b138a487f359b4d9024d35fa
+   ```
+   **PASS** (unchanged, so no r3).
+4. **Cost.**
+   - **Frames.** `main` (the main checkout, `669809a`, which renders as `a6887df` does) against this worktree,
+     `listening_point.py OUT --date D --minutes 720-749 --scale 0.75 --jobs 1 --quality 90` (30 minutes, keyframes
+     every 10, as the nightly job renders), timed with `/usr/bin/time -l`, two rounds in opposite orders:
+
+     | round | date (what shows) | main real / cpu s | branch real / cpu s | ratio cpu |
+     |---|---|---|---|---|
+     | 1, main first | 2027-03-08 synthetic (wall half rebuilt, heap, stakes, spade, a log, scar) | 418.0 / 158.1 | 389.6 / 168.3 | 1.06 |
+     | 1, main first | 2027-05-20 fair (nothing: byte-identical frames) | 265.0 / 174.4 | 291.2 / 193.3 | 1.11 |
+     | 2, branch first | 2027-03-08 synthetic | 142.2 / 119.4 | 186.4 / 139.0 | 1.16 |
+     | 2, branch first | 2027-05-20 fair | 262.1 / 142.5 | 130.1 / 105.7 | 0.74 |
+     | sum | | 1087.3 / 594.4 | 997.4 / 606.3 | **1.02** (real 0.92) |
+
+     The noise is far larger than the difference: the fair-weather pair renders byte-identical frames from the same
+     code paths and still came out 0.74 and 1.11. A profile of two near-scenery keyframes of 2027-03-08 on each
+     (`cProfile`, same process) makes the same calls within 0.1% (`sm` 81642 and 81642, `light` 716 and 714,
+     `linspace` 40834 and 40830): the marks are a few dozen polygons a keyframe. **PASS** on the sum (limit 1.15).
+     Peak RSS: 717-1155 MB main, 852-1048 MB branch, swinging by hundreds of MB between runs of the same code.
+   - **The story, per Day**, in a fresh process each (cold caches), `Story.cost_ms`:
+     - real weather from the cache: 2026-11-03 277 ms, 2026-11-04 32 ms, 2026-12-15 95 ms (81-123 days read);
+     - synthetic: 145-175 ms (2027-03-08, 05-20, 07-02; 88-98 days read), once 1.6 s while the Mac was swapping
+       (2027-11-28);
+     - fair: 1-5 ms.
+
+     Once per render process (the Day is built once and handed to the workers). Day() itself took 0.2-0.4 s CPU
+     on both sides in the profile runs.
+5. **The calendar.** `tools/story_calendar.py` (above). In fair weather it shows only the spade (39 days, the
+   digging) and nothing else; from the real weather cache (2026-10-01 to 2026-11-05) nothing but the garden
+   lagging phase 3 by up to 0.06 on 6 days (no gust reached 20 m/s, no onshore blow of 8 m/s, no snow).
 
 ## Look test
 
@@ -289,7 +371,10 @@ weather (fair weather has no story to show) except `ordinary`.
   that date began, so the next date may read the same earlier day from a later forecast. Where the two disagree
   across a threshold (gusts just either side of 20 m/s, say), a mark can appear one day and be gone the next
   without the work that would clear it. Rare, and the same kind of seam as "weather can jump where separately
-  rendered spans of a day meet" (STATUS.md).
+  rendered spans of a day meet" (- 2026-11-03: built on `v3/story-land`. Probes 1-5 pass (numbers above). The look test is in
+  `out/look/v3/story-land/` (6 pairs, 6 crops, 2 sequences). Not merged, not installed. Reference r2 is unchanged.
+- Next: the lead reviews the look test, then merges and installs. Parts 2 (animal lives) and 3 (echoes of the
+  shore) hang their strands on `Story` (above)..md).
 - **Synthetic history is made in blocks.** Earlier days of synthetic weather come from 32-day blocks, not from
   `synthetic_day(date)` itself (which spins up only 15 days), so the story's reading of a day can differ a little
   from that day's own frames (a gust of 19.9 m/s against 20.1). It never contradicts itself from one date to the
@@ -337,4 +422,7 @@ weather (fair weather has no story to show) except `ordinary`.
 
 ## Status
 
-STATUS
+- 2026-11-03: built on `v3/story-land`. Probes 1-5 pass (numbers above). The look test is in
+  `out/look/v3/story-land/` (6 pairs, 6 crops, 2 sequences). Not merged, not installed. Reference r2 is unchanged.
+- Next: the lead reviews the look test, then merges and installs. Parts 2 (animal lives) and 3 (echoes of the
+  shore) hang their strands on `Story` (above).
