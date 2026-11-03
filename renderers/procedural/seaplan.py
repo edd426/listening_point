@@ -22,9 +22,9 @@ import math
 import numpy as np
 
 from core import ALT_TOP, AZ_SPAN, VH
-from events import catmull, smoothstep, vnoise
+from events import catmull, vnoise
 from season import bump
-from water import BEACON, POTS, SKERRY, SKERRY_HALF, TR, sea_point, skerry_field
+from water import BEACON, SKERRY, SKERRY_HALF, sea_point, skerry_field
 
 T_M2 = 12.4206012 / 24                 # the tide's half-day, in days
 JD0 = 2461000.0 - 0.335 * T_M2         # a low water: low waters are counted from it (seals)

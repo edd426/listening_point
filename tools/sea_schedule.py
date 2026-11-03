@@ -8,7 +8,6 @@ Offline (fair or synthetic weather). Prints a table per date and the totals.
 """
 import argparse
 import datetime as dt
-import math
 import os
 import sys
 

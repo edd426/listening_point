@@ -18,7 +18,7 @@ import numpy as np
 from core import *  # noqa: F401,F403
 from events import catmull, smoothstep
 from fauna import Sprite
-from seaplan import (CREEL_B, CREEL_FROM, CREEL_IN, CREEL_L, CREEL_OUT, CORMORANT_KNOB, FERRY_B, FERRY_L, SEAL_SPOTS, ferry_way,
+from seaplan import (CREEL_B, CREEL_FROM, CREEL_IN, CREEL_L, CREEL_OUT, CORMORANT_KNOB, FERRY_B, FERRY_L, SEAL_SPOTS,
                      heading_of, skerry_point)
 from water import sea_point
 
@@ -279,7 +279,7 @@ class SeaLifeMixin:
     # ----------------------------------------------------------- the ferry --
     def ferry_model(self):
         M = Model()
-        black, red = (34, 36, 42), (150, 40, 32)
+        black = (34, 36, 42)
         white, deck = (232, 232, 226), (92, 98, 92)
         st = [(-18.0, 4.1, 3.8, 2.4, -17.5), (-14.0, 4.5, 4.3, 2.4, -14.0), (-6.0, 4.5, 4.4, 2.5, -6.0),
               (2.0, 4.5, 4.4, 2.7, 2.0), (9.0, 4.3, 4.0, 3.0, 9.0), (13.0, 3.6, 2.9, 3.4, 12.6),
@@ -545,7 +545,6 @@ class SeaLifeMixin:
             L.line([(sp[0] - 0.2 * pl.kx, sp[1]), (sp[0], sp[1] - 0.7 * pl.ky), (sp[0] + 0.2 * pl.kx, sp[1])], foam, max(0.6 * self.s, 0.12 * pl.kx), a=0.55)
         self.model_draw(M, pl, L, R, shade=shade)
         zs = 1 if pl.port_seen else -1
-        hz_k = self.haze_of(pl.D)
         # the wheelhouse's windows (sky in the glass), tyres hung over the side, a white rubbing strake,
         # black below the waterline, and the boat's number on the bow
         glass = self.lit((70, 84, 98), (0, 0.6, 0.8), shade=shade) + self.hor_col * 0.12
@@ -596,7 +595,7 @@ class SeaLifeMixin:
         if which == 0:             # the pale cow: silvery cream, blotched dark
             back, belly, spot = (186, 178, 160), (210, 204, 188), (96, 88, 80)
         else:                      # the others grey or brownish, darker when wet
-            back, belly, spot = ((104, 106, 112), (150, 146, 138), (66, 66, 72)) if which % 2 else ((122, 114, 104), (164, 156, 140), (78, 72, 66))
+            back, belly, spot = ((86, 90, 100), (168, 162, 150), (56, 58, 66)) if which % 2 else ((104, 96, 88), (176, 166, 148), (66, 60, 56))
         k = 1 - 0.35 * wet
         top = self.lit(np.array(back) * k, (0, 0.35, 0.94), shade=shade)
         side = self.lit(np.array(back) * k, (0, 0.85, 0.45), shade=shade)
@@ -649,7 +648,7 @@ class SeaLifeMixin:
         corm = sea.cormorant_at(self.m, wl)
         if not seals and not corm:
             return
-        Mp = self.skerry_px_per_m() * 1.35
+        Mp = self.skerry_px_per_m() * 1.9
         things = []
         for j, _, pose, f, a, b in seals:
             X, Z, h = skerry_point(a, b)
@@ -663,7 +662,6 @@ class SeaLifeMixin:
         ys = [t[3] for t in things]
         L = Layer(self, min(xs) - 3 * Mp, min(ys) - 2.0 * Mp, max(xs) + 3 * Mp, max(ys) + 0.6 * Mp)
         shade = self.local_shade(float(np.mean(xs)), float(np.mean(ys)))
-        n, g = sea.low_water(self.m)
         for b, kind, x, y, j, pose, f in sorted(things, key=lambda t: -t[0]):
             if kind == "seal":
                 # still wet just after it has hauled out (the tide has dropped but a little below its spot)
@@ -704,7 +702,7 @@ class SeaLifeMixin:
     def draw_seal_head(self, head):
         j, X, Z, f, k = head
         D = math.hypot(X, Z)
-        M = self.W / math.radians(AZ_SPAN) / D / U * 1.6
+        M = self.W / math.radians(AZ_SPAN) / D / U * 2.0
         x, y = self.proj(X, 0, Z)
         x, y = float(x), float(y)
         shade = self.local_shade(x, y)
@@ -814,12 +812,14 @@ class SeaLifeMixin:
             R = Layer(self, x - 1.6 * M, y - 1, x + 1.6 * M, y + 0.9 * M)
             sp = Sprite(x, y, M, f)
             mr = Sprite(x, y, M, f)
+            # the dorsal fin: tall and swept back, its trailing edge hollowed (falcate)
+            FIN = [(0.2, 0.0), (0.1, 0.16), (-0.06, 0.32), (-0.3, 0.44), (-0.22, 0.31), (-0.17, 0.15), (-0.2, 0.0)]
             if pose == "arch":
-                body = [(-0.75, -0.02), (-0.45, 0.17), (-0.05, 0.27), (0.35, 0.22), (0.7, 0.03), (0.75, -0.02)]
-                fin = [(-0.15, 0.24), (0.2, 0.26), (-0.18, 0.58), (-0.26, 0.56)]
+                body = [(-0.85, -0.02), (-0.55, 0.11), (-0.1, 0.19), (0.3, 0.16), (0.65, 0.06), (0.85, -0.02)]
+                fin = [(x_, y_ + 0.17) for x_, y_ in FIN]
             elif pose == "fin":
-                body = [(-0.45, -0.02), (-0.2, 0.12), (0.15, 0.13), (0.4, -0.02)]
-                fin = [(-0.12, 0.11), (0.18, 0.12), (-0.15, 0.44), (-0.22, 0.43)]
+                body = [(-0.5, -0.02), (-0.25, 0.07), (0.15, 0.08), (0.45, -0.02)]
+                fin = [(x_ - 0.05, y_ + 0.06) for x_, y_ in FIN]
             elif pose == "rise":
                 body = [(0.0, -0.02), (0.25, 0.12), (0.6, 0.2), (0.88, 0.1), (0.98, 0.04), (0.9, -0.02)]
                 fin = None
@@ -839,8 +839,8 @@ class SeaLifeMixin:
                 sp.poly([(p[0], p[1] * 0.7) for p in body[1:-1]] + [(body[-1][0], 0.0), (body[0][0], 0.0)], back, edge=False)
                 if fin:
                     sp.poly(fin, back)
-                gleam = back * 0.6 + self.hor_col * 0.5 + self.sun_col * 60 * self.sun_str
-                sp.limb([body[1], body[2], body[3]], 0.035, gleam, edge=False)
+                gleam = back * 0.75 + self.hor_col * 0.22 + self.sun_col * 25 * self.sun_str
+                sp.limb([body[1], body[2], body[3]], 0.02, gleam, edge=False)
                 mr.poly([(p[0], -p[1]) for p in body], grey * 0.5, edge=False)
                 if pose == "rise":
                     # the blow: a soft puff from the blowhole
