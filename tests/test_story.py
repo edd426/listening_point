@@ -195,6 +195,17 @@ class Marks(unittest.TestCase):
         np.testing.assert_array_equal(a[box], b[box])
         self.assertFalse(np.array_equal(a[box], c[box]))
 
+    def test_snow_drifts_against_the_walls(self):
+        """Lying snow blown from beyond the walls banks up against their near side (2027-11-28 in synthetic
+        weather), and the walls' foot is white where it was dark."""
+        day = Day(D(2027, 11, 28), weather="synthetic")
+        a, fr, y0 = draw(day)
+        day.story.drift = (0.0, 0.0)
+        b, _, _ = draw(day)
+        diff = np.abs(a.astype(int) - b.astype(int)).sum(-1) > 30
+        self.assertGreater(diff.sum(), 200)
+        self.assertGreater(a[diff][:, :3].mean(), b[diff][:, :3].mean())
+
     def test_nothing_in_the_story_draws_nothing(self):
         """With an empty story the hillside is drawn exactly as phase 3 drew it."""
         day = Day(D(2027, 1, 22), weather="synthetic")

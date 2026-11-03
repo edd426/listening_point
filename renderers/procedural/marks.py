@@ -27,7 +27,7 @@ WOOD = np.array((84, 70, 56), np.float32)          # bark of the tree's limbs (t
 FRESH = np.array((206, 184, 140), np.float32)      # new-split wood
 SNOW = np.array((236, 240, 246), np.float32)
 DRIFTWOOD = np.array((178, 172, 160), np.float32)  # bleached by the sea
-DRIFT_X = ((0.605, 0.685), (0.885, 0.962))         # where driftwood lies along the shore (frame widths)
+DRIFT_X = ((0.605, 0.665), (0.885, 0.962))         # where driftwood lies along the shore (frame widths)
 DRIFT_FULL = 25.0                                  # cm m/s of blown snow that makes a full drift
 
 
@@ -146,7 +146,7 @@ class MarksMixin:
         gf = np.ones(len(seg)) if lv is None else np.interp(lv, range(5), (0.0, 0.37, 0.67, 0.9, 1.0))
         tops, toes, s = [], [], self.s
         # deeper here, shallower there along the wall, where the wind eddied (the same for this wall every time)
-        ph = rng(25, int(seg[0][0] * 10 / self.s), int(seg[0][1] * 10 / self.s)).uniform(0, 2 * math.pi, 3)
+        ph = rng(25, int((seg[0][0] / self.W + 1) * 1e4), int(seg[0][1] / self.H * 1e4)).uniform(0, 2 * math.pi, 3)
         dl = np.cumsum(np.r_[0, np.linalg.norm(np.diff(seg, axis=0), axis=1)]) / (60 * s)
         wob = 0.72 + 0.28 * (np.sin(dl * 1.3 + ph[0]) * 0.5 + np.sin(dl * 2.9 + ph[1]) * 0.3 + np.sin(dl * 6.1 + ph[2]) * 0.2)
         dirs = np.gradient(seg, axis=0)
@@ -341,15 +341,15 @@ class MarksMixin:
             r = rng(24, p["seed"])
             lo, hi = DRIFT_X[p["slot"] % 2]
             xn = lo + (hi - lo) * ((p["slot"] >> 1) % 1000) / 1000.0
-            xs = np.array([xn - 0.004, xn, xn + 0.004])
+            xs = np.array([xn - 0.015, xn, xn + 0.015])
             band = shore_band(xs)
             ys = hill_edge_y(xs) + p["v"] * band
             x, y = xn * W, float(ys[1]) * H
-            ang = math.atan2(float(ys[2] - ys[0]) * H, 0.008 * W) + r.normal(0, 0.12)
+            ang = math.atan2(float(ys[2] - ys[0]) * H, 0.03 * W) + r.normal(0, 0.05)    # along the tide line
             p_ = 0.35 + 1.3 * min(1.0, max(0.0, (y / H - 0.6) / 0.4))
             mpx = 72.0 * s * p_                               # the hillside's pixels per metre (hillside.MS)
             length = r.uniform(1.0, 1.9) * mpx
-            thick = r.uniform(0.09, 0.16) * mpx
+            thick = r.uniform(0.09, 0.15) * mpx
             ca, sa = math.cos(ang), math.sin(ang)
             P = lambda u, v: (x + ca * u - sa * v, y + sa * u + ca * v)
             Lr = Layer(self, x - length, y - length * 0.6 - thick * 2, x + length, y + length * 0.6 + thick * 2)
@@ -357,26 +357,38 @@ class MarksMixin:
                 continue
             wet = self.wx.wet
             alb = DRIFTWOOD * (1 - 0.35 * wet) * r.uniform(0.92, 1.05)
-            top = self.lit(alb * 1.08, [0.0, 0.3, 0.95], x, y)
-            side = self.lit(alb * 0.86, [0.0, 0.85, 0.5], x, y)
-            dark = self.lit(alb * 0.5, [0.0, 0.85, 0.5], x, y)
-            # its shadow on the stones, then the log: a tapering trunk, a knot or two, a root-plate or a split end
-            Lr.poly([P(-length * 0.5, thick * 0.35), P(length * 0.5, thick * 0.25), P(length * 0.48, thick * 0.75),
-                     P(-length * 0.5, thick * 0.85)], (18, 18, 20), a=0.45)
-            taper = r.uniform(0.55, 0.8)
-            body = [P(-length * 0.5, -thick * 0.5), P(length * 0.5, -thick * 0.5 * taper), P(length * 0.5, thick * 0.5 * taper),
-                    P(-length * 0.5, thick * 0.5)]
-            Lr.poly(body, side)
-            Lr.poly([P(-length * 0.5, -thick * 0.5), P(length * 0.5, -thick * 0.5 * taper), P(length * 0.49, -thick * 0.05),
-                     P(-length * 0.49, -thick * 0.05)], top)
-            for _ in range(int(r.integers(2, 5))):        # cracks along the grain
-                u0, v0 = r.uniform(-0.45, 0.3) * length, r.uniform(-0.3, 0.3) * thick
-                Lr.line([P(u0, v0), P(u0 + r.uniform(0.1, 0.35) * length, v0 + r.normal(0, 0.05) * thick)], dark, max(1.0, 0.5 * s))
+            top = self.lit(alb * 1.1, [0.0, 0.3, 0.95], x, y)
+            side = self.lit(alb * 0.84, [0.0, 0.85, 0.5], x, y)
+            dark = self.lit(alb * 0.48, [0.0, 0.85, 0.5], x, y)
+            # a bent, tapering trunk worn smooth, with lumps where branches were, along the grain
+            n = 9
+            bend = r.normal(0, 0.05) * length
+            taper = r.uniform(0.5, 0.75)
+            lumps = r.uniform(0.9, 1.12, n)
+            us = np.linspace(-0.5, 0.5, n) * length
+            vc = bend * np.sin(np.pi * (us / length + 0.5))
+            hw = 0.5 * thick * (1 - (1 - taper) * (us / length + 0.5)) * lumps
+            upper = [P(u, v - h) for u, v, h in zip(us, vc, hw)]
+            lower = [P(u, v + h) for u, v, h in zip(us, vc, hw)]
+            # its shadow on the stones first
+            Lr.poly([P(u, v + h * 0.4) for u, v, h in zip(us, vc, hw)] + [P(u + thick * 0.2, v + h * 1.6) for u, v, h in
+                                                                             zip(us[::-1], vc[::-1], hw[::-1])], (18, 18, 20), a=0.45)
+            Lr.poly(upper + lower[::-1], side)
+            Lr.poly(upper + [P(u, v - h * 0.1) for u, v, h in zip(us[::-1], vc[::-1], hw[::-1])], top)
+            Lr.line(lower, dark, max(1.0, 0.6 * s))
+            for _ in range(int(r.integers(3, 6))):        # cracks and paler streaks along the grain
+                u0, f = r.uniform(-0.45, 0.25), r.uniform(-0.6, 0.6)
+                u1 = u0 + r.uniform(0.1, 0.3)
+                pts = [P(u * length, float(np.interp(u * length, us, vc)) + f * float(np.interp(u * length, us, hw)))
+                       for u in (u0, (u0 + u1) / 2, u1)]
+                Lr.line(pts, dark if r.random() < 0.6 else top * 1.08, max(1.0, 0.5 * s))
             if r.random() < 0.6:                          # a gnarled root end
                 for k in range(int(r.integers(3, 6))):
                     a_ = r.uniform(-2.3, -0.8) if k % 2 else r.uniform(0.8, 2.3)
-                    l_ = r.uniform(0.15, 0.4) * length
-                    Lr.line([P(-length * 0.48, 0), P(-length * 0.48 - math.cos(a_) * l_ * 0.3, math.sin(a_) * l_ * 0.35)],
-                            side * 0.95, max(1.0, thick * 0.3))
-            Lr.ellipse(*P(length * 0.5, 0), thick * 0.12, thick * 0.45 * taper, dark)
+                    l_ = r.uniform(0.12, 0.3) * length
+                    Lr.line([P(-length * 0.48, vc[0]), P(-length * 0.48 - math.cos(a_) * l_ * 0.3, vc[0] + math.sin(a_) * l_ * 0.35)],
+                            side * 0.95, max(1.0, thick * 0.28))
+            e0 = hw[-1]                                    # the broken end, splintered
+            Lr.poly([P(length * 0.5, vc[-1] - e0), P(length * 0.5 + thick * 0.35, vc[-1] - e0 * 0.3), P(length * 0.5 + thick * 0.1, vc[-1]),
+                     P(length * 0.5 + thick * 0.3, vc[-1] + e0 * 0.5), P(length * 0.5, vc[-1] + e0)], top * 1.05)
             Lr.composite(allow=self.shore_allow(Lr, y + thick * 0.5))
