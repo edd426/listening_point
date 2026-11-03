@@ -3,7 +3,7 @@
 From Evan's interview on 2026-11-01, held after the shore went live. These are his answers; the
 phases are their order. Every step gets a look test before it is installed.
 
-## HANDOFF — state at 2026-11-01 ~19:30 CET (phase 3 done and installed)
+## HANDOFF — state at 2026-11-03 ~08:00 CET (phase 3 approved by Evan)
 
 **Verified after the update** (macOS 27.2, 26B123): both venvs still import numpy 2.0.2, scipy 1.13.1
 and Pillow 11.3.0 on Xcode's Python 3.9.6; both launchd jobs are loaded; frames render; the
@@ -19,6 +19,7 @@ carrier is green. The lock screen was not checked (needs Evan's eye).
 | 2 sky: air (geese, murmuration, gulls, contrails, balloon, kite) | `3a971cb` | yes, 16:52 |
 | 3 hillside part 1: land (garden, shed, hives, gates, outcrops, gorse, heather, puddles) | `70ea7f3` | yes, 16:52 |
 | 3 hillside part 2: animals (fox, hares, crows, bigger sheep; depth order behind walls, posts, gate, shed, hives, rocks, gorse) | `4ea34f2` | yes, 19:20 |
+| fix: the lower field wall runs on out of the bottom of the frame (it stopped short in open grass since v2.0) | `3652ede` | yes, 2026-11-03 |
 
 Probes were re-run on each merged head (tests, determinism, r2 digest): all PASS. The details are in
 each part's doc under `docs/v3/`.
@@ -36,6 +37,12 @@ Animals: the lead re-ran the probes on the branch head `5384596` (64 tests OK; `
 collect it) fails 5 of 7 on `main` with `no spot passes for 2027-03-18-cairn`: its synthetic cairn finds no
 spot that passes against r2. Checked on `main` `9d21022`, before the animals merge. It belongs to the
 shore work.
+
+**Evan's verdict (2026-11-03):** he looked through every phase 3 look test and approved phase 3 ("I like the
+after"). His one note: the lower field wall ended in open grass, so the sheep could walk round it toward the
+shore. It dated from v2.0, when the wall was only scenery, and was an oversight once phase 3 made it a field
+boundary. Fixed in `3652ede` (look test `out/look/v3/wall-end/`; tests, determinism and r2 unchanged). The
+field gate is still drawn open, and the upper field is open hill up to the tower, as on a croft.
 
 **Next, in order:**
 1. Suggested pause (not yet decided by Evan): let him live with phases 2 and 3 for a few days
