@@ -259,7 +259,29 @@ PROBES
 
 ## Look test
 
-LOOK
+Folder `out/look/v3/story-land/` of the main checkout:
+- `pair-<scene>.jpg`: the whole frame at Evan's 1440 x 900, `main` on top and this branch below.
+- `crop-<scene>.jpg`: a native-size crop round the subject, `main` above the branch.
+- `seq-<name>.jpg`: one minute across successive dates (this branch only), each crop shown at 2x, the date in its
+  corner.
+- The full renders are in `main/` and `branch/`; `look.py` there rebuilds the set.
+
+Everything was rendered with `listening_point.py --scale 0.75 --jobs 1 --quality 90`, one at a time, in synthetic
+weather (fair weather has no story to show) except `ordinary`.
+
+| scene | when | what to look at |
+|---|---|---|
+| `ordinary` | 2027-05-20 14:30 fair | Nothing in the story: byte-identical to `main` (`cmp` silent). This is what most days look like. |
+| `wall-down` | 2027-02-02 13:00 | A grey February day. The upper field wall is down left of the gate (since 25 November): a V-shaped breach, its stones in the grass in front. The branch the gale of 20 January brought down lies under the tree, bare, to the left of the trunk. |
+| `wall-rebuild` | 2027-03-10 14:00 | Nine workable days in: the gap stripped to its footings, the second course laid and the third most of the way along, a heap of the stones still to go in beside it on the near side, two pale stakes at its ends (the line between them is a pale hair). In the garden the spade stands in the salad bed, where the digging stopped. |
+| `branch-summer` | 2027-07-02 16:00 | The branch the gale of 29 June brought down, in leaf, its leaves three days wilted, a shadow under it. |
+| `driftwood` | 2027-10-13 13:00 | Two pieces thrown up by the south-westerly of 11 October: a long one on the near shingle right of the pier, a shorter one at the tide line on the steep beach left of the pier's root. (The branch of the same blow lies under the tree.) |
+| `drifts` | 2027-11-28 12:00 | Snow blown in from the south-west (the spell's snow came on a wind from 231 degrees) banked against the near side of both field walls: their lower stones buried, the bank deeper here and shallower there. |
+
+| sequence | dates, minute | what it shows |
+|---|---|---|
+| `seq-wall` | 2027-03-01, 04, 07, 10, 13, 16, 18, 21 at 14:00 (a minute when no sheep stands at the gap on any of them) | Fallen; stripped, with the heap and the stakes; the second and third courses; the coping; the heap down to a few stones; whole again, the heap gone. |
+| `seq-branch` | 2027-08-16, 17, 19, 21, 22, 26 at 15:00 | Top: under the tree, nothing; the branch down after the gale of the 16th, green; wilting; brown; cleared. Bottom: the shed, where four logs join the stack (right of the water butt, behind the beans) from the 22nd. |
 
 ## Known issues
 
