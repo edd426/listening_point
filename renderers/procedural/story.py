@@ -49,7 +49,7 @@ GALE, GALE_SURE, BRANCH_P = 20.0, 24.0, 0.5
 BRANCH_CLEAR = (2, 4)   # it is cleared on this many'th workable day after it fell (seeded)
 BRANCH_BACK = 75        # days looked back for branches and their logs
 LOGS = (4, 7)           # logs a cleared branch adds to the pile by the shed
-LOG_KEEP, LOG_BURN = 10, 4    # they all stay this many days, then one goes on the fire every LOG_BURN days
+LOG_KEEP, LOG_BURN = 7, 3     # they all stay this many days, then one goes on the fire every LOG_BURN days
 # A winter wall: weak in some winters, it comes down in the first gale of WALL_GALE, or the first thaw (a day
 # above THAW within three days of a hard frost), between mid November and the end of February.
 WALL_P, WALL_GALE, HARD_FROST, THAW = 0.7, 18.0, -6.0, 3.0
@@ -68,7 +68,7 @@ WORK_RATE, GARDEN_GRACE = 0.55, 45
 # Driftwood: thrown up by an onshore blow, onto the shingle a little above that day's high water.
 ONSHORE_FROM = 210.0  # where the open sea lies from the beach (deg): a wind from there blows straight in
 ONSHORE, DRIFT_P = 8.0, 0.85     # m/s of wind blowing in from the sea
-SURGE = (0.03, 0.06)             # how far above the day's high water it is left (fractions of the beach)
+SURGE = (0.02, 0.05)             # how far above the high waters it is left (fractions of the beach)
 DRIFT_TOP = 0.515                # never higher than this: the dry band above is the shore kit's (shore.py)
 DRIFT_WASH = 0.015               # the sea takes it when its edge comes this close
 DRIFT_FIRE = (2, 6)              # or it is taken for the fire on this many'th workable day (seeded)
@@ -314,7 +314,7 @@ class Story(NoStory):
         if u[0] >= WALL_P:
             return
         site, lo, hi = SITES[int(u[1] * len(SITES))]
-        mid, half = lo + (hi - lo) * u[2], GAP_HALF[0] + (GAP_HALF[1] - GAP_HALF[0]) * u[3]
+        mid, half = float(lo + (hi - lo) * u[2]), float(GAP_HALF[0] + (GAP_HALF[1] - GAP_HALF[0]) * u[3])
         h = self.hist
         d, end, fell = dt.date(Y, 11, 15), dt.date(Y + 1, 3, 1), None
         while d < D and d < end:
@@ -389,7 +389,8 @@ class Story(NoStory):
                         here = None                   # taken for the fire
             elif s.known and s.onshore >= ONSHORE and rng(5, d.toordinal()).random() < DRIFT_P:
                 r = rng(8, d.toordinal())
-                base = 0.5 * float(tide(d).max()) + r.uniform(*SURGE)
+                # the storm's water stood above the high waters of that day and the two after it
+                base = 0.5 * max(float(tide(d + i * DAY).max()) for i in range(3)) + r.uniform(*SURGE)
                 n = 1 + int(r.random() < 0.5) + int(r.random() < 0.2)
                 pieces = []
                 for i in range(n):

@@ -8,18 +8,18 @@ snow drifted against the lee of the walls. In front, every minute, like the wash
 the shingle.
 
 No people, ever: only what they leave. Every mark has its own generator, seeded by the event it belongs
-to ([STORY + 20 + kind, ...]), so it lies in the same place every day it is shown, and drawing it moves no
+to ([story.STORY + 20 + kind, ...]), so it lies in the same place every day it is shown, and drawing it moves no
 other draw. With nothing in the story (and in reference mode) nothing here draws at all.
 """
 import math
 
 import numpy as np
 
-from core import CANOPY, KF, TREE_BASE, Layer, hill_edge_y, hull, normalize, shore_band, sm
+from core import CANOPY, KF, Layer, hill_edge_y, hull, shore_band, sm
 from hillside import BED_A, BEDS, GATE_GAP, OBJ, SHED_AB, enc
 from season import Season
-from story import STORY, rng
-from tree import LEAF
+from story import rng
+from tree import GREENS, LEAF, skeleton
 
 STONE = np.array((128, 124, 114), np.float32)
 LICHEN = np.array((150, 150, 96), np.float32)
@@ -101,12 +101,12 @@ class MarksMixin:
             x, y, dx, dy, nx, ny = at(w["mid"])
             p = persp(y)
             hgt = 26 * s * p * height
-            cx, cy = x + nx * 1.4 * hgt - dx * 0.2 * hgt, y + ny * 1.4 * hgt
-            wide = (t1 - t0) * d[-1] * 0.55
+            cx, cy = x + nx * 1.15 * hgt - dx * 0.2 * hgt, y + ny * 1.15 * hgt
+            wide = (t1 - t0) * d[-1] * 0.62
             show = int(round(len(pile) * w["pile"]))
-            st_h = 7.5 * s * p * height
+            st_h = 8.5 * s * p * height
             for row, f, size, tone, k, i, deep in pile[:show]:
-                stone(cx + f * wide, cy + deep * st_h * 0.5 - row * st_h * 0.8, st_h * size, tone, k, i)
+                stone(cx + f * wide, cy + deep * st_h * 0.5 - row * st_h * 0.85, st_h * size, tone * 1.08, k + 0.1, i)
         if w.get("line"):                  # two pins at the gap's ends and a line at the course being laid
             lvl = min(4, int(math.floor(w["built"])) + 1)
             top = (0.0, 0.37, 0.67, 0.9, 1.0)[lvl]
@@ -116,9 +116,9 @@ class MarksMixin:
                 p = persp(y)
                 hgt = 26 * s * p * height
                 px_, py_ = x + nx * 0.22 * hgt, y + ny * 0.22 * hgt
-                self.hs_line([(px_, py_), (px_, py_ - 1.2 * hgt)], WOOD * 1.3, (0.0, 0.9, 0.3), max(1.0, 0.9 * s * p))
+                self.hs_line([(px_, py_), (px_, py_ - 1.25 * hgt)], FRESH * 0.85, (0.0, 0.9, 0.3), max(1.5, 1.6 * s * p))
                 pins.append((px_, py_ - top * hgt))
-            self.hs_line(pins, (238, 230, 204), (0.0, 0.7, 0.7), max(1.0, 0.6 * s), obj=False)
+            self.hs_line(pins, (250, 246, 228), (0.0, 0.7, 0.7), max(1.0, 0.75 * s), obj=False)
 
     def mk_drift(self, A, N, X, seg, persp, height, gap):
         """Snow drifted against the near side of a wall where the wind that brought it blew from beyond the
@@ -145,6 +145,10 @@ class MarksMixin:
         lv, _ = self.wall_gap(gap, seg)
         gf = np.ones(len(seg)) if lv is None else np.interp(lv, range(5), (0.0, 0.37, 0.67, 0.9, 1.0))
         tops, toes, s = [], [], self.s
+        # deeper here, shallower there along the wall, where the wind eddied (the same for this wall every time)
+        ph = rng(25, int(seg[0][0] * 10 / self.s), int(seg[0][1] * 10 / self.s)).uniform(0, 2 * math.pi, 3)
+        dl = np.cumsum(np.r_[0, np.linalg.norm(np.diff(seg, axis=0), axis=1)]) / (60 * s)
+        wob = 0.72 + 0.28 * (np.sin(dl * 1.3 + ph[0]) * 0.5 + np.sin(dl * 2.9 + ph[1]) * 0.3 + np.sin(dl * 6.1 + ph[2]) * 0.2)
         dirs = np.gradient(seg, axis=0)
         dirs /= np.linalg.norm(dirs, axis=1, keepdims=True) + 1e-6
         nn = len(seg)
@@ -153,18 +157,24 @@ class MarksMixin:
             lee = max(0.0, nx * wsx + ny * wsy)
             end = min(1.0, min(i, nn - 1 - i) / 4.0)             # tapering out at the wall's ends
             hgt = 26 * s * float(persp(y)) * height
-            h = 0.62 * hgt * k * sm(0.1, 0.6, lee) * end * (0.45 + 0.55 * float(gf[i]))
+            h = 0.38 * hgt * k * sm(0.1, 0.6, lee) * end * (0.45 + 0.55 * float(gf[i])) * float(wob[i])
             tops.append((x, y - h))
-            toes.append((x + nx * h * 2.4 + wsx * h * 0.8, y + ny * h * 2.4 + max(0.0, wsy) * h * 0.8))
+            toes.append((x + nx * h * 1.4 + wsx * h * 0.4, y + ny * h * 1.4 + max(0.0, wsy) * h * 0.4))
         if max(y - ty for (x, y), (_, ty) in zip(seg, tops)) < 0.8 * s:
             return
-        poly = tops + toes[::-1]
-        A.poly(poly, SNOW)
-        N.poly(poly, enc((0.0, 0.42, 0.9)))
-        crest = [(x, y + 0.6 * s) for x, y in tops]
-        A.line(crest, SNOW * 1.02, max(1.0, 1.2 * s))
-        N.line(crest, enc((0.0, 0.1, 1.0)), max(1.0, 1.2 * s))
-        X.poly(poly, OBJ)
+        # a smooth bank: its upper half leaning toward you against the wall, its lower half running out into
+        # the lying snow at the ground's own slope, so it shows as the wall's foot buried, not as a new shape
+        mids = [((tx + fx) / 2, (ty + fy) / 2) for (tx, ty), (fx, fy) in zip(tops, toes)]
+        low = mids + toes[::-1]
+        A.poly(low, SNOW)
+        N.poly(low, enc((0.0, -0.2, 0.98)))
+        high = tops + mids[::-1]
+        A.poly(high, SNOW)
+        N.poly(high, enc((0.0, 0.3, 0.95)))
+        crest = [(x, y + 0.5 * s) for x, y in tops]
+        A.line(crest, SNOW, max(1.0, 1.0 * s))
+        N.line(crest, enc((0.0, 0.05, 1.0)), max(1.0, 1.0 * s))
+        X.poly(tops + toes[::-1], OBJ)
 
     # ------------------------------------------------------------ garden --
     def mk_spade(self, k):
@@ -236,7 +246,7 @@ class MarksMixin:
                 he, hn = he * math.cos(a) - hn * math.sin(a), hn * math.cos(a) + he * math.sin(a)
                 dx, dy = ground(he * length / nseg, hn * length / nseg, m)
                 # the side branches it rests on stand up off the grass
-                x, y = x + dx, y + dy - r.uniform(0.0, (0.0, 0.45, 0.3, 0.2)[depth]) * length / nseg * m
+                x, y = x + dx, y + dy - r.uniform(0.0, (0.0, 0.7, 0.45, 0.3)[depth]) * length / nseg * m
                 pts.append((x, y))
             limbs.append((pts, w, w * 0.4, depth))
             if depth >= 3:
@@ -255,9 +265,9 @@ class MarksMixin:
         grow(bx, by, e, n, r.uniform(2.7, 3.5), 0.2 * m, 0)
         leafy = Season(b["fell"]).leaves
         wilt = min(1.0, b["age"] / 9.0)
-        green, brown = np.array((66, 100, 42), np.float32), np.array((132, 108, 62), np.float32)
-        leaves = [(r.uniform(0, 1), r.normal(0, 0.1), r.normal(0, 0.07), r.uniform(0.8, 1.2), r.uniform(0.85, 1.1))
-                  for _ in range(420)]
+        brown = np.array((136, 110, 62), np.float32)
+        leaves = [(r.uniform(0, 1), r.normal(0, 0.12), r.normal(0, 0.08), r.uniform(0.8, 1.2), r.uniform(0.8, 1.15),
+                   r.integers(0, len(GREENS)), r.normal(0, 0.5), r.normal(0, 0.5)) for _ in range(650)]
         # crushed grass under it, then the limbs, thinnest first, each with its top catching the light
         main = limbs[0][0]
         self._hsA.poly(hull([(x, y + 0.05 * m) for x, y in main] + [(x, y + 0.14 * m) for x, y in main]), (30, 40, 22), a=0.3)
@@ -278,20 +288,21 @@ class MarksMixin:
         if leafy > 0.15:                             # leaves, as the tree had them, wilting from the day it fell
             tips = [pts for pts, _, _, depth in limbs if depth >= 2]
             keep = leafy * (1 - 0.4 * wilt)
-            col = green * (1 - wilt) + brown * wilt
-            for u, ox, oy, size, tone in leaves:          # each a shaded leaf and a lit one over it
+            placed = []
+            for u, ox, oy, size, tone, pal, nx_, ny_ in leaves:   # the tree's own leaves, lit each by its own face
                 if u > keep or not tips:
                     continue
                 pts = tips[int(u * 7919) % len(tips)]
                 j = 1 + int(u * 1000) % (len(pts) - 1)
                 x, y = pts[j]
-                rr = 0.085 * m * size * (1 - 0.3 * wilt)
-                a = (u * 977.0) % math.pi
+                placed.append((y + oy * m, x + ox * m, size, tone, pal, nx_, ny_, (u * 977.0) % math.pi))
+            for y, x, size, tone, pal, nx_, ny_, a in sorted(placed):
+                col = np.array(GREENS[pal], np.float32) * (1 - wilt) + brown * wilt
+                rr = 0.1 * m * size * (1 - 0.3 * wilt)
                 ca, sa = math.cos(a), math.sin(a)
-                cx, cy = x + ox * m, y + oy * m
-                leaf = [(cx + rr * (px * ca - py * sa), cy + rr * (px * sa + py * ca) * (1 - 0.4 * wilt)) for px, py in LEAF]
-                self.hs_face(leaf, col * tone, (ox * 2 + 0.3 * ca, 0.35 + 0.4 * sa * sa, 0.85))
-        self.hs_cast([main[0], main[2], main[-1], (main[-1][0], main[-1][1] - 2)], 0.3 * m)
+                leaf = [(x + rr * (px * ca - py * sa), y + rr * (px * sa + py * ca) * (1 - 0.4 * wilt)) for px, py in LEAF]
+                self.hs_face(leaf, col * tone, (nx_, 0.2 + ny_ * 0.6, 0.8))
+        self.hs_cast([main[0], main[2], main[-1], (main[-1][0], main[-1][1] - 2)], (0.5 if leafy > 0.15 else 0.3) * m)
 
     def mk_scar(self, L):
         """Where the branch tore from the tree: pale torn wood on a lower limb of the crown, greying over two
@@ -300,7 +311,6 @@ class MarksMixin:
         age = st.scar if st else None
         if age is None or age > 75:
             return
-        from tree import skeleton
         W, H, s = self.W, self.H, self.s
         segs, _ = skeleton(W, H)
         ccx, ccy = CANOPY[0] * W, CANOPY[1] * H
