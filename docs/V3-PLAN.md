@@ -3,7 +3,7 @@
 From Evan's interview on 2026-11-01, held after the shore went live. These are his answers; the
 phases are their order. Every step gets a look test before it is installed.
 
-## HANDOFF — state at 2026-11-03 ~11:10 CET (phase 4 part 1 merged and installed)
+## HANDOFF — state at 2026-11-03 ~12:40 CET (phase 4 merged and installed; phase 5 not started)
 
 **Verified after the update** (macOS 27.2, 26B123): both venvs still import numpy 2.0.2, scipy 1.13.1
 and Pillow 11.3.0 on Xcode's Python 3.9.6; both launchd jobs are loaded; frames render; the
@@ -21,6 +21,8 @@ carrier is green. The lock screen was not checked (needs Evan's eye).
 | 3 hillside part 2: animals (fox, hares, crows, bigger sheep; depth order behind walls, posts, gate, shed, hives, rocks, gorse) | `4ea34f2` | yes, 19:20 |
 | fix: the lower field wall runs on out of the bottom of the frame (it stopped short in open grass since v2.0) | `3652ede` | yes, 2026-11-03 |
 | 4 sea part 1: water (cloud shadows, wind lanes, glitter, whitecaps; channel beacon, buoys, pot floats; a tidal skerry; fix: phase 2's cloud-beam glow no longer ends in a hard line below the horizon) | `caa3231` | yes, 2026-11-03 11:05 |
+| fix: puddles read as water, not snow (brightness capped against the wet ground; `PUDDLE_CAP` 2.0) | `b7728e4`, `bc3c3e9` | yes, 2026-11-03 11:53 |
+| 4 sea part 2: boats and sea life (ferry on a timetable, creel boat at the pots, extra yachts; seals and a cormorant on the skerry, gannets, dolphins) | `94b8d87` | yes, 2026-11-03 12:35 |
 
 Probes were re-run on each merged head (tests, determinism, r2 digest): all PASS. The details are in
 each part's doc under `docs/v3/`.
@@ -37,6 +39,11 @@ Animals: the lead re-ran the probes on the branch head `5384596` (64 tests OK; `
 Water: the lead re-ran the probes on the branch head `7e345fc` (77 tests OK; `tests/test_shore_reference.py`
 4/4; 6 frames rendered twice, 0 differ; r2 digest unchanged) and after the merge (77 OK). Cost ratio 1.08 and
 peak memory +1.5% (tracemalloc; the delegate's measures). The worktree and the local branch were removed.
+
+Sea life: the lead re-ran the probes on the branch head `d1d9b6f` (96 tests OK, now ~97 s; `tests/test_shore_reference.py`
+4/4; 6 frames rendered twice, 0 differ; r2 digest unchanged) and after the merge (96 OK). Cost ratio 0.97-1.04,
+tracemalloc peak +0.02% (the delegate's measures). How often each thing shows across the year:
+`tools/sea_schedule.py` and the table in `docs/v3/phase4-sea-life.md`. The worktree and branch were removed.
 
 **Known broken, not from v3:** `tests/test_shore_render.py` (run as a script; `unittest discover` does not
 collect it) fails 5 of 7 on `main` with `no spot passes for 2027-03-18-cairn`: its synthetic cairn finds no
@@ -56,14 +63,12 @@ a bit darker than the path (he wanted them darker than the sky, not the ground):
 `bc3c3e9` makes them 1.1-1.3x as bright as the path under overcast (white ones were 3x). Look test
 `out/look/v3/puddles/` (top: white, middle: 1.15, bottom: 2.0).
 
-**Next, in order** (Evan said on 2026-11-03 to start phase 4):
-1. **Phase 4 part 1, water**: merged `caa3231` and installed 2026-11-03 11:05. Doc `docs/v3/phase4-water.md`
-   (it holds the frame-pixel geometry part 2 needs), look test `out/look/v3/water/`.
-2. **Phase 4 part 2, boats and sea life**, started 2026-11-03 ~11:15 on `v3/sea-life`
-   (`.claude/worktrees/v3-sea-life`), built on part 1's positions and draw order; doc
-   `docs/v3/phase4-sea-life.md`, look test `out/look/v3/sea-life/`:
-   - fishing boats working the pots, more sailboats, a ferry to the island on a timetable;
-   - seals on the skerry, dolphins, gannets diving, a cormorant drying its wings.
+**Next, in order:**
+1. Phase 4 is done: part 1 (water) `caa3231`, part 2 (boats and sea life) `94b8d87`, both installed on 2026-11-03.
+   Docs `docs/v3/phase4-water.md`, `docs/v3/phase4-sea-life.md`; look tests `out/look/v3/water/`, `out/look/v3/sea-life/`.
+2. **Phase 5, story over weeks**: not started; offered to Evan on 2026-11-03, waiting for his go. It builds on
+   phase 3's stage parameter (the garden and wall) and on part 2's recognisable seal (the pale cow, always on
+   the skerry's middle knob).
 
 **For Evan to judge** (look tests in `out/look/v3/<part>/` of this checkout, top = before, bottom = after):
 - clouds: `pair-*`, half size;
@@ -83,6 +88,11 @@ a bit darker than the path (he wanted them darker than the sky, not the ground):
   - the floats ride a fixed sea plane, so they do not rise and fall with the tide (the beacon's foot and the
     skerry show the tide);
   - the pot floats are 10-12 px across at native size: orange dots at desktop size.
+- sea life: `pair-*`, `crop-*` (`docs/v3/phase4-sea-life.md`). Things to look at:
+  - the boats are flat-shaded, ink-edged models: do `crop-creel` and `crop-ferry-day` read as pasted-on CG?
+  - the animals are drawn larger than life (seals and cormorant 1.9x, dolphins 2x, gannets 3x), and even so the
+    grey seals and flying gannets are subtle at desktop size;
+  - boats move slower than life so nothing jumps between minutes; yachts sail one leg and don't tack.
 
 **Review bar:**
 - Restraint: Evan found the first grass "a bit distracting".
