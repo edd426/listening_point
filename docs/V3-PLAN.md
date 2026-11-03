@@ -49,6 +49,11 @@ shore. It dated from v2.0, when the wall was only scenery, and was an oversight 
 boundary. Fixed in `3652ede` (look test `out/look/v3/wall-end/`; tests, determinism and r2 unchanged). The
 field gate is still drawn open, and the upper field is open hill up to the tower, as on a croft.
 
+Evan, 2026-11-03, on the installed frames: the puddles on the path were too white under overcast and
+read as snow or dropped wool, not water. Fixed in `b7728e4`: a puddle is now at most 1.15x as bright as
+the wet ground round it (`hillside.PUDDLE_CAP`); under a blue sky they stay blue. Look test
+`out/look/v3/puddles/`.
+
 **Next, in order** (Evan said on 2026-11-03 to start phase 4):
 1. **Phase 4 part 1, water**: merged `caa3231` and installed 2026-11-03 11:05. Doc `docs/v3/phase4-water.md`
    (it holds the frame-pixel geometry part 2 needs), look test `out/look/v3/water/`.
@@ -63,7 +68,7 @@ field gate is still drawn open, and the upper field is open hill up to the tower
 - air: `half-*`; a faint contrail arc in the upper right of `half-2026-11-05-1243` could read as a
   pale rainbow;
 - hillside: `crop-*`, `wl-*`. Things to look at: the garden's size and place (upper left); the
-  puddles on the path, which read as pale ovals (`wl-2027-04-06-1300`); the snow-covered gorse, which
+  snow-covered gorse, which
   reads as grey-blue mounds (`wl-2027-01-27-1100`); the faceted outcrops up close.
 - animals: `pair-*`, `crop-*` (what each shows is in `docs/v3/phase3-animals.md`). Things to look at:
   - the ewes stand about twice the height of the field walls and gate, which are drawn at half scale;
