@@ -113,7 +113,7 @@ class Null:
 
 def stages_key(day):
     st = getattr(day, "wall_stages", None) or {}
-    return tuple(sorted((k, float(getattr(v, "courses", 4.0))) for k, v in st.items()))
+    return tuple(sorted((k, float(getattr(v, "courses", 4.0)), getattr(v, "gap", None)) for k, v in st.items()))
 
 
 # ---------------------------------------------------------------- sprites --
@@ -232,7 +232,7 @@ class FaunaMixin:
         r2 = np.random.default_rng(32)
         for name, seg in zip(("wall-upper", "wall-lower"), self.field_walls()):
             rec.begin(name, seg if name == "wall-upper" else np.concatenate([seg, self.field_wall_end()]))
-            self.wall_body(Tee(null, rec), null, seg, persp, r2, null)
+            self.wall_body(Tee(null, rec), null, seg, persp, r2, null, gap=self.field_gap(name))
         self.wall_end(Tee(null, rec), null, persp, null)
         self.hillside(Tee(null, rec), null, null, null, persp)
         return self.occl_store(rec)
