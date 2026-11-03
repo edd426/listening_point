@@ -3,7 +3,7 @@
 From Evan's interview on 2026-11-01, held after the shore went live. These are his answers; the
 phases are their order. Every step gets a look test before it is installed.
 
-## HANDOFF — state at 2026-11-03 ~08:00 CET (phase 3 approved by Evan)
+## HANDOFF — state at 2026-11-03 ~11:10 CET (phase 4 part 1 merged and installed)
 
 **Verified after the update** (macOS 27.2, 26B123): both venvs still import numpy 2.0.2, scipy 1.13.1
 and Pillow 11.3.0 on Xcode's Python 3.9.6; both launchd jobs are loaded; frames render; the
@@ -20,6 +20,7 @@ carrier is green. The lock screen was not checked (needs Evan's eye).
 | 3 hillside part 1: land (garden, shed, hives, gates, outcrops, gorse, heather, puddles) | `70ea7f3` | yes, 16:52 |
 | 3 hillside part 2: animals (fox, hares, crows, bigger sheep; depth order behind walls, posts, gate, shed, hives, rocks, gorse) | `4ea34f2` | yes, 19:20 |
 | fix: the lower field wall runs on out of the bottom of the frame (it stopped short in open grass since v2.0) | `3652ede` | yes, 2026-11-03 |
+| 4 sea part 1: water (cloud shadows, wind lanes, glitter, whitecaps; channel beacon, buoys, pot floats; a tidal skerry; fix: phase 2's cloud-beam glow no longer ends in a hard line below the horizon) | `caa3231` | yes, 2026-11-03 11:05 |
 
 Probes were re-run on each merged head (tests, determinism, r2 digest): all PASS. The details are in
 each part's doc under `docs/v3/`.
@@ -33,6 +34,10 @@ Animals: the lead re-ran the probes on the branch head `5384596` (64 tests OK; `
 4/4; 6 frames rendered twice, 0 differ; r2 digest unchanged) and again after the merge (64 OK). Cost ratio
 0.99 (the delegate's measure; ≤1.15 required). The worktree and the local branch were removed after the merge.
 
+Water: the lead re-ran the probes on the branch head `7e345fc` (77 tests OK; `tests/test_shore_reference.py`
+4/4; 6 frames rendered twice, 0 differ; r2 digest unchanged) and after the merge (77 OK). Cost ratio 1.08 and
+peak memory +1.5% (tracemalloc; the delegate's measures). The worktree and the local branch were removed.
+
 **Known broken, not from v3:** `tests/test_shore_render.py` (run as a script; `unittest discover` does not
 collect it) fails 5 of 7 on `main` with `no spot passes for 2027-03-18-cairn`: its synthetic cairn finds no
 spot that passes against r2. Checked on `main` `9d21022`, before the animals merge. It belongs to the
@@ -45,12 +50,9 @@ boundary. Fixed in `3652ede` (look test `out/look/v3/wall-end/`; tests, determin
 field gate is still drawn open, and the upper field is open hill up to the tower, as on a croft.
 
 **Next, in order** (Evan said on 2026-11-03 to start phase 4):
-1. **Phase 4 part 1, water**, started 2026-11-03 ~09:35 on `v3/water` (`.claude/worktrees/v3-water`):
-   - cloud shadows, wind patterns and glitter on the sea;
-   - mooring buoys, lobster-pot floats, a channel marker, and a skerry that covers with the tide;
-   - all off in reference mode; same probes; time ratio ≤1.15, peak memory +15% at most;
-   - doc `docs/v3/phase4-water.md`, look test `out/look/v3/water/`.
-2. **Phase 4 part 2, boats and sea life**, after part 1 is merged:
+1. **Phase 4 part 1, water**: merged `caa3231` and installed 2026-11-03 11:05. Doc `docs/v3/phase4-water.md`
+   (it holds the frame-pixel geometry part 2 needs), look test `out/look/v3/water/`.
+2. **Phase 4 part 2, boats and sea life**, next, built on part 1's positions and draw order:
    - fishing boats working the pots, more sailboats, a ferry to the island on a timetable;
    - seals on the skerry, dolphins, gannets diving, a cormorant drying its wings.
 
@@ -66,6 +68,12 @@ field gate is still drawn open, and the upper field is open hill up to the tower
   - an animal about one wall-height beyond a wall can seem to stand on its coping (`snow`; main is worse);
   - at dawn and dusk the ewes are flat pale shapes, a little bright for the light (`fox-dusk`,
     `behind-gate-fox`).
+- water: `pair-*`, `crop-*` (`docs/v3/phase4-water.md`). Things to look at:
+  - streaky clouds cast streaky shadows, which in perspective fan toward a point on the horizon and can read
+    as rays on the sea (`low-water`, `flood-stream`, `sunset`);
+  - the floats ride a fixed sea plane, so they do not rise and fall with the tide (the beacon's foot and the
+    skerry show the tide);
+  - the pot floats are 10-12 px across at native size: orange dots at desktop size.
 
 **Review bar:**
 - Restraint: Evan found the first grass "a bit distracting".
