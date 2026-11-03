@@ -463,7 +463,9 @@ class WaterMixin:
         H, s = self.H, self.s
         if lo <= SKERRY[1] < hi:
             self.skerry()
-        marks = [m for m in self.mark_positions() if lo <= m[3] / H < hi]
+            self.skerry_life()      # seals hauled out, the cormorant (sealife.py)
+        aboard = self.day.sea.pot_aboard(self.m)     # a float the creel boat has aboard with its pot
+        marks = [m for m in self.mark_positions() if lo <= m[3] / H < hi and not (m[0] == "pot" and m[1] == aboard)]
         if not marks:
             return
         k0 = VH * H / math.radians(ALT_TOP)
@@ -667,10 +669,24 @@ class WaterMixin:
 
     # ------------------------------------------------------------ the bay --
     def bay(self):
-        """The skerry, the floats, the mooring buoys and the boats, from the farthest to the nearest."""
+        """The skerry, the floats, the mooring buoys and the boats, from the farthest to the nearest; with them,
+        by their waterlines, the creel boat, the dolphins and seals' heads (sealife.py)."""
         b = self.day.events.boat(self.t)
         yb = b[1] if b else MOORED[1]
-        self.sea_marks(0.0, yb)
-        self.boats()
-        self.moored_boat()
-        self.sea_marks(yb, 2.0)
+        items = self.sea_items()
+        if not items:
+            self.sea_marks(0.0, yb)
+            self.boats()
+            self.moored_boat()
+            self.sea_marks(yb, 2.0)
+            return
+
+        def sail():
+            self.boats()
+            self.moored_boat()
+        lo = 0.0
+        for y, draw in sorted(items + [(yb, sail)], key=lambda t: t[0]):
+            self.sea_marks(lo, y)
+            draw()
+            lo = y
+        self.sea_marks(lo, 2.0)
