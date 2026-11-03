@@ -10,6 +10,9 @@ import ground
 from events import FIELD_WALLS, FIELD_WALL_END
 from fauna import Tee
 
+GAP_FLOOR = 0.55     # a fallen length of wall is down to this many courses in its middle
+COURSE_TOP = (0.0, 0.37, 0.67, 0.9, 1.0)     # the top of a wall built to 0..4 courses, of its full height
+
 # How strongly the grass's fine structure reads (1 = the first phase-1 look, which Evan found a bit
 # distracting): the tufts' light tips against their dark feet, the shade between them, the blades' lean.
 TUFT_SHOW = 0.55
@@ -90,6 +93,11 @@ class LandMixin:
         """The lower wall's run out of the bottom of the frame (events.FIELD_WALL_END), in frame pixels."""
         return self.bezier(*[(x * self.W, y * self.H) for x, y in FIELD_WALL_END], 30)
 
+    def field_gap(self, name):
+        """The gap in field wall `name` today (the Day's wall_stages, story.py), or None."""
+        st = (getattr(self.day, "wall_stages", None) or {}).get(name)
+        return getattr(st, "gap", None)
+
     def wall_end(self, A, N, persp, WM):
         """The lower wall's last stretch, from a generator of its own: its stones, and grass at its foot."""
         seg, re_ = self.field_wall_end(), np.random.default_rng(39)
@@ -156,30 +164,67 @@ class LandMixin:
         for u in np.arange(0, d[-1], 9 * s):
             r.uniform(0.85, 1.15)
 
-    def wall(self, A, N, seg, r, persp, r2, WM):
+    def wall(self, A, N, seg, r, persp, r2, WM, gap=None):
         """A dry-stone wall along a curve: three courses of stones, big footings to small, each its own
-        shade with a lit top and dark joints, under a row of upright coping stones. WM gets its outline."""
+        shade with a lit top and dark joints, under a row of upright coping stones. WM gets its outline.
+        gap: a length that has come down or is being rebuilt (hillside.WallStage.gap), or None."""
         d = np.cumsum(np.r_[0, np.linalg.norm(np.diff(seg, axis=0), axis=1)])
         self.wall_draws(seg, d, r, persp)
-        self.wall_body(A, N, seg, persp, r2, WM)
+        self.wall_body(A, N, seg, persp, r2, WM, gap=gap)
 
-    def wall_body(self, A, N, seg, persp, r2, WM, courses=None, height=1.0, X=None):
+    def wall_gap(self, gap, seg):
+        """A wall's gap (hillside.WallStage.gap) along seg: the courses built at each point of seg (4 where
+        the wall is whole), and laid(row, t), whether a stone of `row` at fraction t along the wall is in
+        place. (None, None) for no gap. A fallen length is a ragged breach, down nearly to the footings in
+        the middle (each stone stays or falls by a hash of where it is, so no generator moves); a length
+        being rebuilt is stripped to a clean gap and laid course by course from its left end."""
+        if gap is None:
+            return None, None
+        mid, half, kind, built = gap
+        d = np.cumsum(np.r_[0, np.linalg.norm(np.diff(np.asarray(seg, np.float64), axis=0), axis=1)])
+        span = half * self.W / max(d[-1], 1e-6)
+        t0, t1 = mid - span, mid + span
+        x = (d / max(d[-1], 1e-6) - t0) / (t1 - t0)
+        inside = (x >= 0) & (x <= 1)
+        if kind == "fallen":
+            depth = lambda xx: 4.0 - (4.0 - GAP_FLOOR) * np.sin(np.pi * np.clip(xx, 0, 1)) ** 0.6
+            lv = np.where(inside, depth(x) - 0.45, 4.0)
+
+            def laid(row, t):
+                xx = (t - t0) / (t1 - t0)
+                if not 0 <= xx <= 1:
+                    return True
+                return row + 0.5 + 0.9 * (float(hash2(row * 7.13 + 1.7, t * 917.3)) - 0.5) < float(depth(xx))
+        else:
+            k, f = int(math.floor(built)), built - math.floor(built)
+            lv = np.where(inside, k + (x < f), 4.0).astype(np.float64)
+
+            def laid(row, t):
+                xx = (t - t0) / (t1 - t0)
+                return not 0 <= xx <= 1 or row < k or (row == k and xx < f)
+        return np.clip(lv, 0, 4), laid
+
+    def wall_body(self, A, N, seg, persp, r2, WM, courses=None, height=1.0, X=None, gap=None):
         """The stones of a wall along seg, from generator r2. courses (0..4: three courses, then the
         coping; None = finished) builds a wall only so far, a fraction of a course along the wall from its
-        start, with the same stones at every stage; height scales it; X (if given) marks it as built."""
+        start, with the same stones at every stage; height scales it; X (if given) marks it as built;
+        gap (hillside.WallStage.gap) leaves a length of it fallen or part rebuilt (wall_gap)."""
         s = self.s
         d = np.cumsum(np.r_[0, np.linalg.norm(np.diff(seg, axis=0), axis=1)])
         dirs = np.gradient(seg, axis=0)
         dirs /= np.linalg.norm(dirs, axis=1, keepdims=True) + 1e-6
         full = courses is None
-        laid = lambda row, u: full or courses >= row + 1 or (courses > row and u < (courses - row) * d[-1])
+        lv, glaid = self.wall_gap(gap, seg)
+        laid = lambda row, u: (full or courses >= row + 1 or (courses > row and u < (courses - row) * d[-1])) \
+            and (glaid is None or glaid(row, u / d[-1]))
         top_f = 1.0 if full else (0.0, 0.37, 0.67, 0.9, 1.0)[int(min(4, max(0, math.floor(courses))))]
-        # the dark body of the wall, seen in the joints between the stones
+        # the dark body of the wall, seen in the joints between the stones (lower where a length is down)
+        tf = np.full(len(seg), top_f) if lv is None else np.minimum(top_f, np.interp(lv, range(5), COURSE_TOP))
         if top_f > 0:
-            top = [(x, y - 26 * s * persp(y) * height * top_f) for x, y in seg]
+            top = [(x, y - 26 * s * persp(y) * height * f) for (x, y), f in zip(seg, tf)]
             A.poly([tuple(p) for p in seg] + top[::-1], (30, 29, 27))
             N.poly([tuple(p) for p in seg] + top[::-1], enc((0, 0.9, 0.3)))
-            body = [tuple(p) for p in seg] + [(x, y - 31 * s * persp(y) * height * top_f) for x, y in seg][::-1]
+            body = [tuple(p) for p in seg] + [(x, y - 31 * s * persp(y) * height * f) for (x, y), f in zip(seg, tf)][::-1]
             WM.poly(body, (255, 255, 255))
             if X is not None:
                 X.poly(body, (0, 0, 255))
@@ -402,10 +447,14 @@ class LandMixin:
         for name, seg in zip(("wall-upper", "wall-lower"), walls):
             if rec:        # the lower wall and its last stretch are one wall to what stands on or behind it
                 rec.begin(name, seg if name == "wall-upper" else np.concatenate([seg, self.field_wall_end()]))
-            self.wall(At, N, seg, r, persp, r2, WM)
+            self.wall(At, N, seg, r, persp, r2, WM, gap=self.field_gap(name))
         wend, re_ = self.wall_end(At, N, persp, WM)
         if rec:
             rec.end()
+        # snow drifted against the walls' near side, and what a fallen length has left (marks.py, phase 5)
+        for name, seg in zip(("wall-upper", "wall-lower"), walls):
+            self.mk_drift(A, N, HSL, seg, persp, 1.0, self.field_gap(name))
+        self.mk_drift(A, N, HSL, wend, persp, 1.0, None)
         for seg in walls:                        # grass grown up against the foot of the wall
             for x_, y_ in seg[1:-1:2]:
                 for _ in range(2):
@@ -476,11 +525,15 @@ class LandMixin:
         if src:
             cot = min(1 / math.tan(math.radians(src[0])), 3.0)
             sx, sy = math.sin(math.radians(src[1])) * cot, -math.cos(math.radians(src[1])) * cot * KF
-        for seg in walls + (wend,):
-            for (xa, ya), (xb, yb) in zip(seg[:-1], seg[1:]):
+        for name, seg in zip(("wall-upper", "wall-lower", "wall-end"), walls + (wend,)):
+            lv, _ = self.wall_gap(self.field_gap(name), seg)       # a fallen length casts less
+            gf = None if lv is None else np.interp(lv, range(5), COURSE_TOP)
+            for i, ((xa, ya), (xb, yb)) in enumerate(zip(seg[:-1], seg[1:])):
                 dao.line([(xa, ya - y0 + s), (xb, yb - y0 + s)], fill=255, width=max(2, int(7 * s * persp(ya))))
                 if src:
                     ha, hb = 29 * s * persp(ya), 29 * s * persp(yb)
+                    if gf is not None:
+                        ha, hb = ha * gf[i], hb * gf[i + 1]
                     dsh.polygon([(xa, ya - y0), (xb, yb - y0), (xb + sx * hb, yb - y0 + sy * hb), (xa + sx * ha, ya - y0 + sy * ha)], fill=255)
         for (xa, ya), (xb, yb) in feet:           # and the hillside's things, at their foot
             dao.line([(xa, ya - y0 + s), (xb, yb - y0 + s)], fill=200, width=max(2, int(5 * s * persp(ya))))

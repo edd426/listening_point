@@ -120,11 +120,14 @@ together on `shore/sync` (2026-11-01), not installed:
 ## Modules
 
 `renderers/procedural/` holds mixins on one `Frame`: `sky`, `sea`, `land`, `hillside`, `tree`, `tower`, `props`,
-`life`, `fauna`, `distant`, `weatherfx`, `mystery`, `shore`, `air`, `water`, `sealife`. `water` (v3 phase 4 part 1,
+`life`, `fauna`, `distant`, `weatherfx`, `mystery`, `shore`, `air`, `water`, `sealife`, `marks`. `water` (v3 phase 4 part 1,
 `docs/v3/phase4-water.md`) draws the light on the sea and the marks in the bay. `sealife` (v3 phase 4 part 2,
 `docs/v3/phase4-sea-life.md`) draws the bay's boats and animals (the creel boat, extra yachts, the island ferry,
 seals, a cormorant, gannets, dolphins) from the day's plan in `seaplan.py` (`day.sea`; empty in reference mode);
-`tools/sea_schedule.py` reports how often each shows. `fauna` (v3 phase 3 part 2,
+`tools/sea_schedule.py` reports how often each shows. `marks` (v3 phase 5 part 1, `docs/v3/phase5-land.md`) draws
+what the story leaves on the land (a wall fallen and rebuilt, the spade, a storm's branch and its logs, driftwood,
+snow drifts) from `story.py` (`day.story`, from the date and the weather of the days before, real weather from the
+cache only; empty in reference mode); `tools/story_calendar.py` prints what shows on each date. `fauna` (v3 phase 3 part 2,
 `docs/v3/phase3-animals.md`) draws the sheep, fox, hares and crows, and hides any animal standing behind the
 walls, the gate, the shed, the hives, the rocks or the gorse (masks recorded while the hill is drawn). `day.py` builds one date's per-minute astronomy, weather,
 season (`season.py`), schedule (`events.py`) and mysteries. `astro.py` and `weather.py` are

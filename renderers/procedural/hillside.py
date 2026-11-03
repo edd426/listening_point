@@ -50,8 +50,15 @@ class WallStage:
     """How far a dry-stone wall is built: `courses` 0..4, three courses of stones and then the coping.
     A fraction builds the next course along the wall from its start, so a wall rising stone by stone is
     `courses` creeping up week by week. The stones are the same at every stage (they are drawn from the
-    same draws and only shown when laid)."""
+    same draws and only shown when laid).
+
+    `gap` (phase 5, story.py) is a length of the wall that has come down or is being rebuilt: (middle, half
+    length, kind, built), the middle as a fraction of the stretch, the half length as a fraction of the
+    frame's width. Kind "fallen": a ragged breach, down nearly to the footings in the middle; "built": the
+    breach stripped to a clean gap and rebuilt to `built` courses (0..4) there, a fraction laying the next
+    course along the gap from its left end. None: no gap."""
     courses: float = 4.0
+    gap: tuple = None
 
 
 def garden_stage(doy):
@@ -195,6 +202,8 @@ class HillsideMixin:
         self.hs_garden(self.hs_garden_stage(), d)
         self.hs_field_gate(FIELD_GATE["open_deg"])
         self.hs_occ()
+        self.mk_wall()                   # phase 5's marks (marks.py): a fallen wall's stones, a blown-down branch
+        self.mk_branch()
         return self._hs_casters, self._hs_feet
 
     def hs_occ(self, name=None, foot=None):
@@ -250,10 +259,12 @@ class HillsideMixin:
         self.hs_occ("shed", [g(SHED_AB[0], SHED_AB[2]), g(SHED_AB[1], SHED_AB[2])])
         self.hs_shed(rng)
         self.hs_occ()
+        self.mk_logs()                   # logs stacked against its gable (marks.py)
         # the left wall, whose inner face you see, then the beds front to back over it
         self.hs_wall("garden-left", [g(0.0, b_) for b_ in np.linspace(0.0, SHED_AB[2] + 0.01, 30)])
         for k in range(len(BEDS) - 1, -1, -1):
             self.hs_bed(k, st, np.random.default_rng(320 + k))
+            self.mk_spade(k)             # the spade left where the digging stopped (marks.py)
         # the right wall (you see its outer face; it hides the garden behind it), then the front wall
         self.hs_wall("garden-right", [g(1.0, b_) for b_ in np.linspace(0.0, 1.0, 30)])
         a0, a1 = GATE_GAP
@@ -272,13 +283,19 @@ class HillsideMixin:
         r2 = np.random.default_rng(360 + WALLS.index(name))
         self.hs_occ(name, pts)
         self.wall_body(self._hsA, self._hsN, seg, persp, r2, self._hsWM, courses=stage.courses, height=height,
-                       X=self._hsX)
+                       X=self._hsX, gap=stage.gap)
         self.hs_occ()
+        self.mk_drift(self._hsA, self._hsN, self._hsX, seg, persp, height, stage.gap)    # snow drifted against it
         hgt = lambda y: 29 * self.s * float(persp(y)) * height * min(1.0, stage.courses / 4)
         if stage.courses <= 0:
             return
-        for (xa, ya), (xb, yb) in zip(seg[:-1], seg[1:]):
-            self._hs_casters.append(("wall", (xa, ya), (xb, yb), hgt(ya), hgt(yb), 0.0))
+        lv, _ = self.wall_gap(stage.gap, seg)          # a fallen length casts less
+        gf = None if lv is None else np.interp(lv, range(5), (0.0, 0.37, 0.67, 0.9, 1.0))
+        for i, ((xa, ya), (xb, yb)) in enumerate(zip(seg[:-1], seg[1:])):
+            ha, hb = hgt(ya), hgt(yb)
+            if gf is not None:
+                ha, hb = ha * float(gf[i]), hb * float(gf[i + 1])
+            self._hs_casters.append(("wall", (xa, ya), (xb, yb), ha, hb, 0.0))
             self._hs_feet.append(((xa, ya), (xb, yb)))
 
     def hs_wicket(self, p0, p1):

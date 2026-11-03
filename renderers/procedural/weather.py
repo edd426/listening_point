@@ -10,6 +10,7 @@ usage: weather.py [DATE] [--offline] [--synthetic] [--fair] [--cache DIR] [-v]
 """
 import argparse
 import datetime as dt
+import functools
 import json
 import os
 import re
@@ -450,7 +451,10 @@ def _clim(table, doy):
     return np.interp(doy, MID, table, period=365.25)
 
 
+@functools.lru_cache(maxsize=512)
 def _share(doy):
+    """The share of days in each state on day of year doy (cached: story.py makes many days of weather; the
+    callers never change the array)."""
     p = np.array([_clim(SHARE[:, j], doy) for j in range(6)])
     return p / p.sum()
 
@@ -553,10 +557,11 @@ def _codes(total, vis, temp, rain, showers, snowfall, frontal, storm):
     return np.where(storm, 95, code)
 
 
-def _synthetic_hourly(date, tz_name, lat, lon):
-    """Made-up hourly weather, Open-Meteo style, from 15 days before date to 2 days after."""
+def _synthetic_hourly(date, tz_name, lat, lon, back=15):
+    """Made-up hourly weather, Open-Meteo style, from `back` days before date to 2 days after (story.py asks
+    for more days before, to spin up the snow on the ground over a block of days)."""
     t0 = _midnight(date, tz_name)
-    th = np.arange(t0 - 15 * 86400, t0 + 3 * 86400 + 1, 3600.0)
+    th = np.arange(t0 - back * 86400, t0 + 3 * 86400 + 1, 3600.0)
     x = th / 3600 + lon / 15                    # solar hours since the epoch
     k = np.floor(x / 24).astype(int)
     hs = x - 24 * k

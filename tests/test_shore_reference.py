@@ -36,7 +36,7 @@ DRAWERS = ("comet", "ghost_ship", "far_lights", "whale", "footprints", "bottle",
            "sheep", "critters", "cat", "heron", "owl", "sky_extras", "boats", "falling_leaves", "high_air", "air_kite",
            "fox", "hares", "crows", "beacon", "beacon_glow", "sea_marks", "skerry", "whitecaps",
            "far_sea", "ferry", "yachts", "gannets", "creel_boat", "skerry_life", "draw_seal_head", "dolphins",
-           "sea_lights")
+           "sea_lights", "driftwood")
 # (date, time, weather, what normal mode draws then): each a day when it really happens (2027's schedule)
 CASES = [
     (D(2027, 1, 25), "02:05", "fair", {"far_lights"}),                    # the light in the empty cottage
@@ -68,6 +68,7 @@ CASES = [
     (D(2027, 5, 20), "16:00", "fair", {"yachts"}),                               # an extra yacht
     (D(2027, 6, 8), "12:30", "fair", {"gannets"}),
     (D(2027, 6, 18), "15:30", "fair", {"dolphins"}),
+    (D(2026, 12, 9), "12:00", "synthetic", {"driftwood"}),                       # thrown up by the onshore gale of the 7th
 ]
 SMALL = 0.25
 
@@ -134,6 +135,9 @@ def test_reference_mode_draws_no_creature_or_rare_event():
         assert not ev.fox and not ev.hares and not ev.boxing and not ev.crow_visits
         sea = day.sea          # the bay's boats and animals (seaplan.py): none
         assert not (sea.ferry or sea.creel or sea.yachts or sea.gannets or sea.dolphins or sea.cormorant or sea.seal_swims)
+        st = day.story         # the story's marks (story.py): none, and phase 3's stages left to the date
+        assert not (st.driftwood or st.wall or st.branch or st.logs or st.spade or st.walls or st.garden)
+        assert getattr(day, "garden_stage", None) is None and not getattr(day, "wall_stages", None)
         drew, specks, img = render_with_spies(day, m)
         assert not drew, (date, hhmm, "reference mode drew", drew)
         assert specks == 0, (date, hhmm, "moths or fireflies in reference mode")
@@ -141,7 +145,7 @@ def test_reference_mode_draws_no_creature_or_rare_event():
                     "sheep", "critters", "cat", "heron", "owl", "falling_leaves", "high_air", "air_kite",
                     "fox", "hares", "crows", "beacon", "beacon_glow", "sea_marks", "skerry", "whitecaps",
                     "far_sea", "ferry", "yachts", "gannets", "creel_boat", "skerry_life", "draw_seal_head", "dolphins",
-                    "sea_lights"}, seen
+                    "sea_lights", "driftwood"}, seen
     # the moths and fireflies of a warm summer night show only in normal mode
     day = Day(D(2027, 7, 6), weather="fair")
     assert render_with_spies(day, minute("23:30"))[1] > 0

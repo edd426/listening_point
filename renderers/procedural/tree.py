@@ -410,6 +410,7 @@ class TreeMixin:
             for (xa, ya, xb, yb_, w0, w1, depth) in segs:
                 if depth <= 5 and abs(yb_ - ya) < 1.4 * abs(xb - xa):
                     L.line([(xa, ya - w0 * 0.7), (xb, yb_ - w1 * 0.7)], snowc, max(0.8 * s, w0 * 0.45), a=min(1.0, wx.snow_cover * 1.5) * (1 - 0.7 * se.leaves))
+        self.mk_scar(L)                  # where a gale tore a branch off (marks.py)
         # last year's nest shows once the leaves are down
         if se.leaves < 0.25:
             nx_, ny_ = ccx - 0.32 * Rx, ccy + 0.05 * Ry

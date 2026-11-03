@@ -15,6 +15,7 @@ import astro
 import events
 import seaplan
 import shore as shore_mod
+import story as story_mod
 import weather as wxmod
 from mystery import Mysteries
 from season import Season
@@ -82,6 +83,9 @@ class Day:
             self._hold_still()
         # the bay's boats and animals (seaplan.py): none in reference mode
         self.sea = seaplan.NoPlan() if self.reference else seaplan.SeaPlan(self)
+        # what the days before have left on the land (story.py): nothing in reference mode
+        self.story = story_mod.NoStory() if self.reference else story_mod.Story(self, weather, cache_dir)
+        self.story.apply(self)
         self.shore = shore_mod.load_shore(shore, self) if shore else None
         self.lamp_lit = shore_mod.lamp_lit(lamp, date, self.tz) if lamp else None
 
