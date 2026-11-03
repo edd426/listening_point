@@ -231,8 +231,9 @@ class FaunaMixin:
         persp = lambda y: 0.35 + 1.3 * np.clip((np.asarray(y) / H - 0.6) / 0.4, 0, 1)
         r2 = np.random.default_rng(32)
         for name, seg in zip(("wall-upper", "wall-lower"), self.field_walls()):
-            rec.begin(name, seg)
+            rec.begin(name, seg if name == "wall-upper" else np.concatenate([seg, self.field_wall_end()]))
             self.wall_body(Tee(null, rec), null, seg, persp, r2, null)
+        self.wall_end(Tee(null, rec), null, persp, null)
         self.hillside(Tee(null, rec), null, null, null, persp)
         return self.occl_store(rec)
 

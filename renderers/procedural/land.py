@@ -7,7 +7,7 @@ from scipy import ndimage as ndi
 
 from core import *  # noqa: F401,F403
 import ground
-from events import FIELD_WALLS
+from events import FIELD_WALLS, FIELD_WALL_END
 from fauna import Tee
 
 # How strongly the grass's fine structure reads (1 = the first phase-1 look, which Evan found a bit
@@ -85,6 +85,16 @@ class LandMixin:
         """The two field walls' foot lines in frame pixels (events.FIELD_WALLS)."""
         W, H = self.W, self.H
         return tuple(self.bezier(*[(x * W, y * H) for x, y in p], 90) for p in FIELD_WALLS)
+
+    def field_wall_end(self):
+        """The lower wall's run out of the bottom of the frame (events.FIELD_WALL_END), in frame pixels."""
+        return self.bezier(*[(x * self.W, y * self.H) for x, y in FIELD_WALL_END], 30)
+
+    def wall_end(self, A, N, persp, WM):
+        """The lower wall's last stretch, from a generator of its own: its stones, and grass at its foot."""
+        seg, re_ = self.field_wall_end(), np.random.default_rng(39)
+        self.wall_body(A, N, seg, persp, re_, WM)
+        return seg, re_
 
     def bezier(self, p0, p1, p2, p3, n=120):
         t = np.linspace(0, 1, n)[:, None]
@@ -390,9 +400,10 @@ class LandMixin:
         rec = self.occl_recorder()
         At = Tee(A, rec) if rec else A
         for name, seg in zip(("wall-upper", "wall-lower"), walls):
-            if rec:
-                rec.begin(name, seg)
+            if rec:        # the lower wall and its last stretch are one wall to what stands on or behind it
+                rec.begin(name, seg if name == "wall-upper" else np.concatenate([seg, self.field_wall_end()]))
             self.wall(At, N, seg, r, persp, r2, WM)
+        wend, re_ = self.wall_end(At, N, persp, WM)
         if rec:
             rec.end()
         for seg in walls:                        # grass grown up against the foot of the wall
@@ -401,6 +412,11 @@ class LandMixin:
                     gx_, gy_ = x_ + r2.uniform(-5, 5) * s, y_ + r2.uniform(0.5, 3.0) * s * persp(y_)
                     if r2.random() < 0.7 and free(gx_, gy_):
                         self.tuft(A, N, gx_, gy_, r2.uniform(5, 10) * s * persp(gy_), r2, tuft[0] * 0.95, tuft[2])
+        for x_, y_ in wend[1:-1:2]:              # and at the foot of the lower wall's last stretch
+            for _ in range(2):
+                gx_, gy_ = x_ + re_.uniform(-5, 5) * s, y_ + re_.uniform(0.5, 3.0) * s * persp(y_)
+                if re_.random() < 0.7 and free(gx_, gy_):
+                    self.tuft(A, N, gx_, gy_, re_.uniform(5, 10) * s * persp(gy_), re_, tuft[0] * 0.95, tuft[2])
         # tufts across the slope; browner in winter, straw-coloured in a dry summer. The ground's own tufts
         # (ground.py) take their place, except where one reaches the shingle; near the bottom of the
         # frame some become larger blades in the foreground.
@@ -460,7 +476,7 @@ class LandMixin:
         if src:
             cot = min(1 / math.tan(math.radians(src[0])), 3.0)
             sx, sy = math.sin(math.radians(src[1])) * cot, -math.cos(math.radians(src[1])) * cot * KF
-        for seg in walls:
+        for seg in walls + (wend,):
             for (xa, ya), (xb, yb) in zip(seg[:-1], seg[1:]):
                 dao.line([(xa, ya - y0 + s), (xb, yb - y0 + s)], fill=255, width=max(2, int(7 * s * persp(ya))))
                 if src:
