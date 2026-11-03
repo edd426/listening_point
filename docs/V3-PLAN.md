@@ -44,10 +44,15 @@ shore. It dated from v2.0, when the wall was only scenery, and was an oversight 
 boundary. Fixed in `3652ede` (look test `out/look/v3/wall-end/`; tests, determinism and r2 unchanged). The
 field gate is still drawn open, and the upper field is open hill up to the tower, as on a croft.
 
-**Next, in order:**
-1. Suggested pause (not yet decided by Evan): let him live with phases 2 and 3 for a few days
-   before phase 4 (sea) and phase 5 (story).
-2. If he finds an animal look wrong (below), fix it on a new branch before phase 4.
+**Next, in order** (Evan said on 2026-11-03 to start phase 4):
+1. **Phase 4 part 1, water**, started 2026-11-03 ~09:35 on `v3/water` (`.claude/worktrees/v3-water`):
+   - cloud shadows, wind patterns and glitter on the sea;
+   - mooring buoys, lobster-pot floats, a channel marker, and a skerry that covers with the tide;
+   - all off in reference mode; same probes; time ratio ≤1.15, peak memory +15% at most;
+   - doc `docs/v3/phase4-water.md`, look test `out/look/v3/water/`.
+2. **Phase 4 part 2, boats and sea life**, after part 1 is merged:
+   - fishing boats working the pots, more sailboats, a ferry to the island on a timetable;
+   - seals on the skerry, dolphins, gannets diving, a cormorant drying its wings.
 
 **For Evan to judge** (look tests in `out/look/v3/<part>/` of this checkout, top = before, bottom = after):
 - clouds: `pair-*`, half size;
