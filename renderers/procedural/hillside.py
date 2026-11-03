@@ -120,7 +120,7 @@ MEADOW = ((0.260, 0.905, 90, 22, 70, 1), (0.330, 0.800, 70, 14, 46, 2), (0.060, 
 # puddles on the path: (along 0..1, across -1..1, size); and in hollows: (x, y, rx at scale 1)
 PATH_PUDDLES = ((0.12, 0.40, 1.1), (0.31, 0.38, 1.1), (0.335, -0.40, 0.9), (0.52, 0.41, 0.8), (0.70, -0.40, 0.7))
 HOLLOW_PUDDLES = ((0.170, 0.834, 30),)
-PUDDLE_CAP = 1.15      # a puddle is at most this much brighter than the wet ground round it
+PUDDLE_CAP = 2.0       # at most this much brighter than the wet rim round it: a little lighter than the path
 
 
 def enc(n):
