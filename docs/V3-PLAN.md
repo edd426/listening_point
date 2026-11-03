@@ -51,8 +51,10 @@ field gate is still drawn open, and the upper field is open hill up to the tower
 
 Evan, 2026-11-03, on the installed frames: the puddles on the path were too white under overcast and
 read as snow or dropped wool, not water. Fixed in `b7728e4`: a puddle is now at most 1.15x as bright as
-the wet ground round it (`hillside.PUDDLE_CAP`); under a blue sky they stay blue. Look test
-`out/look/v3/puddles/`.
+the wet ground round it (`hillside.PUDDLE_CAP`); under a blue sky they stay blue. Evan then found them
+a bit darker than the path (he wanted them darker than the sky, not the ground): `PUDDLE_CAP` 2.0 in
+`bc3c3e9` makes them 1.1-1.3x as bright as the path under overcast (white ones were 3x). Look test
+`out/look/v3/puddles/` (top: white, middle: 1.15, bottom: 2.0).
 
 **Next, in order** (Evan said on 2026-11-03 to start phase 4):
 1. **Phase 4 part 1, water**: merged `caa3231` and installed 2026-11-03 11:05. Doc `docs/v3/phase4-water.md`
