@@ -52,7 +52,9 @@ field gate is still drawn open, and the upper field is open hill up to the tower
 **Next, in order** (Evan said on 2026-11-03 to start phase 4):
 1. **Phase 4 part 1, water**: merged `caa3231` and installed 2026-11-03 11:05. Doc `docs/v3/phase4-water.md`
    (it holds the frame-pixel geometry part 2 needs), look test `out/look/v3/water/`.
-2. **Phase 4 part 2, boats and sea life**, next, built on part 1's positions and draw order:
+2. **Phase 4 part 2, boats and sea life**, started 2026-11-03 ~11:15 on `v3/sea-life`
+   (`.claude/worktrees/v3-sea-life`), built on part 1's positions and draw order; doc
+   `docs/v3/phase4-sea-life.md`, look test `out/look/v3/sea-life/`:
    - fishing boats working the pots, more sailboats, a ferry to the island on a timetable;
    - seals on the skerry, dolphins, gannets diving, a cormorant drying its wings.
 
