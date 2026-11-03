@@ -73,6 +73,10 @@ a bit darker than the path (he wanted them darker than the sky, not the ground):
      land done offstage (a wall rebuilt course by course on workable days, the garden through phase 3's
      `GardenStage`/`WallStage`); weather marks (a gale's branch until cleared, driftwood, snow drifts). Doc
      `docs/v3/phase5-land.md`, look test `out/look/v3/story-land/`, `tools/story_calendar.py`.
+     At ~19:40 `story.py`, `marks.py` and `tools/story_calendar.py` were committed (`1d1e92a`); probes and the look
+     test not yet run. Paused then: the data volume was full (1.1 GB free; the lead deleted its own superseded
+     frame folders from the Trash, 4 GB) and swap was at 17.7 of 18.9 GB under an iOS Simulator and Xcode run
+     from another session. Resume when memory allows.
    - part 2, animal lives: lambs grow up, the cat's kittens, the pale cow seal (seal 0, `SEAL_SPOTS[0]`) leaves
      and returns to her knob. Extends `story.py`.
    - part 3, echoes of the worlds: the listener's boat and life answer the shore's history (the live ledger).
