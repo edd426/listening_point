@@ -6,10 +6,14 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage as ndi
 
 from core import *  # noqa: F401,F403
+from story import rng as srng
+
+# The washing (the story's echoes, story.py): pale, worn cloths, pegged on a line from the mast to the stern
+CLOTHS = ((236, 234, 226), (176, 194, 214), (196, 198, 192), (200, 128, 110), (226, 214, 180), (150, 172, 160))
 
 
 class PropsMixin:
-    def boat(self, cx, cy, size, facing, sails, masthead=False):
+    def boat(self, cx, cy, size, facing, sails, masthead=False, pennant=None):
         s = self.s
         L = Layer(self, cx - size * 0.8, cy - size * 1.35, cx + size * 0.8, cy + size * 0.3)
         f = facing
@@ -31,6 +35,8 @@ class PropsMixin:
             L.line([P(0.05, -0.12), P(-0.42, -0.12)], self.lit((70, 62, 55), side), max(1.0, size * 0.014))
         else:
             L.line([P(0.05, -0.16), P(-0.36, -0.14)], self.lit((200, 196, 186), side), max(1.0, size * 0.03))
+        if pennant is not None:
+            self.pennant(L, P(0.05, -1.19), size, pennant)
         L.composite()
         if masthead and self.night > 0:
             x, y = P(0.05, -1.22)
@@ -43,14 +49,17 @@ class PropsMixin:
         if b:
             x, y, facing = b
             size = 170 * s * (y - VH) / (MOORED[1] - VH)
-            self.boat(x * W, y * H, size, facing, True)
+            self.boat(x * W, y * H, size, facing, True, pennant=self.day.story.pennant_at(self.m))
 
     def moored_boat(self):
         if self.day.events.boat(self.t):
             return
         s = self.s
         cx, cy, size = MOORED[0] * self.W, MOORED[1] * self.H, 170 * s
-        self.boat(cx, cy, size, -1, False, masthead=True)
+        self.boat(cx, cy, size, -1, False, masthead=True, pennant=self.day.story.pennant_at(self.m))
+        wash = self.day.story.washing_at(self.m)
+        if wash is not None:
+            self.washing(cx, cy, size, wash)
         self.listener_window(cx, cy, size)      # the listener lives aboard: a lamp in the deckhouse on a lit evening
         # the bow line, slack, to the post at the end of the pier
         px, py = self.pproj(*self.pier_pt(1.0, 0.06, PIER3["deck"] + 0.008))
@@ -58,6 +67,87 @@ class PropsMixin:
         L = Layer(self, min(px, bx) - 4 * s, min(py, by) - 4 * s, max(px, bx) + 4 * s, max(py, by) + 14 * s)
         sag = [(bx + (px - bx) * t, by + (py - by) * t + 9 * s * math.sin(math.pi * t)) for t in np.linspace(0, 1, 12)]
         L.line(sag, self.lit((150, 140, 116), [0, 1, 0.4]), 1.3 * s)
+        L.composite()
+
+    # ------------------------------------------------- the echoes (story.py) --
+    def downwind(self):
+        """Where the wind blows things on the boat, on screen: (sideways, -1 left .. 1 right, foreshortened), how far
+        it lifts them toward the horizontal (0 hanging, 1 flat out), and the horizontal normal of a cloth across it
+        (east, north, up), turned toward the viewer. The view faces south, so a wind from the east blows to the right."""
+        th = math.radians(self.wx.wind_dir_deg)
+        e, n = -math.sin(th), -math.cos(th)                 # downwind, east and north
+        side = -e                                           # east is on the left
+        across = math.hypot(side, 0.3 * n)                  # how long it looks: one blowing away from you is foreshortened
+        lift = 1.0 - math.exp(-self.wx.wind_ms / 2.5)
+        nrm = (n, -e, 0.0) if -e >= 0 else (-n, e, 0.0)
+        return math.copysign(across, side if abs(side) > 1e-3 else 1.0), lift, nrm
+
+    def pennant(self, L, top, size, colour):
+        """A narrow pennant at the masthead (the story's echoes): the colour of the newest thing on the shore,
+        streaming downwind from the top of the mast (hanging in a calm), rippling, each ripple lit as cloth across the
+        wind."""
+        side, lift, nrm = self.downwind()
+        rr = srng(32, self.day.date.toordinal(), self.m)
+        a = math.radians(6 + 76 * (1 - lift))              # below the horizontal: hanging in a calm, flat out in a breeze
+        ln, depth = 0.23 * size, 0.05 * size
+        d = (side * math.cos(a), math.sin(a))
+        perp = (-d[1], d[0])
+        x0, y0 = top
+        tip = (x0 + d[0] * ln, y0 + 0.5 * depth + d[1] * ln)
+        amp = 0.022 * size * min(1.0, self.wx.wind_ms / 3.0)
+        ph = rr.uniform(0, 2 * math.pi)
+        k = 9
+        pts = []
+        for i in range(k + 1):
+            u = i / k
+            w = amp * u * math.sin(2 * math.pi * 1.4 * u - ph)
+            pts.append(((x0 + (tip[0] - x0) * u + perp[0] * w, y0 + (tip[1] - y0) * u + perp[1] * w),
+                        (x0 + (tip[0] - x0) * u + perp[0] * w, y0 + depth + (tip[1] - y0 - depth) * u + perp[1] * w), w))
+        alb = np.asarray(colour, np.float32)
+        for i in range(k):
+            (a0, b0, w0), (a1, b1, w1) = pts[i], pts[i + 1]
+            slope = (w1 - w0) / max(1e-6, ln / k)
+            tilt = normalize([nrm[0] + 0.6 * slope * nrm[1], nrm[1] - 0.6 * slope * nrm[0], 0.25])
+            L.poly([a0, a1, b1, b0], self.lit(alb, tilt))
+
+    def washing(self, cx, cy, size, seed):
+        """Washing on a line from the mast to a short pole at the stern of the moored boat (the story's echoes): three
+        or four pale cloths pegged along it, blown a little downwind, glowing through when the sun is behind them.
+        The moored boat faces left, so the stern is on the right, away from the pier."""
+        s = self.s
+        r = srng(31, seed)
+        n = int(r.integers(3, 5))
+        cols = [CLOTHS[int(i)] for i in r.choice(len(CLOTHS), n, replace=False)]
+        dims = [(r.uniform(0.05, 0.075), r.uniform(0.045, 0.10), r.uniform(0.92, 1.04)) for _ in range(n)]
+        side, lift, _ = self.downwind()
+        rr = srng(33, seed, self.m)
+
+        def P(x, y):
+            return (cx - x * size, cy + y * size)
+        A, B = P(0.05, -0.38), P(-0.45, -0.25)
+        sag = 0.02 * size
+
+        def on_line(u):
+            return (A[0] + (B[0] - A[0]) * u, A[1] + (B[1] - A[1]) * u + sag * 4 * u * (1 - u))
+        L = Layer(self, min(A[0], B[0]) - 0.1 * size, A[1] - 0.05 * size, max(A[0], B[0]) + 0.15 * size, cy)
+        L.line([P(-0.45, -0.052), B], self.lit((150, 150, 146), [0, 1, 0.2]), max(1.0, 0.012 * size))   # the pole
+        L.line([on_line(u) for u in np.linspace(0, 1, 12)], self.lit((176, 170, 156), [0, 1, 0.4]), max(0.6, 0.6 * s))
+        back = max(0.0, -float(self.sunv[1])) * self.sun_str * 0.3      # thin cloth glows with the sun behind it
+        glow = np.array([255, 220, 170], np.float32) * back * self.sun_col
+        spots = (0.20, 0.39, 0.58, 0.76) if n == 4 else (0.26, 0.48, 0.70)
+        for (w, h, tone), u, col in zip(dims, spots, cols):
+            ul, ur = u - 0.5 * w / 0.5, u + 0.5 * w / 0.5     # the line is about half a boat long on screen
+            p0, p1 = on_line(ul), on_line(ur)
+            sway = side * lift * 0.45 * h * size + 0.12 * h * size * lift * float(rr.uniform(-1, 1))
+            q1, q0 = (p1[0] + sway, p1[1] + h * size), (p0[0] + sway, p0[1] + h * size)
+            alb = np.asarray(col, np.float32) * tone
+            through = glow * alb / 255
+            L.poly([p0, p1, q1, q0], self.lit(alb, [0.15 * side, 1, 0.25]) + through)
+            mx = ((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2)
+            L.poly([mx, p1, q1, ((q0[0] + q1[0]) / 2, (q0[1] + q1[1]) / 2)],
+                   self.lit(alb * 0.9, [-0.3 * side, 1, 0.2]) + 0.9 * through)
+            for p in (p0, p1):                                   # the pegs
+                L.line([p, (p[0], p[1] + 0.012 * size)], self.lit((120, 100, 80), [0, 1, 0.3]), max(0.6, 0.008 * size))
         L.composite()
 
     def bench(self):

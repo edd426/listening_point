@@ -14,6 +14,12 @@ synthetic and fair weather from their own generators (so previews repeat), real 
 forecasts already in the weather cache, never from the network. A day the cache does not cover is a day
 on which nothing happened: no storm and no work.
 
+Part 3, the echoes: the listener, who lives aboard the boat moored at the end of the pier and is never seen,
+answers what reaches the shore (its ledger, shore.py's History): a pennant at the masthead in the colours of the
+newest thing still on the shore, a trip out on the bay the day after the sea takes things, and washing hung out
+on a quiet day. They read only the ledger's events at or before the moment they show (tools/nightly.py re-renders
+from each new event's moment on), and nothing at all without a shore cache or with an empty ledger.
+
 Every random choice here has its own generator, seeded [STORY + strand, ...], disjoint from every other
 generator in the renderer, so no existing draw moves. In reference mode there is no story (NoStory).
 """
@@ -102,6 +108,16 @@ COATS = (("black", 0.2), ("bicolour", 0.3), ("grey", 0.15), ("tabby", 0.2), ("gi
 SEAL_GO_P = 0.85
 SEAL_LEAVE, SEAL_LEAVE_LATE, SEAL_AWAY = (9, 15), 30, (30, 46)   # she leaves 15 September + 0..30 days, for 30-46 days
 SEAL_SURE, SEAL_LEAN = 3, 35   # back, she comes to every low water for 3 days, and is thin for 35
+
+# ----------------------------------------------------------------- echoes --
+# (part 3) The listener's boat answers the shore's history. The pennant flies the colour of the newest object still
+# on the shore, and comes down once nothing new has landed for PENNANT_QUIET seconds.
+PENNANT_QUIET = 3 * 86400
+# Washing hangs on a line from the mast to the stern on a quiet day (nothing new landed since the start of the day
+# before), hung at WASH_HANG and taken in at WASH_IN (hours, seeded), or at the first rain or a blow; only on a dry
+# day (WASH_DRY: no rain for its first hour), not cold (WASH_TEMP C), with the wind under WASH_WIND m/s, moored all day.
+WASH_HANG, WASH_IN, WASH_DRY = (9.0, 10.5), (14.5, 16.0), 60
+WASH_TEMP, WASH_WIND, WASH_BLOW = 3.0, 10.0, 12.0
 
 
 # ---------------------------------------------------------------- weather --
@@ -345,7 +361,33 @@ def seal_year(Y):
 
 
 # ------------------------------------------------------------------ story --
-class NoStory:
+class EchoView:
+    """Reading the echoes (part 3) at a clock minute, from `pennant` and `washing` (see Story)."""
+    pennant = washing = sail = None
+
+    def pennant_at(self, m):
+        """The pennant's colour (an albedo) at clock minute m, or None when none flies."""
+        c = None
+        for m0, col in self.pennant or ():
+            if m0 > m:
+                break
+            c = col
+        return c
+
+    def washing_at(self, m):
+        """The washing's seed while it hangs at clock minute m, else None."""
+        w = self.washing
+        return w[2] if w and w[0] <= m < w[1] else None
+
+
+class Echo(EchoView):
+    """The echoes on one date (echoes())."""
+
+    def __init__(self, pennant=None, sail=None, washing=None):
+        self.pennant, self.sail, self.washing = pennant, sail, washing
+
+
+class NoStory(EchoView):
     """Reference mode: nothing has happened."""
     garden = None
     walls = {}
@@ -356,6 +398,7 @@ class NoStory:
     lambs = kittens = ()
     ewes = pale = pale_before = sold = None
     kittens_in = False
+    # the echoes (part 3): no pennant, no washing, no trip sent by the shore (EchoView)
     cost_ms = 0.0
 
     def apply(self, day):
@@ -383,6 +426,11 @@ class Story(NoStory):
       each with its age, size, coat and seed; kittens_in: a wet spell keeps the young ones indoors today;
     - pale: the pale seal while she is away, or for a while after she is back (her knob, seaplan.seals_at); else None;
       pale_before: the same for the day before (a low water that began before midnight keeps that day's state).
+
+    The echoes (part 3), from the shore's history (day.shore.history), all None without one:
+    - pennant: ((from minute, colour or None), ...) through the day: what flies at the masthead (pennant_at);
+    - sail: (dep, ret) when the sea took things yesterday and the boat goes out today (Story.apply sets the trip);
+    - washing: (from minute, to minute, seed) while washing hangs on the moored boat (washing_at).
     """
 
     def __init__(self, day, weather="auto", cache_dir=None):
@@ -400,6 +448,7 @@ class Story(NoStory):
         self._flock(D)
         self._kittens(D)
         self._seal(D)
+        self._echoes(day)
         self.lookback = len(self.hist.memo)
         del self.hist                    # not needed by the workers
         self.cost_ms = (time.perf_counter() - t0) * 1000
@@ -408,6 +457,8 @@ class Story(NoStory):
         """Hang the stages on the Day, where the hillside (phase 3's interface) draws them from."""
         day.garden_stage = self.garden
         day.wall_stages = dict(self.walls)
+        if self.sail:                   # the echoes: out on the bay the day after the sea took things
+            day.events.trip = self.sail
 
     # ----------------------------------------------------------- garden --
     def _garden(self, D):
@@ -602,6 +653,81 @@ class Story(NoStory):
     # ------------------------------------------------------------- seal --
     def _seal(self, D):
         self.pale, self.pale_before = pale_state(D), pale_state(D - DAY)
+
+    # ----------------------------------------------------------- echoes --
+    def _echoes(self, day):
+        hist = getattr(getattr(day, "shore", None), "history", None)
+        if hist is None or not hist.adds:
+            return
+        e = echoes(day, hist)
+        self.pennant, self.sail, self.washing = e.pennant, e.sail, e.washing
+
+
+def pennant_at(hist, t):
+    """The pennant's colour at UTC second t (an albedo), or None: the colour of the newest object on the shore then
+    (landed, and not yet taken by the sea), unless nothing new has landed for PENNANT_QUIET. Reads only the events at
+    or before t."""
+    newest, best = None, None
+    for lands, seq, colour, gone in hist.adds:
+        if lands > t:
+            continue
+        newest = lands if newest is None else max(newest, lands)
+        if gone is not None and gone <= t:
+            continue
+        if best is None or (lands, seq) > best[:2]:
+            best = (lands, seq, colour)
+    if best is None or t - newest >= PENNANT_QUIET:
+        return None
+    return tuple(best[2])
+
+
+def echoes(day, hist):
+    """The echoes on day's date from the shore's history (shore.History), as an Echo. Reads the schedule's own trip
+    (day.events.trip before Story.apply).
+
+    - pennant: ((from minute, colour or None), ...), evaluated at each minute an add lands, the sea takes something or
+      an arrival turns PENNANT_QUIET old; None if nothing flies all day;
+    - sail: the schedule's own sailing times, when the sea took things on the date before (local), the schedule has no
+      trip of its own, and its own test finds the day fit to sail; else None. It is the same whatever the sea took and
+      whenever it did;
+    - washing: (hung, taken in, seed) in clock minutes, on a quiet day (see WASH_*), else None."""
+    ts = np.array([u.timestamp() for u in day.utc])
+    marks = sorted({x for lands, _, _, gone in hist.adds for x in (lands, lands + PENNANT_QUIET, gone) if x is not None})
+    starts = sorted({0} | {int(i) for i in np.searchsorted(ts, marks, side="left") if 0 < i <= 1440})
+    pennant = []
+    for m in starts:
+        c = pennant_at(hist, float(ts[m]))
+        if not pennant or pennant[-1][1] != c:
+            pennant.append((m, c))
+    pennant = tuple(pennant) if any(c for _, c in pennant) else None
+
+    D, ev = day.date, day.events
+    t0 = float(ts[0])
+    t_1 = dt.datetime.combine(D - DAY, dt.time(0, 0), ZoneInfo(day.tzname)).timestamp()
+    sail = None
+    if ev.trip is None and any(t_1 <= at < t0 for at in hist.seas) and ev.fit_to_sail(*ev.window):
+        sail = tuple(ev.window)
+
+    washing = None
+    r = rng(18, D.toordinal())
+    hang, take = r.uniform(*WASH_HANG), r.uniform(*WASH_IN)
+    m0, m1 = int(hang * 60), int(min(take, ev.sunset - 0.5) * 60)
+    th = float(ts[m0])
+    landed = [lands for lands, _, _, _ in hist.adds if lands <= th]
+    quiet = bool(landed) and max(landed) < t_1
+    if quiet and ev.trip is None and sail is None and m1 - m0 > 2 * WASH_DRY:
+        wx = day.wx
+
+        def wet(a, b):
+            return bool(wx.rain[a:b].max() > 0.05 or wx.drizzle[a:b].max() > 0.15 or wx.snow[a:b].max() > 0.05
+                        or wx.thunder[a:b].max() > 0)
+        if not wet(m0, m0 + WASH_DRY) and wx.wind_ms[m0:m0 + WASH_DRY].max() < WASH_WIND and wx.temp_c[m0] >= WASH_TEMP:
+            for m in range(m0 + WASH_DRY, m1):      # taken in at the first rain, or a blow
+                if wet(m, m + 1) or wx.wind_ms[m] > WASH_BLOW:
+                    m1 = m
+                    break
+            washing = (m0, m1, D.toordinal())
+    return Echo(pennant, sail, washing)
 
 
 def pale_state(D):

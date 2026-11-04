@@ -79,10 +79,57 @@ class ShoreDay:
         self.sets = []
         self.index = np.full(1441, -1, np.int32)
         self.live, self.misfits = [], []
+        self.history = None     # the ledger's events as the story's echoes read them (History), with times
 
     def at(self, m):
         k = int(self.index[min(max(int(m), 0), 1440)])
         return None if k < 0 else self.sets[k]
+
+
+class History:
+    """The shore's history as the story's echoes read it (story.py), in plain numbers: no ids, names or pixels.
+
+    adds: one (lands, seq, colour, gone) per object ever added, in seq order: when it landed and when the sea took it
+    (None while it is still there), as UTC seconds, and its main colour (main_colour); seas: the time of each sea
+    event, in order. The ledger never says why the sea took something, and neither does this."""
+
+    def __init__(self, adds=(), seas=()):
+        self.adds, self.seas = tuple(adds), tuple(seas)
+
+    def upto(self, t):
+        """The history as it stood at UTC second t: only the events at or before t."""
+        return History(((lands, seq, c, gone if gone is not None and gone <= t else None)
+                        for lands, seq, c, gone in self.adds if lands <= t), (at for at in self.seas if at <= t))
+
+
+def seconds(stamp):
+    """A kit time (YYYY-MM-DDTHH:MM:SSZ) as UTC seconds."""
+    return dt.datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc).timestamp()
+
+
+def main_colour(p):
+    """The paint an object is mostly made of (an albedo), from its own pixels, not its label board: the commonest,
+    leaning toward a saturated one, so that a pennant of it shows against the sea."""
+    counts = {}
+    for i, rgb in p.solid.items():
+        if i not in p.label:
+            k = tuple(int(v) for v in rgb)
+            counts[k] = counts.get(k, 0) + 1
+    if not counts:
+        return (128, 128, 128)
+
+    def score(kv):
+        c, n = kv
+        hi, lo = max(c), min(c)
+        return (n * (0.25 + ((hi - lo) / hi if hi else 0.0)), c)
+    return max(counts.items(), key=score)[0]
+
+
+def history(adds, gone):
+    """The History of a replayed shore (replay's adds and gone)."""
+    out = [(seconds(lands), p.seq, main_colour(p), seconds(gone[oid]) if oid in gone else None)
+           for oid, (lands, p) in adds.items()]
+    return History(sorted(out, key=lambda a: a[1]), sorted({seconds(t) for t in gone.values()}))
 
 
 def reference_dir(path):
@@ -180,6 +227,7 @@ def load_shore(path, day):
     sd = ShoreDay((ref.frame_w, ref.frame_h), ref.id, ref.digest)
     sd.live = [a.id for a in shore.live]
     sd.misfits = list(shore.misfits)
+    sd.history = history(adds, gone)
     keys = {}
     for m in range(1441):
         objs = on_show(adds, gone, utc_stamp(day.utc[m]))
