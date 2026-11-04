@@ -138,6 +138,8 @@ class AirMixin:
             step = np.minimum(step, 3 * sig)
             w = od * math.sqrt(2 * math.pi) * sig * step
             ok &= w > 1e-4
+            if not ok.any():            # every splat too faint to draw (2026-11-05 09:27 crashed on the empty box)
+                continue
             xs.append(x[ok]), ys.append(y[ok]), sg.append(sig[ok]), wt.append(w[ok])
         if not xs:
             return
