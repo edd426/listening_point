@@ -290,10 +290,12 @@ class Sail(unittest.TestCase):
 
 class Washing(unittest.TestCase):
     def test_on_a_quiet_day_only(self):
+        """In fair weather (always fit), washing hangs on exactly the quiet days whose own draw makes them washing days,
+        and is in by half an hour before sunset."""
         lg = week_ledger()
         cache = lg.write("wash")
         hung = []
-        for k in range(0, 9):
+        for k in range(0, 16):
             d = W0 + k * DAY
             day = Day(d, weather="fair", shore=cache)
             w = day.story.washing
@@ -302,7 +304,9 @@ class Washing(unittest.TestCase):
                 self.assertLessEqual(w[1] / 60, day.events.sunset - 0.5 + 1e-9)
                 self.assertIsNone(day.events.trip)
         # the last landed on the 14th at 11:17: quiet from the 16th
-        self.assertEqual(hung, [W0 + k * DAY for k in range(5, 9)])
+        quiet = [W0 + k * DAY for k in range(5, 16)]
+        self.assertEqual(hung, [d for d in quiet if S.wash_draws(d)[2]])
+        self.assertTrue(2 <= len(hung) <= len(quiet) - 2, hung)
 
     def test_never_with_an_empty_ledger(self):
         day = Day(W0, weather="fair", shore=Ledger().write("empty-w"))
@@ -325,7 +329,7 @@ class Washing(unittest.TestCase):
             sl = slice(w[0], w[1])
             self.assertLessEqual(float(wx.rain[sl].max()), 0.05, d)
             self.assertLessEqual(float(wx.wind_ms[sl].max()), S.WASH_BLOW, d)
-        self.assertGreater(seen, 10)
+        self.assertGreater(seen, 5)
 
 
 class Off(unittest.TestCase):
@@ -370,13 +374,21 @@ class Drawing(unittest.TestCase):
         return a, b
 
     def test_pennant_and_washing_only_on_the_boat(self):
-        """The echoes change only pixels on and just about the moored boat, and none of a shore object's."""
+        """The echoes change only pixels on and just about the moored boat, and none of a shore object's: the pennant
+        on the 12th (moored all day), the washing on the first quiet washing day (the pennant too, if it is still up).
+        (On the 14th the boat is out: the sea took something on the 13th.)"""
         lg = week_ledger()
         cache = lg.write("draw")
-        day = Day(W0 + 5 * DAY, weather="fair", shore=cache)       # quiet: washing, and the pennant still up at noon
-        m = 12 * 60
-        self.assertIsNotNone(day.story.pennant_at(m))
-        self.assertIsNotNone(day.story.washing_at(m))
+        wash = next(W0 + k * DAY for k in range(5, 16) if S.wash_draws(W0 + k * DAY)[2])
+        for d in (W0 + DAY, wash):
+            with self.subTest(date=d):
+                self.check_on_the_boat(Day(d, weather="fair", shore=cache), 12 * 60, d == wash)
+
+    def check_on_the_boat(self, day, m, washing):
+        self.assertIsNone(day.events.trip)
+        self.assertEqual(day.story.washing_at(m) is not None, washing)
+        if not washing:
+            self.assertIsNotNone(day.story.pennant_at(m))
         a, b = self.frames(day, m)
         diff = np.abs(a - b).max(-1) > 0
         self.assertTrue(diff.any())

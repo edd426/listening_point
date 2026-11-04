@@ -113,10 +113,11 @@ SEAL_SURE, SEAL_LEAN = 3, 35   # back, she comes to every low water for 3 days, 
 # (part 3) The listener's boat answers the shore's history. The pennant flies the colour of the newest object still
 # on the shore, and comes down once nothing new has landed for PENNANT_QUIET seconds.
 PENNANT_QUIET = 3 * 86400
-# Washing hangs on a line from the mast to the stern on a quiet day (nothing new landed since the start of the day
-# before), hung at WASH_HANG and taken in at WASH_IN (hours, seeded), or at the first rain or a blow; only on a dry
-# day (WASH_DRY: no rain for its first hour), not cold (WASH_TEMP C), with the wind under WASH_WIND m/s, moored all day.
-WASH_HANG, WASH_IN, WASH_DRY = (9.0, 10.5), (14.5, 16.0), 60
+# Washing hangs on a line from the mast to the stern on some quiet days (nothing new landed since the start of the day
+# before; on a seeded WASH_P of them, so that a shore gone quiet does not make it a fixture), hung at WASH_HANG and
+# taken in at WASH_IN (hours, seeded), or at the first rain or a blow; only on a dry day (WASH_DRY: no rain for its
+# first hour), not cold (WASH_TEMP C), with the wind under WASH_WIND m/s, moored all day.
+WASH_P, WASH_HANG, WASH_IN, WASH_DRY = 0.5, (9.0, 10.5), (14.5, 16.0), 60
 WASH_TEMP, WASH_WIND, WASH_BLOW = 3.0, 10.0, 12.0
 
 
@@ -681,6 +682,13 @@ def pennant_at(hist, t):
     return tuple(best[2])
 
 
+def wash_draws(D):
+    """Date D's washing draws (the story's seeds, strand 18): when it would be hung and taken in (hours), and whether
+    this is a washing day if it is quiet."""
+    r = rng(18, D.toordinal())
+    return r.uniform(*WASH_HANG), r.uniform(*WASH_IN), bool(r.random() < WASH_P)
+
+
 def echoes(day, hist):
     """The echoes on day's date from the shore's history (shore.History), as an Echo. Reads the schedule's own trip
     (day.events.trip before Story.apply).
@@ -690,7 +698,7 @@ def echoes(day, hist):
     - sail: the schedule's own sailing times, when the sea took things on the date before (local), the schedule has no
       trip of its own, and its own test finds the day fit to sail; else None. It is the same whatever the sea took and
       whenever it did;
-    - washing: (hung, taken in, seed) in clock minutes, on a quiet day (see WASH_*), else None."""
+    - washing: (hung, taken in, seed) in clock minutes, on some quiet days (see WASH_*), else None."""
     ts = np.array([u.timestamp() for u in day.utc])
     marks = sorted({x for lands, _, _, gone in hist.adds for x in (lands, lands + PENNANT_QUIET, gone) if x is not None})
     starts = sorted({0} | {int(i) for i in np.searchsorted(ts, marks, side="left") if 0 < i <= 1440})
@@ -709,13 +717,12 @@ def echoes(day, hist):
         sail = tuple(ev.window)
 
     washing = None
-    r = rng(18, D.toordinal())
-    hang, take = r.uniform(*WASH_HANG), r.uniform(*WASH_IN)
+    hang, take, wash_day = wash_draws(D)
     m0, m1 = int(hang * 60), int(min(take, ev.sunset - 0.5) * 60)
     th = float(ts[m0])
     landed = [lands for lands, _, _, _ in hist.adds if lands <= th]
     quiet = bool(landed) and max(landed) < t_1
-    if quiet and ev.trip is None and sail is None and m1 - m0 > 2 * WASH_DRY:
+    if quiet and wash_day and ev.trip is None and sail is None and m1 - m0 > 2 * WASH_DRY:
         wx = day.wx
 
         def wet(a, b):

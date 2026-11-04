@@ -8,10 +8,11 @@ kept in by a wet spell), the one that stayed, and whether the pale seal is away 
 shore (part 3, with --echoes --shore DIR): the pennant at the masthead, the boat out on the bay the day after the sea
 took things, and the washing on a quiet day.
 
-usage: ./venv/bin/python tools/story_calendar.py [--weather synthetic|fair|auto] [--from 2026-11-01] [--days 365]
+usage: ./venv/bin/python tools/story_calendar.py [--weather synthetic|fair|auto|offline] [--from 2026-11-01] [--days 365]
                                                  [--changes | --lives | --echoes --shore DIR] [--cache DIR]
 
-Offline: synthetic and fair weather make their own; auto reads only the weather cache. --changes prints only
+Offline: synthetic and fair weather make their own; auto and offline read only the weather cache. With --echoes use
+offline for real weather: each date's whole Day is built, and auto may fetch that day's forecast. --changes prints only
 the dates on which something the story shows changes (and the first), then the totals. --lives prints only the
 animal lives: a line on each date they change (a birth, a sale, a kitten gone, the seal away or back), and on
 each Monday between, then the totals. --echoes prints, for each date, what the listener's boat shows of a shore cache
@@ -121,7 +122,7 @@ def echoes_calendar(a, d0):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--weather", default="synthetic", choices=["synthetic", "fair", "auto"])
+    ap.add_argument("--weather", default="synthetic", choices=["synthetic", "fair", "auto", "offline"])
     ap.add_argument("--from", dest="start", default="2026-11-01")
     ap.add_argument("--days", type=int, default=365)
     ap.add_argument("--changes", action="store_true")
