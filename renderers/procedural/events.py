@@ -209,17 +209,13 @@ class Schedule:
         hours = lambda k, dflt: (ev[k].hour + ev[k].minute / 60) if ev.get(k) else dflt
         self.sunrise, self.sunset = hours("sunrise", 6.0), hours("sunset", 18.0)
         # the boat goes out on fair days in the sailing season
-        wx = day.wx
         self.trip = None
         go = rng.random() < 0.85 * day.season.boating
         dep = rng.uniform(max(8.0, self.sunrise + 1.0), 10.5)
         ret = min(rng.uniform(16.0, 18.5), self.sunset - 0.5)
-        if go and ret - dep > 3:
-            i0, i1 = int(dep * 60), int(ret * 60)
-            bad = (wx.rain[i0:i1].max() > 0.3 or wx.thunder[i0:i1].max() > 0 or wx.fog[i0:i1].max() > 0.5
-                   or wx.wind_ms[i0:i1].max() > 10 or wx.snow[i0:i1].max() > 0.1)
-            if not bad:
-                self.trip = (dep, ret)
+        self.window = (dep, ret)        # the day's sailing times, whether or not it goes (the story's echoes may send it)
+        if go and self.fit_to_sail(dep, ret):
+            self.trip = (dep, ret)
         # gulls wheeling over the bay by day: (start h, duration h, centre x, y, radius, speed, phase)
         self.gulls = []
         for k in range(int(rng.integers(5, 10))):
@@ -293,6 +289,17 @@ class Schedule:
         return out
 
     # ----------------------------------------------------------------- boat --
+    def fit_to_sail(self, dep, ret):
+        """Whether the boat can sail from dep to ret (hours): long enough, and no rain, thunder, fog, strong wind
+        or snow on the way."""
+        if ret - dep <= 3:
+            return False
+        wx = self.day.wx
+        i0, i1 = int(dep * 60), int(ret * 60)
+        bad = (wx.rain[i0:i1].max() > 0.3 or wx.thunder[i0:i1].max() > 0 or wx.fog[i0:i1].max() > 0.5
+               or wx.wind_ms[i0:i1].max() > 10 or wx.snow[i0:i1].max() > 0.1)
+        return not bad
+
     def boat(self, t):
         """(x, y, facing) of the sailing boat at clock time t (hours), or None when it is moored."""
         if not self.trip:

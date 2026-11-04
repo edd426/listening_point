@@ -4,15 +4,20 @@ the story reads it, whether it was a day for work, and what is on the land the n
 fallen, or how far rebuilt), the branch under the tree, the logs by the shed, driftwood on the shingle, snow
 drifted against the walls, and the garden (how far it lags phase 3's calendar); and the animal lives (part 2): the
 lambs (how many, their ages), a kept ewe lamb in the flock (a hogg), the kittens that are out (how many, their ages,
-kept in by a wet spell), the one that stayed, and whether the pale seal is away or lately back.
+kept in by a wet spell), the one that stayed, and whether the pale seal is away or lately back; and the echoes of the
+shore (part 3, with --echoes --shore DIR): the pennant at the masthead, the boat out on the bay the day after the sea
+took things, and the washing on a quiet day.
 
-usage: ./venv/bin/python tools/story_calendar.py [--weather synthetic|fair|auto] [--from 2026-11-01] [--days 365]
-                                                 [--changes | --lives] [--cache DIR]
+usage: ./venv/bin/python tools/story_calendar.py [--weather synthetic|fair|auto|offline] [--from 2026-11-01] [--days 365]
+                                                 [--changes | --lives | --echoes --shore DIR] [--cache DIR]
 
-Offline: synthetic and fair weather make their own; auto reads only the weather cache. --changes prints only
+Offline: synthetic and fair weather make their own; auto and offline read only the weather cache. With --echoes use
+offline for real weather: each date's whole Day is built, and auto may fetch that day's forecast. --changes prints only
 the dates on which something the story shows changes (and the first), then the totals. --lives prints only the
 animal lives: a line on each date they change (a birth, a sale, a kitten gone, the seal away or back), and on
-each Monday between, then the totals.
+each Monday between, then the totals. --echoes prints, for each date, what the listener's boat shows of a shore cache
+(DIR, in the kit's layout): the pennant's colour (an albedo) from each time it changes, or 'down', the trip and the
+washing, with the times; it builds each date's whole Day (about a second a date).
 """
 import argparse
 import datetime as dt
@@ -78,16 +83,59 @@ def lives(st):
     return out
 
 
+def hhmm(m):
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def echoes_line(day):
+    """What the boat shows of the shore on day's date, as short words."""
+    st, out = day.story, []
+    if st.pennant:
+        out.append("pennant " + " ".join(f"{hhmm(m)} {'#%02x%02x%02x' % tuple(c) if c else 'down'}" for m, c in st.pennant))
+    if st.sail:
+        out.append(f"out on the bay {st.sail[0]:.2f}-{st.sail[1]:.2f}h (the sea took things yesterday)")
+    elif day.events.trip:
+        out.append("sails (its own trip)")
+    if st.washing:
+        out.append(f"washing {hhmm(st.washing[0])}-{hhmm(st.washing[1])}")
+    return out
+
+
+def echoes_calendar(a, d0):
+    from day import Day
+    n = dict(pennant=0, sail=0, washing=0)
+    print(f"weather {a.weather}; shore {a.shore}; from {d0} for {a.days} days. Times are local clock times.")
+    for i in range(a.days):
+        d = d0 + dt.timedelta(days=i)
+        day = Day(d, weather=a.weather, cache_dir=a.cache, shore=a.shore)
+        if day.shore is None:
+            sys.exit("cannot read the shore cache at %s" % a.shore)
+        st = day.story
+        n["pennant"] += any(c for _, c in st.pennant or ())
+        n["sail"] += bool(st.sail)
+        n["washing"] += bool(st.washing)
+        print(f"{d} {d.strftime('%a')}  | {', '.join(echoes_line(day)) or '-'}")
+    h = day.shore.history
+    print(f"\n{a.days} days; the ledger holds {len(h.adds)} adds and {len(h.seas)} sea events. Days with the pennant up"
+          f" {n['pennant']}, out on the bay after the sea {n['sail']}, washing {n['washing']}.")
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--weather", default="synthetic", choices=["synthetic", "fair", "auto"])
+    ap.add_argument("--weather", default="synthetic", choices=["synthetic", "fair", "auto", "offline"])
     ap.add_argument("--from", dest="start", default="2026-11-01")
     ap.add_argument("--days", type=int, default=365)
     ap.add_argument("--changes", action="store_true")
     ap.add_argument("--lives", action="store_true")
+    ap.add_argument("--echoes", action="store_true", help="the echoes of a shore cache (needs --shore)")
+    ap.add_argument("--shore", default=None, help="a local shore cache in the kit's layout")
     ap.add_argument("--cache", default=os.path.expanduser("~/Library/Caches/listening-point"))
     a = ap.parse_args()
     d0 = dt.date.fromisoformat(a.start)
+    if a.echoes:
+        if not a.shore:
+            ap.error("--echoes needs --shore DIR")
+        return echoes_calendar(a, d0)
     tz, lat, lon = BUDAPEST["tz"], BUDAPEST["lat"], BUDAPEST["lon"]
     totals = dict(days=0, work=0, gale=0, onshore=0, snow=0, wall=0, branch=0, logs=0, driftwood=0, drifts=0, garden=0, spade=0,
                   lambs=0, hogg=0, kittens=0, kept_in=0, young_cat=0, away=0)

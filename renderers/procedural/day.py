@@ -81,13 +81,15 @@ class Day:
         self.reference = bool(reference)
         if self.reference:
             self._hold_still()
-        # the bay's boats and animals (seaplan.py): none in reference mode
-        self.sea = seaplan.NoPlan() if self.reference else seaplan.SeaPlan(self)
-        # what the days before have left on the land (story.py): nothing in reference mode
-        self.story = story_mod.NoStory() if self.reference else story_mod.Story(self, weather, cache_dir)
-        self.story.apply(self)
+        # the shore's objects (shore.py), and its history, which the story's echoes read
         self.shore = shore_mod.load_shore(shore, self) if shore else None
         self.lamp_lit = shore_mod.lamp_lit(lamp, date, self.tz) if lamp else None
+        # what the days before have left on the land, and the echoes of the shore (story.py): nothing in reference
+        # mode. Before the bay's plan, which keeps clear of the sailing boat: an echo may send it out (Story.apply).
+        self.story = story_mod.NoStory() if self.reference else story_mod.Story(self, weather, cache_dir)
+        self.story.apply(self)
+        # the bay's boats and animals (seaplan.py): none in reference mode
+        self.sea = seaplan.NoPlan() if self.reference else seaplan.SeaPlan(self)
 
     def _hold_still(self):
         """The reference mode: nothing that comes and goes, so the shore kit sees the bare scene."""

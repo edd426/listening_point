@@ -130,7 +130,13 @@ snow drifts) from `story.py` (`day.story`, from the date and the weather of the 
 cache only; empty in reference mode); `tools/story_calendar.py` prints what shows on each date. `story.py` also tells the
 animal lives (v3 phase 5 part 2, `docs/v3/phase5-lives.md`): the lambs from their births to the sale and a kept ewe lamb
 (drawn by `fauna`), the cat's kittens in some years (`life`), and the pale seal's autumns away (`seaplan`, `sealife`);
-`tools/story_calendar.py --lives` prints them. `fauna` (v3 phase 3 part 2,
+`tools/story_calendar.py --lives` prints them. And it tells the echoes of the shore (v3 phase 5 part 3,
+`docs/v3/phase5-echoes.md`), from the shore cache's history (`shore.History`, on `day.shore`; nothing without a shore or
+with an empty ledger, and nothing in reference mode): a pennant at the masthead in the colour of the newest object still
+on the shore, the boat out on the bay the day after the sea takes things, and washing on some quiet days (drawn by
+`props`). Each reads only the ledger events at or before its moment, so `nightly.py`'s shore re-render rule covers it;
+`Day` loads the shore and builds the story before the bay's plan. `tools/story_calendar.py --echoes --shore DIR` prints
+them. `fauna` (v3 phase 3 part 2,
 `docs/v3/phase3-animals.md`) draws the sheep, fox, hares and crows, and hides any animal standing behind the
 walls, the gate, the shed, the hives, the rocks or the gorse (masks recorded while the hill is drawn). `day.py` builds one date's per-minute astronomy, weather,
 season (`season.py`), schedule (`events.py`) and mysteries. `astro.py` and `weather.py` are
