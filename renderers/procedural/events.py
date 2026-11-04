@@ -10,6 +10,7 @@ import numpy as np
 import astro
 from hillside import GARDEN
 from season import bump
+from story import rng as srng
 
 # the sailing boat's round trip on the bay, as fractions of the frame, starting and ending at the mooring
 MOORED = (0.886, 0.789)
@@ -32,6 +33,14 @@ def vnoise(seed, t, period):
     k = math.floor(t / period)
     f = smoothstep(t / period - k)
     a, b = (np.random.default_rng([seed % 2 ** 32, (k + j) % 2 ** 32]).uniform(-1, 1) for j in (0, 1))
+    return a + (b - a) * f
+
+
+def snoise(strand, key, t, period):
+    """vnoise from the story's own seeds ([5500 + strand, key, knot]): smooth 1-D noise in [-1, 1]."""
+    k = math.floor(t / period)
+    f = smoothstep(t / period - k)
+    a, b = (srng(strand, key, k + j).uniform(-1, 1) for j in (0, 1))
     return a + (b - a) * f
 
 
@@ -353,36 +362,30 @@ class Schedule:
         return (x0, y0), (x0 + ln * math.cos(ang), y0 + ln * math.sin(ang) * 1.6), 0.5 + 0.5 * r[3]
 
     # ---------------------------------------------------------------- sheep --
-    def sheep(self, t, lambs=False):
-        """Positions and poses of the flock: list of (x, y, facing, grazing, size, view), view 'side',
-        'front' (walking toward you) or 'back'. Each sheep keeps to the side of the field walls its day
-        starts on, and at night folds against the wall on that side."""
+    def sheep(self, t, lambs=(), ewes=None):
+        """Positions and poses of the flock: list of (x, y, facing, grazing, size, view, who), view 'side',
+        'front' (walking toward you) or 'back'. who is None for a grown ewe; else the story's record (story.py): a
+        kept ewe lamb not yet grown in a ewe's place (ewes[i], a hogg: smaller), or one of `lambs`, at its mother's
+        side (lamb_at). Each sheep keeps to the side of the field walls its day starts on, and at night folds
+        against the wall on that side."""
         night = (t < self.sunrise - 0.4) or (t > self.sunset + 0.6)
         fold = [(0.050, 0.772), (0.078, 0.782), (0.064, 0.790), (0.100, 0.797), (0.088, 0.776)]
         # how far into the night-fold walk the flock is (they drift over at dusk, spread out after dawn)
         k = smoothstep((t - (self.sunset + 0.1)) / 0.6) if t > 12 else 1 - smoothstep((t - (self.sunrise - 0.2)) / 0.8)
-        out = []
-        n = 4 + (2 if lambs else 0)
-        for i in range(n):
-            lamb = i >= 4
-            mother = i - 4 if lamb else i
-            bx = 0.05 + 0.2 * np.random.default_rng([self.seed, 50, mother]).random()
-            by = 0.71 + 0.12 * np.random.default_rng([self.seed, 51, mother]).random()
+        out, mums = [], {}
+        for i in range(4):
+            bx = 0.05 + 0.2 * np.random.default_rng([self.seed, 50, i]).random()
+            by = 0.71 + 0.12 * np.random.default_rng([self.seed, 51, i]).random()
             side = 1 if by > wall_y(bx) else -1
-            gx = bx + 0.035 * vnoise(self.seed * 10 + mother, t * 60, 47)
-            gy = by + 0.018 * vnoise(self.seed * 10 + mother + 5, t * 60, 53)
-            if lamb:
-                gx += 0.018 + 0.006 * vnoise(self.seed + 60 + i, t * 60, 9)
-                gy += 0.006
-            fx, fy = fold[mother % len(fold)]
-            if lamb:
-                fx, fy = fx + 0.012, fy + 0.004
+            gx = bx + 0.035 * vnoise(self.seed * 10 + i, t * 60, 47)
+            gy = by + 0.018 * vnoise(self.seed * 10 + i + 5, t * 60, 53)
+            fx, fy = fold[i % len(fold)]
             if side < 0:            # the fold's mirror, tucked in behind the wall
                 fy = 2 * wall_y(fx) - fy - 0.010
             x, y = gx + (fx - gx) * k, gy + (fy - gy) * k
             y = keep_to_field(x, y, side)
-            dx = vnoise(self.seed * 10 + mother, t * 60 + 1, 47) - vnoise(self.seed * 10 + mother, t * 60 - 1, 47)
-            dy = vnoise(self.seed * 10 + mother + 5, t * 60 + 1, 53) - vnoise(self.seed * 10 + mother + 5, t * 60 - 1, 53)
+            dx = vnoise(self.seed * 10 + i, t * 60 + 1, 47) - vnoise(self.seed * 10 + i, t * 60 - 1, 47)
+            dy = vnoise(self.seed * 10 + i + 5, t * 60 + 1, 53) - vnoise(self.seed * 10 + i + 5, t * 60 - 1, 53)
             facing = 1 if dx >= 0 else -1
             view = "side"
             if 0.03 < k < 0.97:     # walking to the fold at dusk, out from it after dawn
@@ -390,8 +393,52 @@ class Schedule:
             elif 0.018 * abs(dy) > 1.25 * 1.6 * 0.035 * abs(dx):     # mostly toward you or away (in pixels)
                 view = "front" if dy > 0 else "back"
             grazing = (not night) and k < 0.5 and np.random.default_rng([self.seed, 52, i, int(t * 60) // 3]).random() < 0.6
-            out.append((x, y, facing, grazing, 0.6 if lamb else 1.0, view))
+            who = ewes[i] if ewes else None
+            out.append((x, y, facing, grazing, who["size"] if who else 1.0, view, who))
+            mums[i] = (x, y, facing, grazing, view, side, night, k)
+        for lb in lambs:
+            out.append(self.lamb_at(t, lb, *mums[lb["mother"]]))
         return sorted(out, key=lambda p: p[1])
+
+    def lamb_at(self, t, lb, mx, my, mf, mgraze, mview, side, night, k):
+        """Where a lamb (story.py) is, by its mother at (mx, my) facing mf, and what it is doing: (x, y, facing,
+        grazing, size, 'side', the lamb with its pose). Pose: stand, graze, suckle (at her flank, facing her tail,
+        its head under her), or lie (by her: at night, in rain or a gale, and often when it is small). It keeps to
+        her side of her (a twin to the other), close at first, a little farther as it grows; it shelters in the
+        rain. Its own draws (the story's seeds 5526-5527), so nothing else moves."""
+        a, key, m = lb["age"], lb["seed"], int(t * 60)
+        i = min(m, 1439)
+        wx = self.day.wx
+        wet = wx.rain[i] > 0.3 or wx.snow[i] > 0.3 or wx.wind_ms[i] > 12
+        q = srng(27, self.seed, key, m // 3).random()
+        small, young = a < 56, a < 21
+        if 0.03 < k < 0.97:
+            pose = "stand"                      # walking with her to the fold, or out of it
+        elif night or k >= 0.97 or (wet and small):
+            pose = "lie"
+        elif small and not wet and mview == "side" and q < (0.2 if young else 0.12):
+            pose = "suckle"
+        elif q < (0.45 if young else 0.28 if small else 0.15):
+            pose = "lie"
+        elif a >= 14 and mgraze and q < (0.75 if small else 0.85):
+            pose = "graze"
+        else:
+            pose = "stand"
+        per = persp_f(my) * 76 / 3840                     # a metre at her feet, in frame widths (fauna.LIFE_M)
+        s = lb["side"]
+        f = mf
+        if pose == "suckle":                    # alongside her, its head at her udder, facing her tail
+            x, y, f = mx - mf * (0.36 - 0.24 * lb["size"]) * per, my + 0.0012, -mf
+        elif pose == "lie" and (night or k >= 0.97 or wet):
+            x, y = mx + s * 0.62 * per, my + 0.0022       # pressed against her, in her lee
+        else:
+            roam = (0.75 + 0.9 * min(1.0, a / 100)) * per   # close at first, farther as it grows
+            x = mx + s * roam * (1.0 + 0.35 * snoise(26, key, t * 60, 11))
+            y = my + 0.004 + 0.006 * snoise(26, key + 1, t * 60, 13) * min(1.0, a / 60)
+            if pose != "lie" and srng(27, self.seed, key, 7, m // 9).random() < 0.3:
+                f = -mf
+        y = keep_to_field(x, y, side)
+        return (x, y, f, pose == "graze", lb["size"], "side", dict(lb, pose=pose))
 
     def awake(self, t):
         bt = self.bedtime

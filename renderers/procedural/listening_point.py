@@ -110,6 +110,7 @@ class Frame(FrameBase, SkyMixin, DistantMixin, SeaMixin, LandMixin, HillsideMixi
             self.crows()
             self.critters()
             self.cat()
+            self.kittens()          # the story's kittens, by the cat (story.py)
             self.heron()
             self.owl()
             self.air_kite()

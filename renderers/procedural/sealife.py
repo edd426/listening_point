@@ -603,7 +603,8 @@ class SeaLifeMixin:
         sp = self.lit(np.array(spot) * k, (0, 0.7, 0.6), shade=shade)
         return top, side, under, sp
 
-    def draw_seal(self, L, x, y, M, f, which, pose, shade, wet):
+    def draw_seal(self, L, x, y, M, f, which, pose, shade, wet, lean=0.0):
+        """A grey seal hauled out. lean: how thin the pale cow still is, back from nursing her pup (0: as ever)."""
         top, side, under, spot = self.seal_colours(which, x, y, shade, wet)
         sp = Sprite(x, y, M, f)
         head_up = {"flat": 0.0, "banana": 0.35, "head": 0.55, "scratch": 0.15}[pose]
@@ -611,9 +612,14 @@ class SeaLifeMixin:
         # the body: a long, heavy spindle lying along the rock
         body = [(-0.95, 0.06 + 0.2 * tail_up), (-0.7, 0.2 + 0.1 * tail_up), (-0.3, 0.36), (0.15, 0.42), (0.5, 0.36),
                 (0.72, 0.26 + 0.25 * head_up), (0.78, 0.0), (0.2, -0.02), (-0.4, 0.0), (-0.85, 0.0)]
+        back = [(-0.7, 0.18 + 0.1 * tail_up), (-0.3, 0.34), (0.15, 0.4), (0.5, 0.34), (0.3, 0.3), (-0.2, 0.28)]
+        if lean > 0:                 # her back sunk and her neck shown, the fat she nursed on gone
+            k = 1 - 0.24 * lean
+            body = [(u, v * k) if -0.75 < u < 0.6 else (u, v) for u, v in body]
+            back = [(u, v * k) for u, v in back]
         sp.poly(body, side)
         sp.poly([(-0.6, 0.02), (0.6, 0.03), (0.7, 0.12), (-0.5, 0.12)], under, edge=False)
-        sp.poly([(-0.7, 0.18 + 0.1 * tail_up), (-0.3, 0.34), (0.15, 0.4), (0.5, 0.34), (0.3, 0.3), (-0.2, 0.28)], top, edge=False)
+        sp.poly(back, top, edge=False)
         # hind flippers, a fan at the tail
         tx, ty = -0.95, 0.06 + 0.2 * tail_up
         sp.poly([(tx + 0.05, ty), (tx - 0.3, ty + 0.12 + 0.25 * tail_up), (tx - 0.22, ty - 0.02 + 0.2 * tail_up)], side)
@@ -635,7 +641,10 @@ class SeaLifeMixin:
             sp.ell(u_, v_, r.uniform(0.04, 0.09), r.uniform(0.025, 0.05), spot, edge=False)
         # the sky's sheen along the back: bright when wet, a soft gleam when dry
         sheen = top * (0.75 - 0.2 * wet) + self.hor_col * (0.3 + 0.3 * wet)
-        sp.limb([(-0.55, 0.3 + 0.08 * tail_up), (-0.1, 0.39), (0.35, 0.37), (0.62, 0.3 + 0.2 * head_up)], 0.04, sheen, edge=False)
+        ridge = [(-0.55, 0.3 + 0.08 * tail_up), (-0.1, 0.39), (0.35, 0.37), (0.62, 0.3 + 0.2 * head_up)]
+        if lean > 0:
+            ridge = [(u, v * k) if u < 0.6 else (u, v) for u, v in ridge]
+        sp.limb(ridge, 0.04, sheen, edge=False)
         sp.draw(L, max(0.45, 0.7 * self.s))
 
     def skerry_life(self):
@@ -667,7 +676,8 @@ class SeaLifeMixin:
                 # still wet just after it has hauled out (the tide has dropped but a little below its spot)
                 _, _, h = skerry_point(*SEAL_SPOTS[j])
                 wet = max(0.0, 1 - (h - wl) / 0.03)
-                self.draw_seal(L, x, y + 0.04 * Mp, Mp, f, j, pose, shade, wet)
+                pale = sea.pale(self.m) if j == 0 else None
+                self.draw_seal(L, x, y + 0.04 * Mp, Mp, f, j, pose, shade, wet, lean=pale["lean"] if pale else 0.0)
             else:
                 self.draw_cormorant(L, x, y + 0.02 * Mp, Mp, f, pose, shade)
         L.composite()

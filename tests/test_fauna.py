@@ -78,7 +78,7 @@ class Schedule(unittest.TestCase):
         for day in self.days[::3]:
             ev = day.events
             for m in range(0, 1440, 7):
-                for x, y, f, grazing, size, view in ev.sheep(m / 60, lambs=True):
+                for x, y, f, grazing, size, view, who in ev.sheep(m / 60, day.story.lambs, day.story.ewes):
                     side = 1 if y > events.wall_y(x) else -1
                     self.assertGreater(abs(y - events.wall_y(x)), 0.005, (day.date, m, x, y))
                     if side < 0 and events.GARDEN[0][0] < x < events.GARDEN[1][0]:

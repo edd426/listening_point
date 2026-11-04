@@ -76,6 +76,33 @@ DRIFT_BACK = 21
 # Snow drifts: the snow that fell in the current spell of lying snow, pushed by the wind above SNOW_PUSH
 SNOW_PUSH, SNOW_BACK = 3.0, 21
 
+# ----------------------------------------------------------- animal lives --
+# (part 2) The lives are told from the spring of LIVES_FROM: before it the flock is phase 3's four ewes and the cat
+# has no kittens. The pale seal's year needs no start: each year's is its own.
+LIVES_FROM = 2027
+# The flock: four blackface ewes, each keeping her place in the schedule's draws (her slot, events.Schedule.sheep).
+EWES = 4
+LAMBING, LAMBING_LATE, LAMBING_SPAN = (3, 25), 21, 18   # the first lambs come 25 March + 0..21 days (the year's
+                                                        # tupping), and every ewe has lambed within 18 days of them
+TUP_AGE = 2                    # a ewe lambs first the spring she is two (a kept ewe lamb is a hogg her first year)
+BARREN_P, TWIN_P, MAX_LAMBS = 0.1, 0.2, 3               # a small flock: three lambs at most
+SALE, SALE_LATE, SALE_GRACE = (8, 25), 24, 21  # weaned and sold: the first day fit for work (or with no weather on
+                                               # record) from 25 August + 0..24 days, at the latest 21 days on
+KEEP_P = 0.8                   # a ewe lamb is kept back that year (if there is one), and the oldest ewe goes with the lambs
+ADULT = 540                    # days old: a kept ewe lamb is a grown ewe from then
+# The cat's kittens: in some years a litter, born indoors; they come out from four weeks old and go to new homes
+# at ten to twelve weeks, each on its own day. Once, one of a litter stays and grows into a second cat.
+LITTER_P, LITTER, LITTER_LATE, LITTER_N = 0.5, (4, 1), 69, (2, 4)    # born 1 April + 0..69 days, 2-4 of them
+KIT_OUT, KIT_HOME, KIT_GROWN = 28, (70, 84), 300   # days old: out, gone to a new home, grown
+KIT_STAY_P = 0.4
+KIT_WET = (8.0, 3.0)           # kept in: this much rain the day before, or this much on each of the two days before
+COATS = (("black", 0.2), ("bicolour", 0.3), ("grey", 0.15), ("tabby", 0.2), ("ginger", 0.15))
+# The pale cow (seaplan's seal 0) goes to a breeding colony in most autumns: west Scotland's grey seals pup from
+# September to late November; she nurses her pup about 18 days, fasting, mates and leaves it, and comes back thin.
+SEAL_GO_P = 0.85
+SEAL_LEAVE, SEAL_LEAVE_LATE, SEAL_AWAY = (9, 15), 30, (30, 46)   # she leaves 15 September + 0..30 days, for 30-46 days
+SEAL_SURE, SEAL_LEAN = 3, 35   # back, she comes to every low water for 3 days, and is thin for 35
+
 
 # ---------------------------------------------------------------- weather --
 class DaySum(NamedTuple):
@@ -229,6 +256,94 @@ def rng(strand, *key):
     return np.random.default_rng([STORY + strand] + [int(k) for k in key])
 
 
+# ------------------------------------------------------------------ lives --
+def lamb_size(age):
+    """A lamb's (or a hogg's) size against a grown ewe's, by its age in days: about half at birth, filling out."""
+    return 1.0 - 0.52 * math.exp(-age / 130.0)
+
+
+def kit_size(age):
+    """A kitten's size against the cat's, by its age in days: 0.45 at four weeks, 0.7 at twelve, grown at KIT_GROWN."""
+    if age <= KIT_HOME[1]:
+        return 0.45 + 0.25 * min(1.0, max(0.0, (age - KIT_OUT) / (KIT_HOME[1] - KIT_OUT)))
+    return 0.7 + 0.3 * min(1.0, (age - KIT_HOME[1]) / (KIT_GROWN - KIT_HOME[1]))
+
+
+@functools.lru_cache(maxsize=16)
+def flock_years(last):
+    """The flock's years from LIVES_FROM to `last`: {year: the ewes as they stand at lambing ((id, birth date or None
+    for phase 3's grown ewes, birth year)), the lambs born, the date the sale is due, the kept ewe lamb's id and the
+    slot she takes}. Decided by the years alone; the weather moves only the day of the sale."""
+    r0 = rng(9, 0)
+    years = [int(LIVES_FROM - TUP_AGE - r0.integers(0, 4)) for _ in range(EWES)]    # phase 3's ewes: 2 to 5 years old
+    ids, born = [f"ewe{k}" for k in range(EWES)], [None] * EWES
+    out = {}
+    for Y in range(LIVES_FROM, last + 1):
+        r = rng(10, Y)
+        start = dt.date(Y, *LAMBING) + int(r.integers(0, LAMBING_LATE + 1)) * DAY
+        draws = [(r.random(), r.random(), int(r.integers(0, LAMBING_SPAN + 1)), r.random(2), r.integers(1 << 30, size=2),
+                  r.random()) for _ in range(EWES)]
+        due = dt.date(Y, *SALE) + int(r.integers(0, SALE_LATE + 1)) * DAY
+        keep, pick = r.random() < KEEP_P, r.random()
+        lambs = []
+        for k, (barren, twin, off, sex, seeds, side) in enumerate(draws):
+            if years[k] > Y - TUP_AGE or barren < BARREN_P:
+                continue
+            n = min(2 if twin < TWIN_P else 1, MAX_LAMBS - len(lambs))
+            s0 = 1 if side < 0.5 else -1
+            for j in range(n):
+                lambs.append(dict(id=f"{Y}-{k}{'ab'[j]}", mother=k, born=start + off * DAY, ewe=bool(sex[j] < 0.5),
+                                  seed=int(seeds[j]), side=s0 if j == 0 else -s0, twin=n == 2))
+        st = dict(ewes=tuple(zip(ids, born, years)), lambs=tuple(lambs), due=due, kept=None, place=None)
+        ewe_lambs = [lb for lb in lambs if lb["ewe"]]
+        if keep and ewe_lambs:
+            kept = ewe_lambs[int(pick * len(ewe_lambs))]
+            place = min(range(EWES), key=lambda k: (years[k], k))       # the oldest ewe goes to the sale with the lambs
+            st.update(kept=kept["id"], place=place)
+            ids[place], born[place], years[place] = kept["id"], kept["born"], Y
+        out[Y] = st
+    return out
+
+
+@functools.lru_cache(maxsize=16)
+def litters(last):
+    """The cat's years from LIVES_FROM to `last`: {year: (the litter: (kittens, each with its birth date, coat, the
+    age it goes to a new home, whether it stays), or None; the kitten of an earlier litter that stayed, or None)}."""
+    out, stayed = {}, None
+    for Y in range(LIVES_FROM, last + 1):
+        r = rng(13, Y)
+        go = r.random() < LITTER_P
+        born = dt.date(Y, *LITTER) + int(r.integers(0, LITTER_LATE + 1)) * DAY
+        n = int(r.integers(LITTER_N[0], LITTER_N[1] + 1))
+        kits = []
+        for j in range(LITTER_N[1]):
+            coat = COATS[int(r.choice(len(COATS), p=[p for _, p in COATS]))][0]
+            kits.append(dict(id=f"{Y}-k{j}", born=born, coat=coat, home=int(r.integers(KIT_HOME[0], KIT_HOME[1] + 1)),
+                             seed=int(r.integers(1 << 30)), stays=False))
+        stays, pick = r.random() < KIT_STAY_P, r.random()
+        litter = None
+        if go:
+            kits = kits[:n]
+            if stays and stayed is None:
+                # one that does not look like her, if the litter has one, so the two can be told apart
+                pool = [k for k in kits if k["coat"] != "black"] or kits
+                pool[int(pick * len(pool))]["stays"] = True
+            litter = tuple(kits)
+        out[Y] = (litter, stayed)
+        if litter and stayed is None:
+            stayed = next((k for k in litter if k["stays"]), None)
+    return out
+
+
+def seal_year(Y):
+    """The pale cow's autumn of year Y: (the day she is gone from, the day she is back), or None if she stays."""
+    r = rng(17, Y)
+    go = r.random() < SEAL_GO_P
+    left = dt.date(Y, *SEAL_LEAVE) + int(r.integers(0, SEAL_LEAVE_LATE + 1)) * DAY
+    back = left + int(r.integers(SEAL_AWAY[0], SEAL_AWAY[1] + 1)) * DAY
+    return (left, back) if go else None
+
+
 # ------------------------------------------------------------------ story --
 class NoStory:
     """Reference mode: nothing has happened."""
@@ -237,6 +352,10 @@ class NoStory:
     wall = branch = scar = drift = spade = None
     logs = 0
     driftwood = ()
+    # the animal lives (part 2): no lambs, the ewes phase 3's, no kittens, the pale seal as phase 4 has her
+    lambs = kittens = ()
+    ewes = pale = pale_before = sold = None
+    kittens_in = False
     cost_ms = 0.0
 
     def apply(self, day):
@@ -254,6 +373,16 @@ class Story(NoStory):
       many logs are stacked by the shed;
     - driftwood: the pieces lying on the shingle, each with the minute today the sea takes it (or None);
     - drift: where the snow of the current spell was blown (east, north, cm m/s), for drifts by the walls.
+
+    The animal lives (part 2):
+    - lambs: this spring's lambs while they are on the hill, each with its mother's slot, its age and size, the side
+      of her it keeps to and a seed for its look (the same every day); sold: the day they went, once gone;
+    - ewes: per slot, None for a grown ewe or the record of a kept ewe lamb not yet grown (a hogg: smaller); None
+      when all four are grown;
+    - kittens: the cat's kittens that are out (four weeks old and not yet gone to new homes), and the one that stayed,
+      each with its age, size, coat and seed; kittens_in: a wet spell keeps the young ones indoors today;
+    - pale: the pale seal while she is away, or for a while after she is back (her knob, seaplan.seals_at); else None;
+      pale_before: the same for the day before (a low water that began before midnight keeps that day's state).
     """
 
     def __init__(self, day, weather="auto", cache_dir=None):
@@ -268,6 +397,9 @@ class Story(NoStory):
         self._branch(D)
         self._driftwood(day, D)
         self._drift(D)
+        self._flock(D)
+        self._kittens(D)
+        self._seal(D)
         self.lookback = len(self.hist.memo)
         del self.hist                    # not needed by the workers
         self.cost_ms = (time.perf_counter() - t0) * 1000
@@ -418,3 +550,70 @@ class Story(NoStory):
             e, n = e + s.snow_e, n + s.snow_n
             d -= DAY
         self.drift = (e, n)
+
+    # ------------------------------------------------------------ lambs --
+    def _flock(self, D):
+        Y = D.year
+        if Y < LIVES_FROM:
+            return
+        st = flock_years(Y)[Y]
+        self.sold = self._sale(st["due"], D)
+        ewes = list(st["ewes"])
+        if self.sold and st["kept"]:
+            kept = next(lb for lb in st["lambs"] if lb["id"] == st["kept"])
+            ewes[st["place"]] = (kept["id"], kept["born"], Y)
+        hoggs = tuple(None if b is None or (D - b).days >= ADULT else
+                      dict(id=i, slot=k, age=(D - b).days, size=lamb_size((D - b).days)) for k, (i, b, _) in enumerate(ewes))
+        self.ewes = hoggs if any(hoggs) else None
+        if not self.sold:
+            self.lambs = tuple(dict(lb, age=(D - lb["born"]).days, size=lamb_size((D - lb["born"]).days),
+                                    kept=lb["id"] == st["kept"])
+                               for lb in st["lambs"] if lb["born"] <= D)
+
+    def _sale(self, due, D):
+        """The day the lambs were taken to the sale, if it was before D: the first day from `due` fit for work
+        outside (gathering the hill), or with no weather on record, and SALE_GRACE days on whatever the weather."""
+        h, d = self.hist, due
+        while d < D:
+            if h.workable(d) or not h(d).known or d >= due + SALE_GRACE * DAY:
+                return d
+            d += DAY
+        return None
+
+    # ---------------------------------------------------------- kittens --
+    def _kittens(self, D):
+        Y = D.year
+        if Y < LIVES_FROM:
+            return
+        litter, stayed = litters(Y)[Y]
+        out = []
+        if stayed:
+            out.append(stayed)
+        for k in litter or ():
+            age = (D - k["born"]).days
+            if age >= KIT_OUT and (k["stays"] or age < k["home"]):
+                out.append(k)
+        self.kittens = tuple(dict(k, age=(D - k["born"]).days, size=kit_size((D - k["born"]).days)) for k in out)
+        if any(k["age"] < KIT_HOME[1] for k in self.kittens):      # (the one that stayed goes out in any weather)
+            h = self.hist
+            p1, p2 = h(D - DAY), h(D - 2 * DAY)
+            self.kittens_in = bool(p1.known and (p1.rain >= KIT_WET[0] or (p2.known and min(p1.rain, p2.rain) >= KIT_WET[1])))
+
+    # ------------------------------------------------------------- seal --
+    def _seal(self, D):
+        self.pale, self.pale_before = pale_state(D), pale_state(D - DAY)
+
+
+def pale_state(D):
+    """The pale cow on date D: away (at the breeding colony), or lately back (sure: she comes to every low water;
+    lean: how thin she still is, 1 the day she is back), or None (as phase 4 has her)."""
+    trip = seal_year(D.year)
+    if trip is None:
+        return None
+    left, back = trip
+    if left <= D < back:
+        return dict(away=True, left=left, back=back, since=None, sure=False, lean=0.0)
+    if back <= D < back + SEAL_LEAN * DAY:
+        since = (D - back).days
+        return dict(away=False, left=left, back=back, since=since, sure=since < SEAL_SURE, lean=1.0 - since / SEAL_LEAN)
+    return None
