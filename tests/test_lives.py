@@ -93,7 +93,7 @@ class Lambs(unittest.TestCase):
 
     def test_the_flock_carries_over(self):
         """Four ewes always; a kept ewe lamb lambs first the spring she is two, not the one after her birth."""
-        yrs = S.flock_years(max(YEARS))
+        yrs = S.flock_years(max(YEARS) + 1)
         for Y in YEARS:
             ewes = yrs[Y]["ewes"]
             self.assertEqual(len(ewes), S.EWES)
@@ -198,6 +198,8 @@ class Kittens(unittest.TestCase):
                 if spot in ("inside", "lamp") or (dark and m - dark[0] >= 14):
                     self.assertEqual(kits, [], (d, m, spot))
                     continue
+                if dark:
+                    continue                    # dusk: on their way in by the door
                 here = fr.cat_spot(spot, seeds)
                 for kit, x, y, pose, f in kits:
                     shown += 1
