@@ -3,7 +3,7 @@
 From Evan's interview on 2026-11-01, held after the shore went live. These are his answers; the
 phases are their order. Every step gets a look test before it is installed.
 
-## HANDOFF — state at 2026-11-03 ~22:50 CET (phase 5 part 1 installed; part 2 building)
+## HANDOFF — state at 2026-11-04 ~12:05 CET (phase 5 parts 1 and 2 installed; part 3 next)
 
 **Verified after the update** (macOS 27.2, 26B123): both venvs still import numpy 2.0.2, scipy 1.13.1
 and Pillow 11.3.0 on Xcode's Python 3.9.6; both launchd jobs are loaded; frames render; the
@@ -25,6 +25,7 @@ carrier is green. The lock screen was not checked (needs Evan's eye).
 | 4 sea part 2: boats and sea life (ferry on a timetable, creel boat at the pots, extra yachts; seals and a cormorant on the skerry, gannets, dolphins) | `94b8d87` | yes, 2026-11-03 12:35 |
 | 5 story part 1: land and weather marks (`story.py` calendar from cached weather; a wall that falls in a winter gale and is rebuilt on workable days; the garden stepping with the work; a gale's branch, then logs by the shed; driftwood; snow drifts) | `09fe743` | yes, 2026-11-03 22:43 |
 | fix: contrails crashed when the weight filter emptied a live trail's splats (the 2026-11-05 render failed at 09:27 on one forecast; a later forecast passed, so the retry hid it) | `4868d71` | yes, 2026-11-04 07:15 |
+| 5 story part 2: animal lives (lambs born, growing up and sold, a ewe lamb kept as a hogg; the cat's kittens some years, one staying as a second cat; the pale cow seal away at a breeding colony in autumn and back thin) | `89e9106` | yes, 2026-11-04 12:01 (desktop not yet captured: the screen was locked) |
 
 Probes were re-run on each merged head (tests, determinism, r2 digest): all PASS. The details are in
 each part's doc under `docs/v3/`.
@@ -81,13 +82,17 @@ a bit darker than the path (he wanted them darker than the sky, not the ground):
      story shows almost nothing yet (a small garden lag on 6 days of Oct 1 to Nov 5). Worktree and branch removed.
      The build ran during a full disk (the lead deleted its own superseded frame folders from the Trash, 4 GB) and
      another session's iOS Simulator and Xcode runs; a "pause" reached the delegate only after it had finished.
-   - part 2 `v3/story-lives` (worktree `.claude/worktrees/story-lives`, started 22:40 from `09fe743`): lambs born
-     and growing up, weaned and sold by autumn; the cat's kittens some years; the pale cow seal (seal 0,
-     `SEAL_SPOTS[0]`) away for weeks and back to her knob. Extends `story.py`. Doc `docs/v3/phase5-lives.md`, look
-     test `out/look/v3/story-lives/`. Every render or test run waits on `gate2.sh` in the lead's scratchpad
-     (memorystatus >= 35 and load <= 12 for 5 minutes, or a `gate.open` file beside it), because the ClaudeLifter
-     session's Xcode and Simulator runs will go on for some hours; that session will message `projects-8a` when
-     it is done.
+   - part 2 `v3/story-lives` (started 2026-11-03 22:40 from `09fe743`): lambs born and growing up, sold by
+     autumn; the cat's kittens some years; the pale cow seal (seal 0, `SEAL_SPOTS[0]`) away for weeks and back to
+     her knob. Extends `story.py`. Doc `docs/v3/phase5-lives.md`, look test `out/look/v3/story-lives/`.
+     Merged `89e9106` and installed 2026-11-04 12:01. The lead re-ran the probes on the branch head `4bfe892`
+     (118 tests OK; `tests/test_shore_reference.py` 4/4; 2027-03-24 and 2028-06-15 (lambs and kittens) each 6
+     frames rendered twice, 0 differ; r2 digest unchanged) and after the merge with the contrail fix (118 OK).
+     Cost ratio 0.99 CPU (the delegate's measure). The `ordinary` look scene is byte-identical to `main`.
+     From the real cache: the pale cow was away 2026-09-23 to 11-01, so from install she comes to every low
+     water through 11-04 and is thin until 12-06; flock and cat change nothing until the 2027 lambing.
+     The delegate sat idle from 03:24 to 11:37 (it waited on a background notification and missed its renders
+     finishing). Worktree and branch removed.
    - part 3, echoes of the worlds: the listener's boat and life answer the shore's history (the live ledger).
      Touches the shore: anything that depends on the ledger must also be re-rendered by `nightly.py`'s
      shore re-render rule, and must stay off in reference mode.
@@ -124,6 +129,17 @@ a bit darker than the path (he wanted them darker than the sky, not the ground):
     clean-edged up close;
   - how often: in the synthetic year the logs show on about 110 days and the wall gap on about 114 (late
     November to March in a weak winter).
+
+- story, animal lives (`out/look/v3/story-lives/`, `docs/v3/phase5-lives.md`): `pair-*`, `crop-*`, `seq-lambs`,
+  `seq-kittens`, `seq-seal`. Things to look at:
+  - the kittens are tiny: in proportion to the phase 1 cat (about 12 px tall at the step on a 2880-wide frame),
+    a kitten is 5-9 px. They read only if you look; making them read means drawing the cat and kittens larger;
+  - one 2029 kitten stays and grows into a second cat, so from July 2029 two cats are out by day
+    (`KIT_STAY_P = 0` turns it off without moving any other draw);
+  - 3-4 lambs with the 4 ewes from April to late August, against phase 3's fixed 2 lambs: restrained enough?
+  - the kept ewe lamb (smaller, whiter) and the thin seal are close-up rewards only;
+  - the seal's timing (west Scotland grey seals pup September to late November; about 18 days' nursing) comes
+    from a search summary of the SCOS reports, not read in full.
 
 **Review bar:**
 - Restraint: Evan found the first grass "a bit distracting".
