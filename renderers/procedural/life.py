@@ -8,7 +8,22 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage as ndi
 
 from core import *  # noqa: F401,F403
-from events import FIELD_WALLS
+from events import FIELD_WALLS, snoise
+from story import KIT_GROWN, KIT_HOME
+from story import rng as srng
+
+KIT_HOME_MAX = KIT_HOME[1]      # days old: the kittens are all gone to new homes by then (all but one that stays)
+KIT_FAR = 49                    # days old: from seven weeks they follow her to the wall and the bench
+# where up to four kittens settle round the cat at each spot, in the cat's own size unit k (x to the right, y toward
+# you): on the mat at the step and beside it, round her in the grass, in the grass at the wall's foot, at the bench
+KIT_SPOTS = {"step": ((-2.6, 0.4), (2.4, 0.9), (-4.6, 1.2), (4.2, 0.2)),
+             "grass": ((-2.4, 0.8), (2.2, -0.4), (-1.0, 1.9), (3.6, 1.2)),
+             "wall": ((-1.8, 0.6), (1.6, 1.2), (-3.4, 1.6), (3.2, 0.4)),
+             "bench": ((-3.0, 0.6), (-1.0, 1.4), (1.6, 0.8), (3.4, 1.6))}
+# coats: (fur, white parts or None, bars or None)
+KIT_COATS = {"black": ((30, 28, 30), None, None), "bicolour": ((32, 30, 32), (226, 224, 216), None),
+             "grey": ((104, 106, 112), None, None), "tabby": ((122, 100, 74), None, (72, 58, 44)),
+             "ginger": ((184, 116, 58), (232, 214, 186), (148, 84, 40))}
 
 
 class LifeMixin:
@@ -90,6 +105,154 @@ class LifeMixin:
         # eyes: a glint of green-gold when a lamp is near, as a cat's do
         if pose != "curl":
             near = self.lights_on * (1.0 if spot in ("lamp", "step") or pose == "walk" else 0.4)
+            ec = np.array([200, 220, 90], np.float32)
+            for e in (-1, 1):
+                ex, ey = hx + e * 0.15 * k + f * 0.05 * k, hy - 0.02 * k
+                if near > 0.05:
+                    self.glow(ex, ey, 0.9 * s, ec, 1.6 * near)
+                else:
+                    self.glow(ex, ey, 0.5 * s, ec * 0.6, 0.5 * (1 - self.night))
+
+    # -------------------------------------------------------------- kittens --
+    def kit_place(self, kit, n, entry):
+        """Where kitten n stands while the cat keeps to her plan's stretch `entry` (start, spot, two seeds): (x, y)
+        of its feet near her, or None while it is indoors (she is somewhere else, or the stretch began after dark)."""
+        start, spot = entry[0], entry[1]
+        grown = kit["age"] >= KIT_FAR
+        if spot not in ("step", "grass", "wall", "bench") or (spot in ("wall", "bench") and not grown):
+            return None
+        if float(self.day.sun_alt[min(int(start), 1440)]) < -4:
+            return None
+        s = self.s
+        x, y, _, depth = self.cat_spot(spot, entry[2:])
+        if spot == "wall":              # in the grass at the foot of the wall she sits on, on its near side
+            y = depth + 3 * s * self.persp(depth)
+        elif spot == "bench":           # in the grass in front of the bench
+            y = BENCH[1] * self.H + 7 * s
+        k = 30 * s * self.persp(y) * 0.36
+        dx, dy = KIT_SPOTS[spot][n % len(KIT_SPOTS[spot])]
+        far = 1.0 if kit["age"] < KIT_HOME_MAX else 1.35
+        return x + dx * k * far, y + dy * k
+
+    def door_step(self):
+        return self.tw["cx"], self.tw["yb"] + 15 * self.s
+
+    def kittens_now(self):
+        """The story's kittens out now (story.py): [(kitten, x, y, pose, facing)]. They keep near the cat: by her at
+        the step or in the grass, and from seven weeks at the foot of the wall she sits on or in front of the bench.
+        While she is anywhere else, after dark, and on days a wet spell keeps them in, they are indoors. When she
+        moves they follow, each a minute or two behind her at a kitten's pace, going in and out by the door."""
+        st = self.day.story
+        if self.reference or not st.kittens:
+            return []
+        plan, m, s = self.day.events.cat, self.m, self.s
+        i = max(j for j, p in enumerate(plan) if p[0] <= m)
+        out = []
+        for n, kit in enumerate(st.kittens):
+            if st.kittens_in and kit["age"] < KIT_HOME_MAX:
+                continue
+            lag, walk = 1 + n, 6 + 2 * (n % 2)
+            since = m - plan[i][0]
+            here = self.kit_place(kit, n, plan[i])
+            moving = False
+            if i == 0 or since >= lag + walk:
+                pos = here
+            else:
+                there = self.kit_place(kit, n, plan[i - 1])
+                if since < lag:
+                    pos = there
+                elif here is None and there is None:
+                    pos = None
+                else:
+                    a, b = there or self.door_step(), here or self.door_step()
+                    u = (since - lag + 0.5) / walk
+                    pos = (a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u)
+                    moving = abs(b[0] - a[0]) + abs(b[1] - a[1]) > 2 * s
+                    f = 1 if b[0] >= a[0] else -1
+            if pos is not None and not moving and here is not None and float(self.day.sun_alt[min(m, 1440)]) < -4:
+                # dusk came while she sat on: they go in by the door, each in its turn
+                dark = np.nonzero(self.day.sun_alt[plan[i][0]:m + 1] < -4)[0]
+                u = (m - plan[i][0] - int(dark[0]) - lag + 0.5) / walk
+                if u >= 1:
+                    pos = None
+                elif u > 0:
+                    d = self.door_step()
+                    pos, moving, f = (pos[0] + (d[0] - pos[0]) * u, pos[1] + (d[1] - pos[1]) * u), True, (1 if d[0] >= pos[0] else -1)
+            if pos is None:
+                continue
+            x, y = pos
+            seed = kit["seed"]
+            if moving:
+                pose = "walk"
+            else:
+                k = 30 * s * self.persp(y) * 0.36
+                x += 0.7 * k * snoise(28, seed, m, 5)            # it plays about its place, never far
+                y += 0.35 * k * snoise(28, seed + 1, m, 6)
+                q = srng(29, self.day.date.toordinal(), seed, m // 3).random()
+                young = kit["age"] < 42
+                pose = "curl" if q < (0.3 if young else 0.12) else "sit" if q < 0.62 else "crouch" if q < 0.84 else "walk"
+                f = 1 if srng(29, self.day.date.toordinal(), seed, 7, m // 5).random() < 0.5 else -1
+            out.append((kit, x, y, pose, f))
+        return sorted(out, key=lambda p: p[2])
+
+    def kittens(self):
+        """The kittens, drawn like the cat in proportion to her: big heads and ears, tails up; sitting, crouched to
+        pounce, trotting, or curled asleep. The one that stays grows into the cat's shape and size by KIT_GROWN."""
+        for kit, x, y, pose, f in self.kittens_now():
+            self.draw_kitten(kit, x, y, pose, f)
+
+    def draw_kitten(self, kit, x, y, pose, f):
+        s = self.s
+        kc = 1 - min(1.0, max(0.0, (kit["age"] - 28) / (KIT_GROWN - 28)))    # how much kitten is left in its shape
+        k = 30 * s * self.persp(y) * 0.36 * kit["size"]
+        base, white, stripe = KIT_COATS[kit["coat"]]
+        fur = self.lit(base, [0, 0.8, 0.5], x, y)
+        wf = self.lit(white, [0, 0.8, 0.5], x, y) if white else None
+        S = Layer(self, x - 1.2 * k, y - 0.3 * k, x + 1.2 * k, y + 0.4 * k)
+        S.ellipse(x, y + 0.05 * k, 0.9 * k, 0.17 * k, np.array([20, 24, 18]) * (self.amb + 0.25), a=0.4)
+        self.life_put(S, y, solid=False, xc=x)
+        L = Layer(self, x - 3 * k, y - 3.4 * k, x + 3 * k, y + 0.6 * k)
+        hr = 0.42 + 0.14 * kc                       # its head, large while it is small
+        if pose == "sit":
+            L.ellipse(x, y - 0.8 * k, 0.6 * k, (0.95 - 0.15 * kc) * k, fur)
+            L.line([(x - f * 0.45 * k, y - 0.1 * k), (x - f * 1.0 * k, y - 0.05 * k), (x - f * 1.15 * k, y - 0.35 * k)], fur, 0.16 * k)
+            if wf is not None:
+                L.ellipse(x + f * 0.22 * k, y - 0.75 * k, 0.26 * k, 0.42 * k, wf)
+            hx, hy = x + f * 0.1 * k, y - (1.95 - 0.25 * kc) * k
+        elif pose == "curl":
+            L.ellipse(x, y - 0.32 * k, 0.85 * k, 0.36 * k, fur)
+            L.line([(x - f * 0.8 * k, y - 0.2 * k), (x - f * 0.3 * k, y - 0.02 * k), (x + f * 0.4 * k, y - 0.06 * k)], fur * 1.15, 0.16 * k)
+            hx, hy = x + f * 0.62 * k, y - 0.42 * k
+            hr *= 0.85
+        elif pose == "crouch":                      # crouched to pounce: rump up, tail straight out behind
+            L.ellipse(x, y - 0.45 * k, 0.95 * k, 0.4 * k, fur)
+            L.line([(x - f * 0.85 * k, y - 0.6 * k), (x - f * 1.25 * k, y - 0.95 * k)], fur, 0.16 * k)
+            if wf is not None:
+                L.ellipse(x + f * 0.55 * k, y - 0.2 * k, 0.3 * k, 0.16 * k, wf)
+            hx, hy = x + f * 0.95 * k, y - 0.55 * k
+        else:                                       # trotting, tail straight up
+            L.ellipse(x, y - 0.72 * k, 0.95 * k, 0.37 * k, fur)
+            ph = self.m % 2
+            for lx in (-0.62, -0.4, 0.4, 0.62):
+                L.line([(x + lx * k, y - 0.6 * k), (x + lx * k + (0.12 if ph else -0.12) * k * (1 if lx > 0 else -1), y)],
+                       wf if wf is not None and abs(lx) < 0.5 else fur, 0.17 * k)
+            L.line([(x - f * 0.85 * k, y - 0.85 * k), (x - f * 0.95 * k, y - 1.95 * k)], fur, 0.17 * k)
+            hx, hy = x + f * 1.05 * k, y - 1.1 * k
+        if stripe is not None and pose != "curl":   # a tabby's or a ginger's bars, for whoever looks closely
+            sc = self.lit(stripe, [0, 0.8, 0.5], x, y)
+            bx, by = (x, y - 0.8 * k) if pose == "sit" else (x, y - 0.6 * k)
+            for e in (-0.35, 0.0, 0.35):
+                L.line([(bx + e * k, by - 0.3 * k), (bx + (e + 0.08) * k, by + 0.05 * k)], sc, 0.09 * k)
+        L.ellipse(hx, hy, hr * k, 0.86 * hr * k, fur)
+        if wf is not None:
+            L.ellipse(hx + f * 0.12 * k, hy + 0.14 * k, 0.22 * k, 0.15 * k, wf)
+        for e in (-1, 1):
+            ex = hx + e * 0.57 * hr * k
+            L.poly([(ex - 0.36 * hr * k, hy - 0.45 * hr * k), (ex + 0.36 * hr * k, hy - 0.45 * hr * k),
+                    (ex + e * 0.15 * hr * k, hy - (1.5 + 0.15 * kc) * hr * k)], fur)
+        self.life_put(L, y, xc=x)
+        if pose != "curl" and kc < 0.5:             # grown: its eyes catch the lamps, as hers do
+            near = self.lights_on * 0.4
             ec = np.array([200, 220, 90], np.float32)
             for e in (-1, 1):
                 ex, ey = hx + e * 0.15 * k + f * 0.05 * k, hy - 0.02 * k

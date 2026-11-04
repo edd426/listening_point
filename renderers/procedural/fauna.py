@@ -22,6 +22,7 @@ from PIL import Image, ImageDraw
 
 from core import KF, SS, Layer, hull, normalize
 from events import WALL_LINES, vnoise
+from story import rng as srng
 
 LIFE_M = 76.0        # pixels per metre for the animals at a perspective of 1 on a 3840-wide frame
 OCC = OrderedDict()  # (W, H, date, wall stages) -> the standing things recorded while the hill was drawn
@@ -346,17 +347,23 @@ class FaunaMixin:
 
     # ---------------------------------------------------------------- sheep --
     def sheep(self):
-        """The flock, big enough to read: blackface ewes in their fleece (shorn in early summer), lambs in
-        spring; side on, or walking toward you or away; lying down in the fold at night."""
+        """The flock, big enough to read: blackface ewes in their fleece (shorn in early summer), and the story's
+        lambs from spring to the sale (story.py; draw_lamb); side on, or walking toward you or away; lying down in
+        the fold at night. A kept ewe lamb is a smaller ewe in a whiter fleece until she is grown."""
         se = self.season
         W, H, s = self.W, self.H, self.s
-        for i, (xn, yn, f, grazing, size, view) in enumerate(self.day.events.sheep(self.t, lambs=se.lambs)):
+        st = self.day.story
+        for i, (xn, yn, f, grazing, size, view, who) in enumerate(self.day.events.sheep(self.t, st.lambs, st.ewes)):
             x, y = xn * W, yn * H
-            lamb = size < 1
             M = LIFE_M * s * self.persp(y) * size
-            standing = self.sun_alt > -4 or lamb
-            shorn = se.shorn and not lamb
-            fleece = np.array((242, 238, 228) if lamb else (206, 200, 186) if shorn else (228, 223, 210), np.float32)
+            if who is not None and "mother" in who:
+                self.lamb(who, x, y, f, M)
+                continue
+            standing = self.sun_alt > -4
+            shorn = se.shorn
+            fleece = np.array((206, 200, 186) if shorn else (228, 223, 210), np.float32)
+            if who is not None and not shorn:        # a hogg: her first fleece, whiter than the ewes'
+                fleece = np.array((238, 234, 223), np.float32)
             v = view if standing else "lying"
             side = v in ("side", "lying")
             self.life_shadow(x, y, (1.15 if side else 0.72) * M, (0.8 if standing else 0.45) * M, y)
@@ -458,6 +465,91 @@ class FaunaMixin:
             dx, dy = r.uniform(-0.75, 0.75), r.uniform(-0.35, 0.65)
             px, py, w = cx + dx * rx, cy + dy * ry, r.uniform(0.04, 0.06)
             sp.limb([(px - w, py), (px - w * 0.3, py + w * 0.5), (px + w * 0.4, py + w * 0.3)], 0.014, c, edge=False)
+
+    # ---------------------------------------------------------------- lambs --
+    def lamb(self, lb, x, y, f, M):
+        """One of the story's lambs at (x, y), facing f, M pixels to its own metre (its size is in M)."""
+        lying = lb["pose"] == "lie"
+        self.life_shadow(x, y, (0.95 if lying else 1.0) * M, (0.4 if lying else 0.85) * M, y)
+        L = Layer(self, x - 1.0 * M, y - 1.2 * M, x + 1.0 * M, y + 0.12 * M)
+        sp = Sprite(x, y, M, f)
+        self.draw_lamb(sp, lb, x, y)
+        sp.draw(L, self.ink_w() * 0.85)
+        self.life_put(L, y, xc=x)
+
+    def draw_lamb(self, sp, lb, x, y):
+        """A blackface lamb, in its own metres: leggy, big-headed and knobbly at first, longer and sturdier week by
+        week (its size is in the sprite's scale); a tight white coat, its face and legs speckled black and white in
+        a pattern of its own (the same every day: the story's seed 5530), a long tail. Standing, grazing,
+        suckling (its head up under her, its tail out) or lying."""
+        pose, age = lb["pose"], lb["age"]
+        g = math.exp(-age / 40.0)                    # how much of the newborn is left in it
+        lv = self.sunv if self.sun_alt > -3 else self.moonv
+        rim_n = normalize([lv[0] * 0.8, lv[1] * 0.8 + 0.25, 0.45])
+        coat = np.array((246, 243, 234), np.float32)
+        b, t, u = (self.lit(coat, n, x, y) for n in ((0, 0.5, 0.87), (0, -0.2, 0.98), (0, 0.8, -0.25)))
+        m_ = 0.5 * (b + t)
+        rim = self.lit(coat, rim_n, x, y)
+        fb, ft, _, _ = self.tones((46, 40, 38), x, y)
+        wb = self.lit((232, 228, 218), (0, 0.8, 0.55), x, y)
+        legc = self.lit((70, 62, 56), (0, 0.8, 0.55), x, y)
+        r = srng(30, lb["seed"])
+        speck = [(r.uniform(-0.02, 0.2), r.uniform(-0.07, 0.06), r.uniform(0.018, 0.034)) for _ in range(int(r.integers(1, 4)))]
+        socks = [r.random() < 0.45 for _ in range(4)]
+        a_, b_ = 0.56 - 0.14 * g, 0.27 - 0.06 * g     # the barrel's half length and half height
+        leg = 0.26 + 0.13 * g                         # the legs below it
+        hk = 1.2 + 0.32 * g                           # the head, large at first
+        q = a_ / 0.6
+        lying = pose == "lie"
+        cy = 0.85 * b_ + 0.02 if lying else leg + b_
+        ox, oy = self.rim_off(sp.f, 0.05)
+        if not lying:
+            for k, (lx, far) in enumerate(((0.42 * q, True), (-0.36 * q, True), (0.34 * q, False), (-0.44 * q, False))):
+                top = cy - b_ + 0.05
+                sp.limb([(lx, top), (lx + 0.012, 0.0)], 0.05 + 0.01 * g, legc * (0.7 if far else 1.0), edge=False)
+                if socks[k]:                         # a white patch at the knee
+                    sp.limb([(lx + 0.004, top - 0.1 - 0.06 * g), (lx + 0.008, top - 0.16 - 0.08 * g)], 0.046,
+                            wb * (0.75 if far else 1.0), edge=False)
+            # its tail: hanging, or out while it sucks
+            tail = [(-a_ * 0.94, cy + 0.06), (-a_ - 0.1, cy + 0.07), (-a_ - 0.17, cy + 0.03)] if pose == "suckle" else \
+                   [(-a_ * 0.94, cy + 0.06), (-a_ - 0.04, cy - 0.04), (-a_ - 0.03, cy - 0.17)]
+            sp.bushy(tail, [0.035, 0.03, 0.022], m_)
+        else:                                        # its forelegs folded under it
+            sp.limb([(0.2 * q, 0.06), (0.36 * q, 0.025)], 0.05, legc * 0.85, edge=False)
+        # the coat: a small woolly barrel, its back in the light
+        sp.blob(ox, cy + oy, a_, b_, rim, p=2.2)
+        sp.blob(0.0, cy, a_, b_, b, p=2.2)
+        for xx in np.linspace(-0.4, 0.36, 5) * q:
+            rr = 0.07 * q
+            sp.ell(xx, cy + b_ * (0.82 - 0.25 * (abs(xx) / a_) ** 3), rr, rr * 0.85, t)
+        sp.blob(0.0, cy + 0.04, a_ * 0.97, b_ * 0.82, 0.6 * b + 0.4 * t, edge=False, p=2.4)
+        sp.blob(0.0, cy + 0.09, a_ * 0.82, b_ * 0.5, t, edge=False, p=2.2)
+        sp.blob(0.0, cy - 0.19 * q, a_ * 0.78, b_ * 0.24, 0.5 * (u + b), edge=False, p=2.2)
+        c = 0.6 * m_ + 0.4 * b
+        for _ in range(6):                           # tight curls
+            px, py, w = r.uniform(-0.7, 0.7) * a_, cy + r.uniform(-0.3, 0.6) * b_, r.uniform(0.025, 0.04)
+            sp.limb([(px - w, py), (px - w * 0.3, py + w * 0.6), (px + w * 0.4, py + w * 0.3)], 0.012, c, edge=False)
+        # the neck and head
+        if pose == "graze":
+            sp.limb([(0.38 * q, cy), (0.55 * q, 0.22)], 0.17, 0.5 * (b + m_))
+            pv, ang = (0.57 * q, 0.2), -62
+        elif pose == "suckle":                       # reaching up under her
+            sp.limb([(0.38 * q, cy + 0.03), (0.6 * q, cy + 0.1)], 0.17, m_)
+            pv, ang = (0.63 * q, cy + 0.12), 18
+        elif lying:
+            sp.limb([(0.38 * q, cy + 0.05), (0.54 * q, cy + 0.12)], 0.17, m_)
+            pv, ang = (0.57 * q, cy + 0.14), -8
+        else:
+            sp.limb([(0.38 * q, cy + 0.07), (0.56 * q, cy + 0.14)], 0.17, m_)
+            pv, ang = (0.6 * q, cy + 0.16), -14
+        with sp.turn(ang, *pv):
+            P = lambda pts: [(pv[0] + dx * hk * 0.86, pv[1] + dy * hk) for dx, dy in pts]
+            sp.poly(P(SHEEP_HEAD), fb)
+            for sx, sy, sr in speck:                 # its own white markings
+                sp.ell(pv[0] + sx * hk * 0.86, pv[1] + sy * hk, sr * hk, sr * hk * 0.8, wb, edge=False)
+            sp.ell(pv[0] + 0.105 * hk * 0.86, pv[1] + 0.02 * hk, 0.015, 0.011, fb * 0.3, edge=False)
+            sp.poly(P(SHEEP_EAR), fb * 0.85)
+            sp.poly(P([(-0.02, 0.045), (-0.12, 0.03), (-0.12, 0.018), (-0.02, 0.03)]), ft * 0.8, edge=False)
 
     # ------------------------------------------------------------------ fox --
     def fox(self):
@@ -727,10 +819,10 @@ class FaunaMixin:
         for site, u, j, pose, f, key in birds:
             if site == "ground":
                 if flock is None:
-                    flock = self.day.events.sheep(self.t, lambs=self.season.lambs)
+                    flock = self.day.events.sheep(self.t, self.day.story.lambs, self.day.story.ewes)
                 if not flock or self.sun_alt < -4:
                     continue
-                sx, sy, sf, _, size, _ = flock[int(u * len(flock)) % len(flock)]
+                sx, sy, sf, _, size, _, _ = flock[int(u * len(flock)) % len(flock)]
                 sy *= H
                 Ms = LIFE_M * s * self.persp(sy)
                 side = 1 if key[0] % 2 else -1

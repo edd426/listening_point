@@ -539,6 +539,16 @@ class SeaPlan:
         return None
 
     # --------------------------------------------------------------- seals --
+    def pale(self, m=None):
+        """The pale cow's state from the story (story.Story.pale): None, or away, or lately back. At minute m: a low
+        water that began before midnight keeps the day before's, so a haul-out across midnight is one haul-out."""
+        st = getattr(self.day, "story", None)
+        pale = getattr(st, "pale", None)
+        before = getattr(st, "pale_before", None)
+        if m is not None and before != pale and self.low_water(m)[0] == self.low_water(0)[0]:
+            return before
+        return pale
+
     def low_water(self, m):
         """The count of the low water this minute belongs to (from high water to high water), and how far from
         it (-0.5 .. 0.5 of the tide's cycle; negative while the tide falls)."""
@@ -551,7 +561,10 @@ class SeaPlan:
     def seals_at(self, m, wl):
         """The seals now: [(which, where, pose, facing, a, b)] where is 'rock' (hauled out at its spot) or 'water'
         (a head near its spot, waiting for the rock to dry, or just slipped off it). Seal 0 is the pale cow, who
-        comes to her own knob most low waters. wl: the water level (world units)."""
+        comes to her own knob most low waters; in the autumns she goes to a breeding colony (the story, story.py) her
+        knob is empty while she is away, and she comes to every low water the first days she is back (as the wind
+        allows). wl: the water level (world units)."""
+        pale = self.pale(m)
         n, g = self.low_water(m)
         mm = min(int(m), 1439)
         wind = float(self.day.wx.wind_ms[mm])
@@ -561,7 +574,12 @@ class SeaPlan:
         for j, (a, b) in enumerate(SEAL_SPOTS):
             r = np.random.default_rng([n % 2 ** 32, 96, j])
             comes, thr, face, wait = r.random(), r.uniform(*SEAL_THR[j]), r.random() < 0.5, r.uniform(0.002, 0.005)
-            if comes > SEAL_P[j] * (1.0 if wind < 11 else 0.4 if wind < 15 else 0.0):
+            p = SEAL_P[j]
+            if j == 0 and pale:
+                if pale["away"]:
+                    continue
+                p = 1.0 if pale["sure"] else p
+            if comes > p * (1.0 if wind < 11 else 0.4 if wind < 15 else 0.0):
                 continue
             _, _, h = skerry_point(a, b)
             margin = h - wl
@@ -594,9 +612,10 @@ class SeaPlan:
     def seal_swim_at(self, m, wl):
         """A seal's head in the water now: (which, X, Z, seed, minutes in) or None (not while that seal is out
         on the rock)."""
+        pale = self.pale(m)
         for m0, m1, j, X, Z, seed in self.seal_swims:
             if m0 <= m < m1:
-                if any(s[0] == j for s in self.seals_at(m, wl)):
+                if any(s[0] == j for s in self.seals_at(m, wl)) or (j == 0 and pale and pale["away"]):
                     return None
                 return j, X, Z, seed, m - m0
         return None
@@ -631,4 +650,7 @@ class NoPlan:
         return []
 
     def seal_swim_at(self, m, wl):
+        return None
+
+    def pale(self, m=None):
         return None

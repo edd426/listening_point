@@ -2,13 +2,17 @@
 """What the story shows on each date (v3 phase 5, part 1; story.py): for a year of dates, the day's weather as
 the story reads it, whether it was a day for work, and what is on the land the next morning: the wall (whole,
 fallen, or how far rebuilt), the branch under the tree, the logs by the shed, driftwood on the shingle, snow
-drifted against the walls, and the garden (how far it lags phase 3's calendar).
+drifted against the walls, and the garden (how far it lags phase 3's calendar); and the animal lives (part 2): the
+lambs (how many, their ages), a kept ewe lamb in the flock (a hogg), the kittens that are out (how many, their ages,
+kept in by a wet spell), the one that stayed, and whether the pale seal is away or lately back.
 
 usage: ./venv/bin/python tools/story_calendar.py [--weather synthetic|fair|auto] [--from 2026-11-01] [--days 365]
-                                                 [--changes] [--cache DIR]
+                                                 [--changes | --lives] [--cache DIR]
 
 Offline: synthetic and fair weather make their own; auto reads only the weather cache. --changes prints only
-the dates on which something the story shows changes (and the first), then the totals.
+the dates on which something the story shows changes (and the first), then the totals. --lives prints only the
+animal lives: a line on each date they change (a birth, a sale, a kitten gone, the seal away or back), and on
+each Monday between, then the totals.
 """
 import argparse
 import datetime as dt
@@ -50,6 +54,27 @@ def shows(st, hist, d):
         out.append(f"garden behind {lag:.2f}")
     if st.spade:
         out.append("spade")
+    return out + lives(st)
+
+
+def weeks(ages):
+    w = sorted({a // 7 for a in ages})
+    return f"{w[0]}w" if len(w) == 1 else f"{w[0]}-{w[-1]}w"
+
+
+def lives(st):
+    """The animal lives on that date, as short words."""
+    out = []
+    if st.lambs:
+        out.append(f"lambs {len(st.lambs)} ({weeks([lb['age'] for lb in st.lambs])})")
+    if st.ewes:
+        out += [f"hogg {e['id']} ({e['size']:.2f})" for e in st.ewes if e]
+    young = [k for k in st.kittens if k["age"] < S.KIT_HOME[1]]
+    if young:
+        out.append(f"kittens {len(young)} ({weeks([k['age'] for k in young])})" + (" kept in" if st.kittens_in else ""))
+    out += [f"young cat {k['coat']} ({k['age'] // 7}w)" for k in st.kittens if k["age"] >= S.KIT_HOME[1]]
+    if st.pale:
+        out.append("pale cow away" if st.pale["away"] else f"pale cow back ({st.pale['since']}d)")
     return out
 
 
@@ -59,11 +84,13 @@ def main():
     ap.add_argument("--from", dest="start", default="2026-11-01")
     ap.add_argument("--days", type=int, default=365)
     ap.add_argument("--changes", action="store_true")
+    ap.add_argument("--lives", action="store_true")
     ap.add_argument("--cache", default=os.path.expanduser("~/Library/Caches/listening-point"))
     a = ap.parse_args()
     d0 = dt.date.fromisoformat(a.start)
     tz, lat, lon = BUDAPEST["tz"], BUDAPEST["lat"], BUDAPEST["lon"]
-    totals = dict(days=0, work=0, gale=0, onshore=0, snow=0, wall=0, branch=0, logs=0, driftwood=0, drifts=0, garden=0, spade=0)
+    totals = dict(days=0, work=0, gale=0, onshore=0, snow=0, wall=0, branch=0, logs=0, driftwood=0, drifts=0, garden=0, spade=0,
+                  lambs=0, hogg=0, kittens=0, kept_in=0, young_cat=0, away=0)
     prev, costs = None, []
     print(f"weather {a.weather}; from {d0} for {a.days} days. A date's line is what shows that day (from the days before it);"
           f" 'work' means that day itself was fit for work, so its work shows the next morning.")
@@ -85,15 +112,31 @@ def main():
         for k, word in (("wall", "wall"), ("branch", "branch"), ("logs", "logs"), ("driftwood", "driftwood"), ("drifts", "drifts"),
                         ("garden", "garden"), ("spade", "spade")):
             totals[k] += any(x.startswith(word) for x in what)
-        key = tuple(x for x in what if not x.startswith(("branch", "garden behind")))
-        key += tuple("branch" for x in what if x.startswith("branch"))
-        if not a.changes or key != prev or i == 0:
-            print(f"{d} {d.strftime('%a')}  {wx:<52s} | {', '.join(what) or '-'}")
+        lv = lives(st)
+        totals["lambs"] += bool(st.lambs)
+        totals["hogg"] += any(x.startswith("hogg") for x in lv)
+        totals["kittens"] += any(x.startswith("kittens") for x in lv)
+        totals["kept_in"] += any(x.endswith("kept in") for x in lv)
+        totals["young_cat"] += any(x.startswith("young cat") for x in lv)
+        totals["away"] += "pale cow away" in lv
+        if a.lives:
+            key = (len(st.lambs), sum(k["age"] < S.KIT_HOME[1] for k in st.kittens), st.kittens_in,
+                   st.pale is not None, bool(st.pale and st.pale["away"]), bool(st.pale and st.pale["sure"]),
+                   tuple(e and e["id"] for e in st.ewes or ()))
+            if key != prev or i == 0 or (d.weekday() == 0 and (st.lambs or st.kittens or st.pale)):
+                print(f"{d} {d.strftime('%a')}  | {', '.join(lv) or '-'}")
+        else:
+            key = tuple(x for x in what if not x.startswith(("branch", "garden behind")))
+            key += tuple("branch" for x in what if x.startswith("branch"))
+            if not a.changes or key != prev or i == 0:
+                print(f"{d} {d.strftime('%a')}  {wx:<52s} | {', '.join(what) or '-'}")
         prev = key
     n = totals["days"]
     print(f"\n{n} days: {totals['work']} fit for work ({100 * totals['work'] / n:.0f}%), {totals['gale']} with gusts of"
           f" {S.GALE:.0f} m/s or more, {totals['onshore']} with an onshore blow of {S.ONSHORE:.0f} m/s, {totals['snow']} with snow lying.")
     print("days showing: " + ", ".join(f"{k} {totals[k]}" for k in ("wall", "branch", "logs", "driftwood", "drifts", "spade", "garden")))
+    print("lives: " + ", ".join(f"{k.replace('_', ' ')} {totals[k]}" for k in ("lambs", "hogg", "kittens", "kept_in", "young_cat", "away"))
+          + " (days; 'away': the pale cow)")
     costs.sort()
     print(f"story per date: median {costs[len(costs) // 2]:.1f} ms, max {costs[-1]:.1f} ms (this process, its caches warm as it goes)")
 

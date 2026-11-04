@@ -55,7 +55,6 @@ class Season:
         self.flowers = [(c, bump(d, a, b, e, f)) for a, b, e, f, c in FLOWERS if bump(d, a, b, e, f) > 0.02]
         self.flower_density = min(1.0, sum(w for _, w in self.flowers) / 2.2)
         # who is about
-        self.lambs = 74 <= d <= 152          # mid-March to the end of May
         self.shorn = 152 <= d <= 196         # June to mid-July, before the fleece grows back
         self.fireflies = bump(d, 158, 168, 195, 205)
         self.bats = bump(d, 90, 105, 290, 305)

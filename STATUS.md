@@ -127,7 +127,10 @@ seals, a cormorant, gannets, dolphins) from the day's plan in `seaplan.py` (`day
 `tools/sea_schedule.py` reports how often each shows. `marks` (v3 phase 5 part 1, `docs/v3/phase5-land.md`) draws
 what the story leaves on the land (a wall fallen and rebuilt, the spade, a storm's branch and its logs, driftwood,
 snow drifts) from `story.py` (`day.story`, from the date and the weather of the days before, real weather from the
-cache only; empty in reference mode); `tools/story_calendar.py` prints what shows on each date. `fauna` (v3 phase 3 part 2,
+cache only; empty in reference mode); `tools/story_calendar.py` prints what shows on each date. `story.py` also tells the
+animal lives (v3 phase 5 part 2, `docs/v3/phase5-lives.md`): the lambs from their births to the sale and a kept ewe lamb
+(drawn by `fauna`), the cat's kittens in some years (`life`), and the pale seal's autumns away (`seaplan`, `sealife`);
+`tools/story_calendar.py --lives` prints them. `fauna` (v3 phase 3 part 2,
 `docs/v3/phase3-animals.md`) draws the sheep, fox, hares and crows, and hides any animal standing behind the
 walls, the gate, the shed, the hives, the rocks or the gorse (masks recorded while the hill is drawn). `day.py` builds one date's per-minute astronomy, weather,
 season (`season.py`), schedule (`events.py`) and mysteries. `astro.py` and `weather.py` are
