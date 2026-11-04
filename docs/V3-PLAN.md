@@ -3,7 +3,7 @@
 From Evan's interview on 2026-11-01, held after the shore went live. These are his answers; the
 phases are their order. Every step gets a look test before it is installed.
 
-## HANDOFF — state at 2026-11-04 ~12:05 CET (phase 5 parts 1 and 2 installed; part 3 building)
+## HANDOFF — state at 2026-11-04 ~13:45 CET (phase 5 done: parts 1-3 installed; waiting on Evan's look)
 
 **Verified after the update** (macOS 27.2, 26B123): both venvs still import numpy 2.0.2, scipy 1.13.1
 and Pillow 11.3.0 on Xcode's Python 3.9.6; both launchd jobs are loaded; frames render; the
@@ -25,7 +25,8 @@ carrier is green. The lock screen was not checked (needs Evan's eye).
 | 4 sea part 2: boats and sea life (ferry on a timetable, creel boat at the pots, extra yachts; seals and a cormorant on the skerry, gannets, dolphins) | `94b8d87` | yes, 2026-11-03 12:35 |
 | 5 story part 1: land and weather marks (`story.py` calendar from cached weather; a wall that falls in a winter gale and is rebuilt on workable days; the garden stepping with the work; a gale's branch, then logs by the shed; driftwood; snow drifts) | `09fe743` | yes, 2026-11-03 22:43 |
 | fix: contrails crashed when the weight filter emptied a live trail's splats (the 2026-11-05 render failed at 09:27 on one forecast; a later forecast passed, so the retry hid it) | `4868d71` | yes, 2026-11-04 07:15 |
-| 5 story part 2: animal lives (lambs born, growing up and sold, a ewe lamb kept as a hogg; the cat's kittens some years, one staying as a second cat; the pale cow seal away at a breeding colony in autumn and back thin) | `89e9106` | yes, 2026-11-04 12:01 (desktop not yet captured: the screen was locked) |
+| 5 story part 2: animal lives (lambs born, growing up and sold, a ewe lamb kept as a hogg; the cat's kittens some years, one staying as a second cat; the pale cow seal away at a breeding colony in autumn and back thin) | `89e9106` | yes, 2026-11-04 12:01 |
+| 5 story part 3: echoes of the worlds (with a shore: a pennant at the moored boat's masthead in the colour of the newest object still on the shore, down 3 days after the last arrival; the boat's trip the day after the sea takes anything; washing aboard on some quiet days) | `fe212e2` | yes, 2026-11-04 13:29 (desktop captured 13:36: the pennant flies) |
 
 Probes were re-run on each merged head (tests, determinism, r2 digest): all PASS. The details are in
 each part's doc under `docs/v3/`.
@@ -93,13 +94,24 @@ a bit darker than the path (he wanted them darker than the sky, not the ground):
      water through 11-04 and is thin until 12-06; flock and cat change nothing until the 2027 lambing.
      The delegate sat idle from 03:24 to 11:37 (it waited on a background notification and missed its renders
      finishing). Worktree and branch removed.
-   - part 3 `v3/story-echoes` (worktree `.claude/worktrees/story-echoes`, started 2026-11-04 12:20 from
-     `7a969b1`), echoes of the worlds: the listener (who lives aboard the moored boat, never shown or named)
-     answers the shore's ledger through traces on the boat, the water or the land. Rules in the brief: what shows
-     at instant t depends only on ledger events at or before t (so `nightly.py`'s re-render from the new event's
-     instant covers it); nothing in reference mode or without `--shore`; nothing over or near a shore object; no
-     text; independent of the lamp; nothing from the real (private) shore committed to this public repo. The
-     delegate sends a design note first and waits for the lead's go.
+   - part 3 `v3/story-echoes` (started 2026-11-04 12:20 from `7a969b1`), echoes of the worlds: the listener
+     (who lives aboard the moored boat, never shown or named) answers the shore's ledger through traces on the boat.
+     Built: E1 the pennant, E2 the trip after the sea, E3 the washing (`WASH_P` 0.5: half the quiet days, the
+     delegate's change so washing is not a fixture while the shore is slow). Not built (ideas in the doc): dressed
+     overall every 50th arrival, stove smoke. Doc `docs/v3/phase5-echoes.md`, look test `out/look/v3/story-echoes/`.
+     Rules: what shows at instant t depends only on ledger events at or before t (E2 on sea events before the date's
+     00:00), so `nightly.py`'s re-render from the new event's instant on today and tomorrow covers it; nothing in
+     reference mode, without `--shore`, or with an empty ledger (byte-identical); nothing over or near a shore
+     object (all on the boat, drawn behind the objects); no text; independent of the lamp; nothing from the real
+     shore committed (this repo is public). `Day.__init__` now loads the shore, then the story, then `SeaPlan`.
+     Merged `fe212e2` and installed 2026-11-04 13:29. The lead re-ran the probes on the branch head `7677fa7` (135
+     tests OK; `tests/test_shore_reference.py` 4/4; 6 frames rendered twice, 0 differ, and byte-identical to part 2's
+     frames without a shore; r2 digest unchanged; 0 matches of the live ledger's ids, hashes and commits in the
+     branch diff and messages) and after the merge (135 OK). Cost ratio 0.99 CPU (the delegate's measure).
+     On the live shore: the pennant flies the newest object's colour until 2026-11-06 04:29 if nothing new lands;
+     washing would hang 11-05 and 11-06 on the same condition. Worktree and branch removed.
+3. All five phases are built and installed. Next: Evan's look at phase 5's look tests (below) and any vetoes
+   or changes from them. The only idea still open is "Unfinished ideas" below (heaped cumulus, painted).
 
 **For Evan to judge** (look tests in `out/look/v3/<part>/` of this checkout, top = before, bottom = after):
 - clouds: `pair-*`, half size;
@@ -144,6 +156,16 @@ a bit darker than the path (he wanted them darker than the sky, not the ground):
   - the kept ewe lamb (smaller, whiter) and the thin seal are close-up rewards only;
   - the seal's timing (west Scotland grey seals pup September to late November; about 18 days' nursing) comes
     from a search summary of the SCOS reports, not read in full.
+
+- story, echoes of the worlds (`out/look/v3/story-echoes/`, `docs/v3/phase5-echoes.md`): `pair-*`, `crop-*`,
+  `seq-story` (`pair-real` is the live shore: local only). Things to look at:
+  - the pennant is a fleck at desktop size (29 x 6 px at 2880 wide); a blue or tar-coloured object gives a pennant
+    hard to see against the sea;
+  - the pennant falls back to the next newest object when the sea takes the newest. Storms never take the newest,
+    so a fallback means a veto. The lead chose this so a vetoed object's colour is not flown for days; only Evan sees
+    live frames;
+  - the trip after the sea: 4-6 a month from December to March at a steady pace of objects;
+  - the washing: too rare, or too domestic? (`WASH_P` 1 restores "every quiet dry day").
 
 **Review bar:**
 - Restraint: Evan found the first grass "a bit distracting".
