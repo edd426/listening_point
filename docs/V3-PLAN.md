@@ -24,6 +24,7 @@ carrier is green. The lock screen was not checked (needs Evan's eye).
 | fix: puddles read as water, not snow (brightness capped against the wet ground; `PUDDLE_CAP` 2.0) | `b7728e4`, `bc3c3e9` | yes, 2026-11-03 11:53 |
 | 4 sea part 2: boats and sea life (ferry on a timetable, creel boat at the pots, extra yachts; seals and a cormorant on the skerry, gannets, dolphins) | `94b8d87` | yes, 2026-11-03 12:35 |
 | 5 story part 1: land and weather marks (`story.py` calendar from cached weather; a wall that falls in a winter gale and is rebuilt on workable days; the garden stepping with the work; a gale's branch, then logs by the shed; driftwood; snow drifts) | `09fe743` | yes, 2026-11-03 22:43 |
+| fix: contrails crashed when the weight filter emptied a live trail's splats (the 2026-11-05 render failed at 09:27 on one forecast; a later forecast passed, so the retry hid it) | `4868d71` | yes, 2026-11-04 07:15 |
 
 Probes were re-run on each merged head (tests, determinism, r2 digest): all PASS. The details are in
 each part's doc under `docs/v3/`.
