@@ -3,7 +3,7 @@
 From Evan's interview on 2026-11-01, held after the shore went live. These are his answers; the
 phases are their order. Every step gets a look test before it is installed.
 
-## HANDOFF — state at 2026-11-04 ~12:05 CET (phase 5 parts 1 and 2 installed; part 3 next)
+## HANDOFF — state at 2026-11-04 ~12:05 CET (phase 5 parts 1 and 2 installed; part 3 building)
 
 **Verified after the update** (macOS 27.2, 26B123): both venvs still import numpy 2.0.2, scipy 1.13.1
 and Pillow 11.3.0 on Xcode's Python 3.9.6; both launchd jobs are loaded; frames render; the
@@ -93,9 +93,13 @@ a bit darker than the path (he wanted them darker than the sky, not the ground):
      water through 11-04 and is thin until 12-06; flock and cat change nothing until the 2027 lambing.
      The delegate sat idle from 03:24 to 11:37 (it waited on a background notification and missed its renders
      finishing). Worktree and branch removed.
-   - part 3, echoes of the worlds: the listener's boat and life answer the shore's history (the live ledger).
-     Touches the shore: anything that depends on the ledger must also be re-rendered by `nightly.py`'s
-     shore re-render rule, and must stay off in reference mode.
+   - part 3 `v3/story-echoes` (worktree `.claude/worktrees/story-echoes`, started 2026-11-04 12:20 from
+     `7a969b1`), echoes of the worlds: the listener (who lives aboard the moored boat, never shown or named)
+     answers the shore's ledger through traces on the boat, the water or the land. Rules in the brief: what shows
+     at instant t depends only on ledger events at or before t (so `nightly.py`'s re-render from the new event's
+     instant covers it); nothing in reference mode or without `--shore`; nothing over or near a shore object; no
+     text; independent of the lamp; nothing from the real (private) shore committed to this public repo. The
+     delegate sends a design note first and waits for the lead's go.
 
 **For Evan to judge** (look tests in `out/look/v3/<part>/` of this checkout, top = before, bottom = after):
 - clouds: `pair-*`, half size;
