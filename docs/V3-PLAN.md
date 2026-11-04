@@ -3,7 +3,7 @@
 From Evan's interview on 2026-11-01, held after the shore went live. These are his answers; the
 phases are their order. Every step gets a look test before it is installed.
 
-## HANDOFF — state at 2026-11-04 ~13:45 CET (phase 5 done: parts 1-3 installed; waiting on Evan's look)
+## HANDOFF — state at 2026-11-04 ~13:45 CET (phase 5 done and approved by Evan; v3 complete)
 
 **Verified after the update** (macOS 27.2, 26B123): both venvs still import numpy 2.0.2, scipy 1.13.1
 and Pillow 11.3.0 on Xcode's Python 3.9.6; both launchd jobs are loaded; frames render; the
@@ -110,8 +110,10 @@ a bit darker than the path (he wanted them darker than the sky, not the ground):
      branch diff and messages) and after the merge (135 OK). Cost ratio 0.99 CPU (the delegate's measure).
      On the live shore: the pennant flies the newest object's colour until 2026-11-06 04:29 if nothing new lands;
      washing would hang 11-05 and 11-06 on the same condition. Worktree and branch removed.
-3. All five phases are built and installed. Next: Evan's look at phase 5's look tests (below) and any vetoes
-   or changes from them. The only idea still open is "Unfinished ideas" below (heaped cumulus, painted).
+3. All five phases are built and installed. **Evan's verdict on phase 5 (2026-11-04)**, after looking through all
+   three look tests: "It all looks really great. I couldn't always notice the differences, but I'm sure after some
+   time I'll notice more and more." No vetoes or changes asked; the "for Evan to judge" items below stand as they
+   are built. The only idea still open is "Unfinished ideas" below (heaped cumulus, painted).
 
 **For Evan to judge** (look tests in `out/look/v3/<part>/` of this checkout, top = before, bottom = after):
 - clouds: `pair-*`, half size;
