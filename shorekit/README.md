@@ -43,22 +43,35 @@ they never land in a repository by accident.
    that the sea took them: a storm and the owner look the same. They stay in the record; they are
    just not drawn.
 
+## Shadows
+
+Everything standing on the shingle or the pier has a small contact shadow under its foot and, since
+kit 1.3.0, a **cast shadow** that falls away from the sun, or from a bright moon. `preview` draws it
+for each of the four lights, and on the wallpaper it turns through the day, so an upright thing works
+as a sundial. The rule is whole numbers (`SCHEMA.md` 4.6): each light is two integers, and every
+shadow pixel can be worked out by hand from them. Shadows are drawn, never judged: nothing about a
+cast shadow can make a check pass or fail, and a thing built onto another casts none.
+
 ## What it promises
 
 - **Exactly the same everywhere**, given the same kit, record and reference set: the verdict and
   its messages, every pixel an object covers, the order things are drawn in and who covers whom,
-  the label's letters, and the preview's pixels. Tests check this on Linux and macOS, x86 and ARM,
-  Python 3.9 and 3.12.
-- **Close, not exact:** colour. The Mac lights each object through the real renderer every minute;
-  at the four reference lights the result stays within a small tolerance of the preview.
-- **Not promised:** other weather and hours, snow on objects, creatures passing in front.
+  the label's letters, the pixels each cast shadow falls on, and the preview's pixels. Tests check
+  this on Linux and macOS, x86 and ARM, Python 3.9 and 3.12.
+- **The same pixels on the Mac:** at every minute the wallpaper's cast shadow is this kit's rule,
+  given that minute's sun or moon.
+- **Close, not exact:** colour, and how dark a shadow is. The Mac lights each object through the real
+  renderer every minute; at the four reference lights the result stays within a small tolerance of
+  the preview.
+- **Not promised:** other weather and hours, snow on objects, creatures passing in front. Under
+  cloud or in fog there is no cast shadow at all.
 
 ## Safety
 
 Objects are text, not images, so nothing on the Mac ever decodes a maker's picture. Every input
 is size-checked before it is read; JSON with fractions, duplicate keys, escapes or non-ASCII is
 refused; `import` checks a PNG's header before inflating a byte and never inflates more than the
-header allows. The test suite throws 310 malformed inputs at it.
+header allows. The test suite throws 341 malformed inputs at it.
 
 ## For developers
 

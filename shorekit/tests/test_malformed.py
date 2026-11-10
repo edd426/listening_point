@@ -363,6 +363,29 @@ def refjson_cases():
     return [("reference json %d" % i, run, item) for i, item in enumerate(datas)]
 
 
+def refcast_cases():
+    """Kit 1.3.0: a conditions.json whose cast shadows are out of shape (test_cast.cast_cases)."""
+    import json
+    from test_cast import cast_cases
+
+    def run(item):
+        _, f, src = item
+        d = tempfile.mkdtemp(prefix="shorekit-ref-bad-")
+        try:
+            dst = os.path.join(d, "r1")
+            shutil.copytree(src or S.reference_dir_cast(), dst)
+            p = os.path.join(dst, "conditions.json")
+            with open(p, "rb") as fh:
+                o = json.loads(fh.read())
+            o = f(o) or o
+            with open(p, "wb") as fh:
+                fh.write(o if type(o) is bytes else canonical(o))
+            load_reference(dst)
+        finally:
+            shutil.rmtree(d)
+    return [("reference cast: " + item[0], run, item) for item in cast_cases()]
+
+
 class TestVeil(unittest.TestCase):
     def test_a_veil_brighter_than_255_is_linear_and_allowed(self):
         """Daylight fog is brighter than 255 in the renderer's linear light; the tone curve takes 0-511."""
@@ -388,8 +411,10 @@ class TestMalformed(unittest.TestCase):
     def test_every_malformed_input_is_refused_fast(self):
         S.reference()
         ledger_base()
-        cases = manifest_cases() + import_cases() + refpng_cases() + ledger_cases() + queue_cases() + refjson_cases()
-        self.assertGreaterEqual(len(cases), 200)
+        S.reference_cast()
+        cases = (manifest_cases() + import_cases() + refpng_cases() + ledger_cases() + queue_cases() + refjson_cases()
+                 + refcast_cases())
+        self.assertGreaterEqual(len(cases), 330)
         slow = []
         for name, fn, data in cases:
             tracemalloc.start()

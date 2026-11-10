@@ -9,12 +9,18 @@ An object pixel of albedo A (per channel c) at crop pixel (x, y) under a conditi
 
 and a contact-shadow pixel over the crop's own colour G is (G_c * (256 - s) + S_c * s) >> 8.
 
+Kit 1.3.0: before the contact shadows, every ground pixel some object's cast shadow falls on
+(geometry.cast_pixels, for the condition's cast.dx and cast.dy) is darkened once, however many shadows
+meet there: (G_c * (256 - cast.alpha)) >> 8. No object's pixel is ever touched. A condition without
+`cast` (a reference set written before 1.3.0) has no cast shadows at all.
+
 Look B: L is the light on the pixel's face (front, top, east or west, see geometry.cell_face), and a
 pixel of the manifest's glow key also emits t += (A_c * EMIT * lamps) >> 8, with the condition's
 lamps (x256) and EMIT = 410 (1.6 x256): lamplight that comes on with the scene's own lamps.
 """
 import hashlib
 
+from .geometry import cast_pixels
 from .png import write_png
 from .rules import draw_order, paint
 
@@ -31,11 +37,31 @@ def shade(alb, light, lut, a, veil, vig, lamps=0):
     return lut[w if w < 512 else 511]
 
 
+def cast_shown(ref, objs, dx, dy):
+    """The ground the cast shadows of `objs` darken under a light of direction (dx, dy), x256 px of shadow
+    per px of height (geometry.cast_pixels): every pixel some object's shadow falls on and no object
+    covers, as sorted crop indices. This one set is what the preview and the Mac both draw; it is in no
+    footprint, no rule and no plan."""
+    cast = set()
+    for o in objs:
+        cast.update(cast_pixels(o, ref, dx, dy))
+    if cast:
+        for o in objs:
+            cast.difference_update(o.solid)
+    return sorted(cast)
+
+
 def compose(ref, objs, cond):
     """The crop for `cond` with `objs` drawn on it: bytearray of cw*ch RGB."""
     order = draw_order(objs)
     owner, drawn = paint(order, ref.cw * ref.ch)
     out = bytearray(ref.crop(cond.name))
+    if cond.cast_alpha:
+        keep = 256 - cond.cast_alpha
+        for i in cast_shown(ref, order, cond.cast_dx, cond.cast_dy):
+            j = 3 * i
+            for c in range(3):
+                out[j + c] = (out[j + c] * keep) >> 8
     sa, sr = cond.shadow_alpha, cond.shadow_rgb
     done = set()
     for ds in drawn:

@@ -60,6 +60,10 @@ COLOURS = {
     "fog": [(150, 158, 166), (140, 140, 138), (160, 158, 152), (120, 128, 112), (140, 134, 126), (110, 110, 112)],
 }
 CONDITIONS = ("noon", "golden", "night", "fog")
+# kit 1.3.0: the cast shadow of each condition, for the set written as shore_conditions 2: dx, dy (x256 px of
+# shadow per px of height, right and down) and alpha (x256). A high sun in the south, a low one in the west
+# (the longest shadow there is), a moon, and fog, which casts none.
+CAST = {"noon": (24, 84, 87), "golden": (-742, 60, 60), "night": (310, 150, 30), "fog": (0, 0, 0)}
 
 
 def interp(pts, x):
@@ -149,8 +153,9 @@ def _fill(mask, shape, value):
                     mask[(y - CY) * CW + x - CX] = value
 
 
-def make_reference(path, rid="r1"):
-    """Write a complete synthetic reference set into `path` (created). Returns path."""
+def make_reference(path, rid="r1", cast=None):
+    """Write a complete synthetic reference set into `path` (created). Returns path. With `cast` (CAST) it is
+    written as shore_conditions 2, each condition carrying its cast shadow; without, as 1, as before kit 1.3.0."""
     os.makedirs(path, exist_ok=True)
     nx = RX1 - RX0 + 1
     tops, bots = [], []
@@ -211,7 +216,10 @@ def make_reference(path, rid="r1"):
                       "lamps": lamps[name], "lut": [lut(name, c) for c in range(3)],
                       "veil": {"rgb": veil, "alpha": alpha},
                       "shadow": {"rgb": shadows[name][0], "alpha": shadows[name][1]}})
-    conditions = {"shore_conditions": 1, "reference": rid, "cell": 16, "vignette": vig, "conditions": conds}
+        if cast:
+            conds[-1]["cast"] = dict(zip(("dx", "dy", "alpha"), cast[name]))
+    conditions = {"shore_conditions": 2 if cast else 1, "reference": rid, "cell": 16, "vignette": vig,
+                  "conditions": conds}
     for name, obj in (("surfaces.json", surfaces), ("palette.json", palette), ("conditions.json", conditions)):
         with open(os.path.join(path, name), "wb") as f:
             f.write(canonical(obj) + b"\n")
@@ -265,6 +273,22 @@ def reference():
     if "ref" not in _CACHE:
         _CACHE["ref"] = load_reference(reference_dir())
     return _CACHE["ref"]
+
+
+def reference_dir_cast():
+    """The same synthetic r1 written as shore_conditions 2, with CAST: the pictures and surfaces are identical."""
+    if "r1c" not in _CACHE:
+        d = tempfile.mkdtemp(prefix="shorekit-ref-")
+        atexit.register(shutil.rmtree, d, True)
+        _CACHE["r1c"] = make_reference(os.path.join(d, "r1"), cast=CAST)
+    return _CACHE["r1c"]
+
+
+def reference_cast():
+    from shorekit.reference import load_reference
+    if "refc" not in _CACHE:
+        _CACHE["refc"] = load_reference(reference_dir_cast())
+    return _CACHE["refc"]
 
 
 def fixture(name):

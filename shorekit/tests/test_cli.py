@@ -46,7 +46,7 @@ class TestCli(unittest.TestCase):
     def test_status(self):
         code, lines = run(["status", "--shore", self.shore])
         self.assertEqual(code, 0)
-        self.assertTrue(lines[0].startswith("KIT 1.2.0 unpacked (not a zipapp) (no kit.lock found"))
+        self.assertTrue(lines[0].startswith("KIT 1.3.0 unpacked (not a zipapp) (no kit.lock found"))
         self.assertTrue(lines[1].startswith("SHORE reference=r1 digest="))
         self.assertIn("ledger=0 events live=0/48", lines[1])
 
