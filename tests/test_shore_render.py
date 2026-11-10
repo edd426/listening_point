@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Tests for the shore in the renderer (renderers/procedural/shore.py): objects, their shadows, the lamp.
+"""Tests for the shore in the renderer (renderers/procedural/shore.py): objects, their contact and cast shadows,
+the lamp.
 
 usage: ./venv/bin/python tests/test_shore_render.py [test_name ...]      (from the repo root)
 
 Offline and synthetic. Needs a reference set: SHORE_REFERENCE=DIR, else one is built for the run (half a
-minute). The no-regression test renders full frames with the renderer as it was before the shore
-(LP_BASELINE, a git revision, default shore/kit) and as it is now, and compares the files byte for byte;
-it is skipped when that revision does not exist. The whole file takes a few minutes.
+minute). The no-regression test renders full frames with the renderer of another revision (LP_BASELINE, a
+git revision, default main) without a shore, and with this one without a shore, with an empty one and with
+one whose objects have not landed yet, and compares the files byte for byte; it is skipped when that
+revision does not exist. The whole file takes a few minutes.
 """
 import datetime as dt
 import filecmp
@@ -33,7 +35,7 @@ import shore_reference as sr  # noqa: E402
 import shore_support as S  # noqa: E402
 from core import MOORED, Layer  # noqa: E402
 from day import Day  # noqa: E402
-from shorekit.compose import compose  # noqa: E402
+from shorekit.compose import cast_shown, compose  # noqa: E402
 from shorekit.rules import draw_order, paint  # noqa: E402
 
 D = dt.date
@@ -55,7 +57,7 @@ def fixture_cache(name="fixtures", veto=None):
 
 # ------------------------------------------------------------- no regression --
 def baseline_renderer():
-    rev = os.environ.get("LP_BASELINE", "shore/kit")
+    rev = os.environ.get("LP_BASELINE", "main")
     if subprocess.run(["git", "-C", ROOT, "rev-parse", "--verify", "-q", rev + "^{commit}"], capture_output=True).returncode:
         return None, rev
     dst = os.path.join(TMP, "baseline")
@@ -107,8 +109,9 @@ def test_no_shore_and_empty_shore_are_byte_identical_to_the_renderer_before():
 
 
 # ------------------------------------------------------------- kit agreement --
-def kit_footprint(ref, objs):
-    """The kit's footprint of these objects: every pixel an object owns or a shadow is shown on."""
+def kit_footprint(ref, objs, cond=None):
+    """The kit's footprint of these objects: every pixel an object owns or a contact shadow is shown on; and
+    with a condition, the ground its cast shadows darken (kit 1.3.0). Returns (mask, cast mask)."""
     order = draw_order(objs)
     owner, drawn = paint(order, ref.cw * ref.ch)
     mask = np.frombuffer(owner.tobytes(), np.uint16).reshape(ref.ch, ref.cw) > 0
@@ -116,25 +119,44 @@ def kit_footprint(ref, objs):
         for i in ds:
             if owner[i] == 0:
                 mask[i // ref.cw, i % ref.cw] = True
-    return mask
+    cast = np.zeros_like(mask)
+    if cond is not None and cond.cast_alpha:
+        cast.ravel()[cast_shown(ref, objs, cond.cast_dx, cond.cast_dy)] = True
+    return mask, cast
 
 
 def test_frames_agree_with_the_kit_at_the_reference_conditions():
     ref = S.reference()
     cache, shore = fixture_cache()
     objs = list(shore.live)
-    want_mask = kit_footprint(ref, objs)
     report = []
+    shadows = 0
     for cond in ref.conditions:
         name, hhmm, kind = next(c for c in sr.CONDITIONS if c[0] == cond.name)
         m = sr.minute(hhmm)
         day = Day(sr.DATE, weather=kind, reference=True, shore=cache)
         st = day.shore.at(m)
         assert st is not None and set(st["ids"]) == {o.id for o in objs}, cond.name
+        solid_mask, cast_mask = kit_footprint(ref, objs, cond)
+        want_mask = solid_mask | cast_mask
         got_mask = np.zeros_like(want_mask)
         got_mask[st["sy"] - ref.cy, st["sx"] - ref.cx] = True
         got_mask[st["hy"] - ref.cy, st["hx"] - ref.cx] = True
-        assert np.array_equal(got_mask, want_mask), (cond.name, "footprint", int((got_mask ^ want_mask).sum()))
+        assert np.array_equal(got_mask, solid_mask), (cond.name, "footprint", int((got_mask ^ solid_mask).sum()))
+        # the cast shadow: the renderer's light at this minute is the direction the reference set gives the kit,
+        # and the ground it darkens is the ground the kit's preview darkens, pixel for pixel
+        fr = lp.Frame(day, m, sr.SCALE)
+        light = fr.shore_cast() if ref.conditions_version == 2 else None
+        got_cast = np.zeros_like(want_mask)
+        if cond.cast_alpha:
+            assert light is not None and light[:2] == (cond.cast_dx, cond.cast_dy), (cond.name, light)
+            tx, ty, _ = fr.shore_cast_pixels(st)
+            got_cast[ty - ref.cy, tx - ref.cx] = True
+            assert cast_mask.sum() > 500, (cond.name, int(cast_mask.sum()))
+            shadows += 1
+        else:
+            assert light is None and fr.shore_cast_pixels(st) is None, (cond.name, light)
+        assert np.array_equal(got_cast, cast_mask), (cond.name, "cast shadow", int((got_cast ^ cast_mask).sum()))
         img = sr.crop(sr.render(day, m)).astype(int)
         bare = np.frombuffer(ref.crop(cond.name), np.uint8).reshape(ref.ch, ref.cw, 3).astype(int)
         kit = np.frombuffer(bytes(compose(ref, objs, cond)), np.uint8).reshape(ref.ch, ref.cw, 3).astype(int)
@@ -144,8 +166,15 @@ def test_frames_agree_with_the_kit_at_the_reference_conditions():
         mean, p99 = d.mean(), np.percentile(d, 99)
         report.append(f"{cond.name} mean {mean:.2f} p99 {p99:.1f} max {d.max()}")
         assert mean <= MEAN_MAX and p99 <= P99_MAX, report[-1]
+        only = cast_mask & ~solid_mask
+        if only.any():      # the cast shadow alone, held to the same tolerance
+            d = np.abs(img[only] - kit[only]).ravel()
+            report[-1] += f" (cast shadow, {int(only.sum())} px: mean {d.mean():.2f} p99 {np.percentile(d, 99):.1f})"
+            assert d.mean() <= MEAN_MAX and np.percentile(d, 99) <= P99_MAX, report[-1]
+            assert (img[only].sum(-1) < bare[only].sum(-1)).mean() > 0.9, (cond.name, "the cast shadow is not darker than the ground")
         # and the objects really are drawn: inside the footprint the frame is not the bare crop
         assert (np.abs(img[want_mask] - bare[want_mask]).sum(-1) > 0).mean() > 0.9, cond.name
+    assert shadows == (3 if ref.conditions_version == 2 else 0), shadows     # noon, golden and the moonlit night; no fog
     print("      " + "; ".join(report))
 
 
@@ -180,7 +209,8 @@ def test_objects_show_from_landing_until_the_sea_takes_them():
     with open(obj, "rb") as f:
         data = f.read()
     with open(obj, "wb") as f:
-        f.write(data.replace(b"[150,140,116]", b"[150,140,117]"))      # no longer the object the ledger names
+        assert b"[226,186,52]" in data
+        f.write(data.replace(b"[226,186,52]", b"[226,186,53]"))        # no longer the object the ledger names
     assert Day(D(2027, 3, 21), weather="clear", shore=bad).shore is None
 
 
@@ -273,8 +303,9 @@ def test_nightly_renders_again_only_what_the_shore_and_the_lamp_changed():
     def kept():
         return [m for m, n in enumerate(names) if os.path.exists(os.path.join(folder, n))]
     lamp = os.path.join(TMP, "nightly-lamp.json")
-    saved = nightly.SHORE, nightly.LAMP, nightly.LOG
+    saved = nightly.SHORE, nightly.LAMP, nightly.LOG, shore_sync.REFERENCE
     nightly.SHORE, nightly.LAMP, nightly.LOG = cache, lamp, os.path.join(TMP, "nightly.log")
+    shore_sync.REFERENCE = S.reference().id     # the set this run tests against, whatever id it was built with
     try:
         # frames made when only the first two objects had landed: the two of that morning show from 05:30
         frames()
@@ -303,7 +334,7 @@ def test_nightly_renders_again_only_what_the_shore_and_the_lamp_changed():
         nightly.SHORE = cache
         assert nightly.shore_args() == ["--shore", cache, "--lamp", lamp]
     finally:
-        nightly.SHORE, nightly.LAMP, nightly.LOG = saved
+        nightly.SHORE, nightly.LAMP, nightly.LOG, shore_sync.REFERENCE = saved
 
 
 def main():
