@@ -4,7 +4,7 @@ Standard library only, integer arithmetic only, so every platform and every Pyth
 reaches the same verdict, the same footprint pixels and the same preview pixels.
 """
 
-KIT_VERSION = "1.2.0"
+KIT_VERSION = "1.3.0"
 
 # The limits the rules are written in (BUILD section 2 and the 2026-10-31 decisions).
 MAX_LIVE = 48            # objects drawn at once; when this many are live and one more comes, a storm
@@ -20,3 +20,5 @@ GLOW_MAX_PX = 64         # look B: the most frame pixels one object may light at
 FAINT_D = 48             # look C: an object's mean colour stands at least this far (redmean) from the ground
 FAINT_RING = 6           #   around it, out to this many px past its box, at each of these conditions
 FAINT_CONDITIONS = ("noon", "golden")
+CAST_MAX_DX = 768        # 1.3.0: a cast shadow runs at most 3 px sideways per px of height (x256), the scene's own cap,
+CAST_MAX_DY = 256        #   and at most 1 px up or down the frame per px of height, so its rows leave no gaps

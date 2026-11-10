@@ -4,13 +4,17 @@ looks right on the Mac" rests on: the verdicts and their messages, every footpri
 draw order and who covers whom, the label glyphs, and the preview's decoded pixels.
 
 To re-pin after a deliberate change: python3 shorekit/tests/test_golden.py --print
+
+Kit 1.3.0 re-pinned `ledger` and `sea ledger` only: an add event records the kit version that accepted it.
+Every other value from 1.2.0 stands, the sheet's pixels included, because the synthetic set is still written
+without cast shadows; the `cast ...` values pin the same shore against the set written with them.
 """
 import hashlib
 import os
 import sys
 
 import support as S
-from shorekit.compose import pixels_sha256, plan, plan_sha256, sheet, zoom
+from shorekit.compose import cast_shown, pixels_sha256, plan, plan_sha256, sheet, zoom
 from shorekit.font import plaque_cells
 from shorekit.ledger import Shore, ledger_sha256
 from shorekit.manifest import manifest_from_obj
@@ -77,6 +81,30 @@ def scenario():
         lines += [m.id + " " + e.line() for e in errs] or [m.id + " PASS"]
     got["verdicts"] = lines
     got.update(sea_scenario(ref))
+    got.update(cast_scenario())
+    return got
+
+
+def cast_scenario():
+    """Kit 1.3.0: the same five objects against the same set written with cast shadows (shore_conditions 2).
+    The ground each condition's shadows darken and the preview's pixels are pinned; the plan must not move."""
+    ref = S.reference_cast()
+    got = {}
+    with open(os.path.join(S.reference_dir_cast(), "conditions.json"), "rb") as f:
+        got["cast file conditions.json"] = hashlib.sha256(f.read()).hexdigest()
+    shore = Shore(ref)
+    for oid, world in LANDED:
+        at = DAYS[oid[:10]]
+        shore.accept(manifest_from_obj(S.fixture_obj(oid)), at, at, world, "0" * 40)
+    got["cast plan"] = plan_sha256(ref, shore.live)
+    for c in ref.conditions:
+        px = cast_shown(ref, shore.live, c.cast_dx, c.cast_dy) if c.cast_alpha else []
+        got["cast " + c.name] = "dx %d dy %d alpha %d: %d px %s" % (
+            c.cast_dx, c.cast_dy, c.cast_alpha, len(px), hashlib.sha256(" ".join(map(str, px)).encode("ascii")).hexdigest())
+    w, h, px, panels = sheet(ref, shore.live)
+    got["cast sheet"] = "%dx%d %s" % (w, h, pixels_sha256(px))
+    z = zoom(ref, panels[0], shore.byid["2026-11-03-log"], shore.live)
+    got["cast zoom"] = "%dx%d %s" % (z[0], z[1], pixels_sha256(z[2]))
     return got
 
 
@@ -100,7 +128,15 @@ def sea_scenario(ref):
             "sea live": "%d live, plan %s" % (len(shore.live), plan_sha256(ref, shore.live))}
 
 
-GOLDEN = {'draw order': '2026-11-04-bottle 2026-11-02-flag 2026-11-03-log 2026-11-02-cairn 2026-11-03-shell',
+GOLDEN = {'cast file conditions.json': 'f736c5ba3f1e62e31fa88e3ad77f8f5dcd9dc0078cea62485fa41f9c345e3e73',
+ 'cast fog': 'dx 0 dy 0 alpha 0: 0 px e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+ 'cast golden': 'dx -742 dy 60 alpha 60: 449 px 0525e6ba9f0f08bc18ae2e5d69eb9fe59a0494f2fdcbfca3ce50e19a3b20008e',
+ 'cast night': 'dx 310 dy 150 alpha 30: 669 px 51977f1f848664fcda6b19d348a1b37f7c700d6ec43f36320a3ae99fa33936fa',
+ 'cast noon': 'dx 24 dy 84 alpha 87: 389 px 104f962b03fd77b74e451129ac77427b0fd41b875c289fd40fc7b02730579089',
+ 'cast plan': 'd9629141ac30add5a7917a169379d35aedce022224f1ac00962911b7f6fc2298',
+ 'cast sheet': '2560x1280 cab8dd73edfe84f857d0ca409956acab8945a8d2e34c542acb180a449303caef',
+ 'cast zoom': '500x244 3924f750c96a55af88ad9a72035c4fb4313dde20963bfe9441345e52c9b3a57c',
+ 'draw order': '2026-11-04-bottle 2026-11-02-flag 2026-11-03-log 2026-11-02-cairn 2026-11-03-shell',
  'file conditions.json': 'ba8678e0d3b38960dde0bd7c77289f1088ad016dd478a12312bea28009700f55',
  'file palette.json': '38124db51bf56a21da961bbefc574f937d5d0ae6dae091c851aa28eb8768103e',
  'file surfaces.json': 'e9f354f1c0ace8c5f3be4455cffd505992e2644cb9d1693327c4620e728029d4',
@@ -110,7 +146,7 @@ GOLDEN = {'draw order': '2026-11-04-bottle 2026-11-02-flag 2026-11-03-log 2026-1
  'footprint 2026-11-03-shell': '20 solid (0 label, 20 shown), 0 shadow (0 shown)',
  'footprint 2026-11-04-bottle': '120 solid (0 label, 120 shown), 18 shadow (18 shown)',
  'glyphs': 'c81c1c68c120241edb4e9511748740a703782eff6598f73ea1f05f7e44667bf7',
- 'ledger': '3b18ac1238775c73962860a65229dd8b9695b05c6a099e4b638bb1131c3c1289',
+ 'ledger': '071a1fb0b8e32e1411ebfadd285b79dde62743a1e687a353f48b5d83af665dc7',
  'pixels fog.png': 'f0d94ce77d3409566207ea87323f5d3f90b3f53d6cb4b4894b88c05b31da80c2',
  'pixels golden.png': 'cd9a805f9b7c6cd58c523d8c35baaf383ec49ebbc95fa35d5979d2ab7a8113f1',
  'pixels keepout.png': '98cc0d4edab0639d8baddce29c9996fc1ef49c1e88a897ba52641fa1cefe3d3b',
@@ -119,7 +155,7 @@ GOLDEN = {'draw order': '2026-11-04-bottle 2026-11-02-flag 2026-11-03-log 2026-1
  'plan': 'd9629141ac30add5a7917a169379d35aedce022224f1ac00962911b7f6fc2298',
  'sea events': ['{"at":"2026-11-04T04:30:00Z","event":"sea","seq":49,"takes":["2026-11-02-s00","2026-11-02-s01","2026-11-02-s02","2026-11-02-s03","2026-11-02-s04","2026-11-02-s05","2026-11-02-s06","2026-11-03-top"]}',
                 '{"at":"2026-11-04T09:00:00Z","event":"sea","seq":51,"takes":["2026-11-02-s20"]}'],
- 'sea ledger': 'e8b284c0e0b140517b65868bd9acbe06605b054b9e6dd777cb32a59759f3f1a6',
+ 'sea ledger': '783fbc5fb2253e0573fd47c39613bb80648620ca03dc0a227fd4d45403c3d3bb',
  'sea live': '40 live, plan 6b93fc6f1dd5eccce7de5ad39cc9ef2d02587ecd5458b953cf6f62edafd9dafe',
  'sea reasons': ['{"for":"2026-11-04-new","seq":49,"why":"storm"}', '{"id":"2026-11-02-s20","seq":51,"why":"veto"}'],
  'sea storm takes': '2026-11-02-s00 2026-11-02-s01 2026-11-02-s02 2026-11-02-s03 2026-11-02-s04 2026-11-02-s05 '
@@ -150,6 +186,8 @@ class TestGolden(unittest.TestCase):
         self.assertEqual(sorted(got), sorted(GOLDEN))
         for k in sorted(GOLDEN):
             self.assertEqual(got[k], GOLDEN[k], k)
+        self.assertEqual(got["cast plan"], got["plan"])        # cast shadows are drawn, never judged
+        self.assertNotEqual(got["cast sheet"], got["sheet"])
 
 
 if __name__ == "__main__":

@@ -1,6 +1,12 @@
-# shorekit schema (kit 1.2.0)
+# shorekit schema (kit 1.3.0)
 
-**Kit 1.2.0 draws the look Evan chose on 2026-11-01 (variant C).** Objects are `scale` 1-4, with a
+**Kit 1.3.0 adds the cast shadow.** Everything standing on the shingle or the pier throws a shadow that
+falls away from the sun, or the moon: the preview shows it in each of the four lights, and on the
+wallpaper it moves through the day, so an upright thing is a sundial. The rule is section 4.6, the
+numbers it uses are each condition's `cast` (5.3), and it is **drawn, never judged**: no rule, footprint,
+plan or ledger entry knows about it, and nothing that passed under 1.2.0 can fail because of it.
+
+**Kit 1.2.0 drew the look Evan chose on 2026-11-01 (variant C).** Objects are `scale` 1-4, with a
 perspective ceiling `max_h` and floor `min_h` on their size (rule 1). A label is at most 8
 characters, cut 1 px per font pixel into a small pale driftwood board (4.3). An optional `glow` key
 lights at night, at most 64 px (rule 2, section 7). Every pixel is lit by the face it shows, read off
@@ -83,7 +89,7 @@ with `<root>/kit.lock` present, from `<root>`; else from the working directory i
 ## 3. `kit.lock`
 
 ```json
-{"shore_kit_lock": 1, "kit": "1.2.0", "commit": "<listening_point commit>",
+{"shore_kit_lock": 1, "kit": "1.3.0", "commit": "<listening_point commit>",
  "pyz_sha256": "<sha256 of kit/shorekit.pyz>", "reference": "r1"}
 ```
 
@@ -98,7 +104,7 @@ Exactly these keys. `shorekit status` prints `KIT OK` when the running archive's
 ### 4.1 Manifest
 
 ```json
-{"shore": 1, "id": "2026-11-02-cairn", "maker": "maker-a", "kit": "1.2.0", "reference": "r1",
+{"shore": 1, "id": "2026-11-02-cairn", "maker": "maker-a", "kit": "1.3.0", "reference": "r1",
  "palette": {"a": [122, 118, 110], "b": [134, 130, 122]},
  "rows": ["..aa..", ".abba.", "aabbaa"],
  "scale": 3, "anchor": [3, 2],
@@ -178,7 +184,9 @@ it is inside the region, not on keep-out, not one of the object's own solid pixe
 for `shingle`, column x has a dry band and `y >= dry.top[x]`; for `pier`, it is on the deck.
 Objects built onto another object cast no shadow (it would fall on an object).
 
-The **footprint** is the solid pixels plus the shadow pixels it actually casts (below).
+The **footprint** is the solid pixels plus the shadow pixels it actually casts (below). In this file
+"shadow" on its own always means this contact shadow. The **cast shadow** of kit 1.3.0 (4.6) is a
+separate thing: it is in no footprint, and nothing in this section or in 4.5 takes any account of it.
 
 **Ground y**: `foot_y` for `shingle` and `pier`; for an object built onto another, the ground y of
 the object it rests on (transitively). **Draw order**: ascending `(ground y, seq)`.
@@ -236,6 +244,68 @@ A candidate is judged in this order; a stage with errors stops the judging.
 Every message names the spot: a cell `(column,row)` and a frame pixel `(x,y)` or column `x=`, the
 first in raster order. Percentages shown are floored, except "takes", which is rounded up.
 
+### 4.6 The cast shadow (kit 1.3.0): drawn, never judged
+
+A light is two integers, **`dx`** and **`dy`**: the shadow it lays on the ground, in 256ths of a pixel
+per pixel of height, to the right (`dx`) and down the frame (`dy`). Either may be negative (to the
+left; up the frame, which is behind the thing). `-768 <= dx <= 768` and `-256 <= dy <= 256`. The
+viewer looks south, so a sun in the east stands on the left and gives `dx > 0`: the shadow falls to the
+right. A sun in the south is ahead of the viewer and gives `dy > 0`: the shadow comes toward the
+viewer. Where the numbers come from is 5.3.
+
+Write `off(k, d) = (d*k + 128) >> 8`: `d*k/256` to the nearest whole pixel, halves rounded up (`>>`
+floors, also for negative numbers).
+
+An object placed `on` `shingle` or `pier` casts a shadow; an object built onto another casts none
+(as with the contact shadow). For **every solid pixel** `(X, Y)` of the object (its opaque grid pixels
+and its label board's), with `h = foot_y - Y` its height above the foot row (0 on the foot row):
+
+```
+row      R = foot_y + 1 + off(h, dy)
+columns  X + min(off(h, dx), off(h+1, dx))  ..  X + max(off(h, dx), off(h+1, dx))
+```
+
+That is the ground the pixel's own height sweeps over, from where its bottom edge's shadow lands to
+where its top edge's does. So the shadow of each row of the bitmap runs on into the next row's (they
+share the column `X + off(h+1, dx)`, on the same row or the one beside it, because `|dy| <= 256`):
+there are **no holes** however thin the thing or long the shadow. The shadow of an upright `H` pixels
+tall reaches `off(H, dx)` columns past its side and `off(H-1, dy)` rows past the row under its foot
+(its top pixel is `h = H-1`).
+
+A candidate pixel `(x, R)` is **kept** if, exactly as for the contact shadow (4.4), it is inside the
+region, not on keep-out, not one of the object's own solid pixels, and on ground: for `shingle`,
+column `x` has a dry band and `R >= dry.top[x]` (nothing seaward of the dry band; the grass below it
+is ground); for `pier`, it is on the deck.
+
+The **cast shadow on show** for a set of objects is the union of their kept pixels, less every pixel
+that is a solid pixel of any object in the set: a cast shadow never falls on an object, its own or
+another's, and where two shadows meet the ground is darkened once. How dark is section 7.
+
+Worked example. An upright 2 px wide and 8 px tall, its bottom-left pixel at `(x, y)` (so `foot_y = y`),
+under `dx = 384`, `dy = 64` (a pixel and a half to the right and a quarter of a pixel down per pixel
+of height):
+
+```
+h            0  1  2  3  4  5  6  7  8
+off(h, 384)  0  2  3  5  6  8  9 11 12
+off(h, 64)   0  0  1  1  1  1  2  2
+
+row y+1:  x    .. x+4      (h = 0, 1)
+row y+2:  x+3  .. x+10     (h = 2, 3, 4, 5)
+row y+3:  x+9  .. x+13     (h = 6, 7)          18 pixels on open ground
+```
+
+What the cast shadow is **not**: it is not in `Placed.shadow`, the footprint, the bounding box, the
+painting of 4.4, or any rule of 4.5 (`E_COVER` and `E_HIDDEN` count contact shadows only; `E_FAINT`
+leaves out the contact shadow only); it is not in `plan()`, `PLAN sha256` or `result.json`; and the
+`PASS` line's "shadow px" is the contact shadow. A verdict, a ledger and a plan are the same with
+and without it. It changes `sheet.png` and `zoom.png`, and nothing else.
+
+On the wallpaper the Mac asks this same rule (`shorekit.compose.cast_shown`) for every frame, with
+`dx` and `dy` from that minute's sun or moon (5.3 gives the formula), so the shadow turns through the
+day and the Mac's shadow pixels are the kit's. The four `cast` entries of a reference set are four
+moments of that.
+
 ---
 
 ## 5. Reference sets: `reference/<rid>/`
@@ -287,15 +357,21 @@ required. The kit refuses a set that breaks any rule below (`E_REFDATA`).
 ### 5.3 `conditions.json`
 
 ```json
-{"shore_conditions": 1, "reference": "r1", "cell": 16,
+{"shore_conditions": 2, "reference": "r1", "cell": 16,
  "vignette": [[ ...80 ints ], ... 40 rows],
  "conditions": [
    {"name": "noon", "light": [300, 296, 288], "top": [...], "east": [...], "west": [...], "lamps": 0,
     "lut": [[ ...512 ints ], [ ...512 ], [ ...512 ]],
     "veil": {"rgb": [0, 0, 0], "alpha": [ ...640 ints ]},
-    "shadow": {"rgb": [22, 24, 30], "alpha": 110}},
+    "shadow": {"rgb": [22, 24, 30], "alpha": 110},
+    "cast": {"dx": 2, "dy": 83, "alpha": 87}},
    ... exactly 4 conditions ]}
 ```
+
+- `shore_conditions` is `1` or `2`. A set written as **2** (kit 1.3.0) carries `cast` on every
+  condition. A set written as **1** carries it on none: the kit still loads it, draws no cast shadow
+  at all, and its pictures are byte for byte what kit 1.2.0 drew. Any other value, a `cast` in a set
+  written as 1, or a condition without `cast` in a set written as 2, is `E_REFDATA`.
 
 - `cell` is 16. `vignette[j][i]` is the vignette x256 (0-256) for crop pixels
   `16i .. 16i+15` by `16j .. 16j+15`.
@@ -310,6 +386,27 @@ required. The kit refuses a set that breaks any rule below (`E_REFDATA`).
 - `veil`: the fog veil: colour (linear 0-511, the tone curve's domain: daylight fog is brighter
   than 255) and alpha x256 (0-256) per crop row (640 values). All-zero alpha means no veil.
 - `shadow`: the contact shadow's display-space colour and alpha x256.
+- `cast` (sets written as 2): exactly `{"dx", "dy", "alpha"}`. `dx`, `dy`: the direction of this
+  condition's cast shadows as section 4.6 takes it, `-768..768` and `-256..256`. `alpha`: how dark,
+  x256 (0-256); the colour is black (section 7). `alpha` 0 means this condition casts no shadow (fog,
+  an overcast or moonless minute); the builder then writes `dx` and `dy` as 0.
+
+  The builder (`tools/shore_reference.py`) takes them from the condition's own frame, as the renderer
+  does for every frame it draws (`renderers/procedural/shore.py`, `cast_vector` and `shore_cast`).
+  With `alt` and `az` the altitude and azimuth in degrees (azimuth from north through east) of the
+  sun if it is more than 1 degree up, else of the moon if it is more than 4 degrees up and the sun
+  more than 6 degrees down:
+
+  ```
+  cot = min(1 / tan(alt), 3)                  a shadow is at most three times as long as the thing is tall
+  dx  = floor(256 *  sin(az) * cot       + 0.5)
+  dy  = floor(256 * -cos(az) * cot * 0.30 + 0.5)      0.30: ground running toward the viewer is foreshortened
+  ```
+
+  the scene's own projection for the shadows of its tower, tree and bench. `alpha` is the single
+  alpha over the crop that best fits the share of the ground's light the renderer's shadow takes at
+  that minute: 0.34 under a full sun (less as cloud, fog or the horizon dims it, and never more than
+  the sun's own share of the light on the beach), up to 0.30 under a full moon, nothing in weak light.
 
 ### 5.4 Images
 
@@ -432,7 +529,7 @@ after the sea event's.
 - `OUT/result.json` (canonical, then LF):
 
 ```json
-{"shore_replay": 1, "kit": "1.2.0", "reference": "r1", "reference_digest": "<hex>",
+{"shore_replay": 1, "kit": "1.3.0", "reference": "r1", "reference_digest": "<hex>",
  "ledger_in": {"events": 34, "sha256": "<hex>"}, "ledger_out": {"events": 36, "sha256": "<hex>"},
  "append": [<events appended, as in the ledger>],
  "sea": [<the reason for each sea event appended, section 6.6>],
@@ -491,14 +588,22 @@ out_c = lut_c[min(w, 511)]
 
 and for a shadow pixel over crop colour `G`: `out_c = (G_c * (256 - s) + shadow_c * s) >> 8`.
 
+**Cast shadows (kit 1.3.0)** go on first, under everything. With `a` the condition's `cast.alpha`:
+if `a > 0`, every pixel of the cast shadow on show (4.6, for the condition's `cast.dx` and `cast.dy`)
+becomes `G_c = (G_c * (256 - a)) >> 8`, once. Then the contact shadows are laid over that with the
+formula above (a pixel in both gets both, in this order), then the objects' solid pixels as before.
+No object pixel is touched. With `a = 0`, or against a set written as `shore_conditions` 1, this step
+does nothing.
+
 - `sheet.png`: the four conditions as a 2 x 2 grid (`[0 1; 2 3]`), 2560 x 1280.
 - `zoom.png`: condition 0 around the object being previewed (its footprint's bounding box plus 24
   px, at most 400 x 250), x4; keep-out tinted red over everything, and on open ground the dry
-  band's top and bottom rows in green and the deck's edge in cyan.
+  band's top and bottom rows in green and the deck's edge in cyan. The window follows the footprint,
+  not the cast shadow, so a long shadow may run out of it; the sheet shows all of it.
 
 The promise is the **decoded pixels** (`pixels-sha256=` in the output): PNG file bytes may differ
 with the zlib version. `PLAN sha256` digests every footprint pixel, the draw order and who covers
-whom.
+whom; cast shadows are not in it, so it is the same against a set with them and without.
 
 ## 8. For the renderer (Python API)
 
@@ -518,6 +623,20 @@ Drawing each object's solid pixels in this order, lit by the frame, reproduces t
 exactly. The renderer also gives each lit area a halo, a pool of light on the ground and, on the
 pier, a streak on the water; the kit's preview draws only the pixels. The kit is importable straight from the zipapp (`sys.path.insert(0, "shorekit.pyz")`).
 
+The cast shadow, for any light (4.6):
+
+```python
+from shorekit.compose import cast_shown
+from shorekit.geometry import cast_pixels
+cast_shown(ref, shore.live, dx, dy)      # sorted crop indices: the ground to darken, never an object's pixel
+cast_pixels(placed, ref, dx, dy)         # one object's own kept pixels (before the other objects are left out)
+```
+
+A crop index `i` is frame pixel `(i % 1280 + crop.x, i // 1280 + crop.y)`. The renderer calls
+`cast_shown` once a frame with that minute's `dx`, `dy` (5.3) and darkens those pixels before the
+contact shadows; against a reference set written as `shore_conditions` 1 it draws none, as the preview
+does.
+
 ## 9. Exit codes
 
 | Code | Meaning |
@@ -528,6 +647,19 @@ pier, a streak on the water; the kit's preview draws only the pixels. The kit is
 | 3 | the ledger is inconsistent (`E_LEDGER`), or does not square with `--reasons` |
 
 ## 10. Changes
+
+- **1.3.0. The cast shadow.** Objects standing on the shingle or the pier throw a shadow that follows
+  the sun and the moon (4.6): drawn by the preview and the wallpaper, judged by nothing.
+  - `conditions.json` may be written as `shore_conditions` 2, with a `cast` (`dx`, `dy`, `alpha`) on
+    every condition (5.3). Sets written as 1 still load and are drawn exactly as before.
+  - The compositor darkens the cast shadow's ground first (7). `sheet.png` and `zoom.png` change
+    against a set written as 2; against a set written as 1 their pixels are the same as 1.2.0's.
+  - New for the renderer: `compose.cast_shown`, `geometry.cast_pixels` (8).
+  - Not changed: manifests, every rule and message, footprints, `plan()`, `PLAN sha256`, the ledger and
+    its replay. An object made for 1.2.0 passes or fails exactly as it did (`E_KIT` compares the major
+    version), and a ledger accepted under 1.2.0 replays exactly as it did. A new add event records
+    `"kit": "1.3.0"`. Moving a shore to a reference set written as 2 gives that set a new id, and a
+    manifest names the set it was made against (`E_REFERENCE`), as with any move to a new set.
 
 - **1.2.0 (look C, chosen 2026-11-01).** Bigger objects, the way they look and a stand-out rule.
   - Size: `scale` goes up to 4. The builder's `max_h` is 96 x persp, and there is a new floor `min_h`

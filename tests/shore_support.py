@@ -42,8 +42,9 @@ def reference():
     return _ref["ref"]
 
 
-def manifest(oid, maker, rows, palette, on, x, y, anchor=None, scale=1, label=None, ref="r1"):
-    obj = {"shore": 1, "id": oid, "maker": maker, "kit": "1.0.0", "reference": ref,
+def manifest(oid, maker, rows, palette, on, x, y, anchor=None, scale=1, label=None, ref=None):
+    """A manifest made against the reference set in use (SHORE_REFERENCE may be a set of any id)."""
+    obj = {"shore": 1, "id": oid, "maker": maker, "kit": "1.0.0", "reference": ref or reference().id,
            "palette": {k: list(v) for k, v in palette.items()}, "rows": list(rows), "scale": scale,
            "anchor": list(anchor if anchor is not None else (len(rows[0]) // 2, len(rows) - 1)),
            "place": {"on": on, "x": x, "y": y}}
@@ -102,14 +103,23 @@ def write_cache(path, ref_dir, shore, extra_events=()):
     return path
 
 
-STONES = {"a": (134, 130, 122), "b": (122, 118, 110), "c": (104, 100, 92), "d": (150, 146, 136)}
-CAIRN = ["..dd..", ".daab.", ".aabb.", "aabbcc", "abbacc", "bbaacc", "cbbccb"]
+def twice(rows):
+    """A bitmap with every cell doubled each way."""
+    return [line for row in rows for line in ("".join(c * 2 for c in row),) * 2]
+
+
+# Look C (kit 1.2.0): a thing must be big enough to notice (its sides average min_h, about 50 px on the near
+# shingle) and stand out from the ground (rule 7), so the cairn is whitewashed and drawn twice the size, the
+# post is taller and painted red, and the log is longer and painted yellow.
+STONES = {"a": (232, 230, 222), "b": (214, 208, 196), "c": (186, 176, 156), "d": (240, 236, 222)}
+CAIRN = twice(["..dd..", ".daab.", ".aabb.", "aabbcc", "abbacc", "bbaacc", "cbbccb"])
+LOG = {"w": (226, 186, 52), "v": (196, 132, 46)}
 
 
 def fixtures(shore, ref):
     """Four synthetic objects accepted one after another, as the carrier would: a labelled cairn on the
-    shingle, a post on the pier, a flag built onto the cairn and a driftwood log further left (look B: at
-    scale 4, big enough to clear the floor on size; the flag, built onto the cairn, may stay small).
+    shingle, a post on the pier, a flag built onto the cairn and a painted log further left (at scale 4, big
+    enough to clear the floor on size; the flag, built onto the cairn, may stay small).
     Returns their manifests in seq order."""
     out = []
 
@@ -119,9 +129,9 @@ def fixtures(shore, ref):
     m, _ = place_first(shore, lambda x, y: manifest("2027-03-18-cairn", "maker-a", CAIRN, STONES, "shingle", x, y,
                                                      scale=4, label=("CAIRN", "right")), dry_spots(ref, 2520, 2800))
     accept(m, "2027-03-18T04:30:00Z")
-    post = ["oo", "tt", "tt", "tt", "tt", "tt", "tt", "tt", "tt", "tt"]
-    m, _ = place_first(shore, lambda x, y: manifest("2027-03-18-post", "maker-b", post, {"o": (118, 112, 102), "t": (96, 80, 64)},
-                                                     "pier", x, y, anchor=(0, 9), scale=4), deck_spots(ref, 2200, 2400))
+    post = ["ooo"] * 2 + ["ttt"] * 18
+    m, _ = place_first(shore, lambda x, y: manifest("2027-03-18-post", "maker-b", post, {"o": (232, 230, 222), "t": (196, 52, 40)},
+                                                     "pier", x, y, anchor=(1, 19), scale=4), deck_spots(ref, 2200, 2400))
     accept(m, "2027-03-18T04:31:00Z")
     cairn = shore.byid["2027-03-18-cairn"]
     top = cairn.top
@@ -131,8 +141,9 @@ def fixtures(shore, ref):
     m, _ = place_first(shore, lambda x, y: manifest("2027-03-19-flag", "maker-a", flag, pal, "2027-03-18-cairn", x, y,
                                                      anchor=(0, 8)), [(x, top - 1) for x in cols])
     accept(m, "2027-03-19T04:30:00Z")
-    log = ["..wwwwwwww..", ".wwvvwwwwvw.", "wvvwwwwvvwww", ".wwwwvwwww.."]
-    m, _ = place_first(shore, lambda x, y: manifest("2027-03-19-log", "maker-b", log, {"w": (150, 140, 116), "v": (118, 112, 102)},
-                                                     "shingle", x, y, scale=4, anchor=(6, 3)), dry_spots(ref, 1760, 1990))
+    log = ["..wwwwwwwwwwwwwwww..", ".wwvvwwwwwwwwwwvvww.", "wvvwwwwvvwwwwwwwwwvw", "wwwwvvwwwwwwvvwwwwww", "wwvwwwwwwvwwwwwwvvww",
+           ".wwwwvvwwwwwwvwwwww.", "..wwwwwwwwwwwwwwww.."]
+    m, _ = place_first(shore, lambda x, y: manifest("2027-03-19-log", "maker-b", log, LOG,
+                                                     "shingle", x, y, scale=4, anchor=(10, 6)), dry_spots(ref, 2240, 2460))
     accept(m, "2027-03-19T04:31:00Z")
     return out

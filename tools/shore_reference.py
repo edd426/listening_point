@@ -15,7 +15,7 @@ events, no grain, the tide at high water, the same weather all day) and writes i
   palette.json     the renderer's own albedos, the distance D a colour may stray from them, the light
                    colours a glow key may take, the label board's wood
   conditions.json  per minute: the light on each face of an object, how far the lamps are lit, the
-                   tone curve, the vignette, the fog
+                   tone curve, the vignette, the fog, and which way a cast shadow falls and how dark it is
   context.jpg      the noon frame, small, for people (the kit ignores it)
 
 Two runs write the same bytes. Reference sets are shore data: write them outside this repository
@@ -146,9 +146,11 @@ def veil(fr):
     return a[CROP["y"]:CROP["y"] + CROP["h"]], F
 
 
-def shadow_alpha(img, lut, vig, alpha, F, where):
+def shadow_alpha(img, lut, vig, alpha, F, where, take=SHADOW):
     """The kit's contact shadow is one alpha over the crop's own colour; the renderer's takes SHADOW of
-    the light from the ground under the fog. The alpha that fits best (least squares) where shadows fall."""
+    the light from the ground under the fog. The alpha that fits best (least squares) where shadows fall.
+    The cast shadow's alpha is fitted the same way, with `take` the share of the light the renderer's cast
+    shadow takes at that minute."""
     ys, xs = np.nonzero(where)
     num = den = 0.0
     for ch in range(3):
@@ -160,7 +162,7 @@ def shadow_alpha(img, lut, vig, alpha, F, where):
         v = vig[ys, xs].astype(np.float64)
         Lg = w / v
         ff = F[ch] * alpha[ys]
-        dark = ((Lg - ff) * (1 - SHADOW) + ff) * v
+        dark = ((Lg - ff) * (1 - take) + ff) * v
         Ds = t[np.clip(np.floor(dark).astype(int), 0, 511)]
         num += float((Dv * Ds).sum())
         den += float((Dv * Dv).sum())
@@ -353,7 +355,8 @@ def build(out, rid="r1", log=print):
         lights = [[rint(256 * v) for v in fr.light(normalize(n))] for n in FACES]
         alpha, F = veil(fr)
         lut = tone_lut(fr.night)
-        conds.append(dict(name=name, m=m, fr=fr, lights=lights, lamps=rint(256 * fr.lights_on), lut=lut, alpha=alpha, F=F))
+        conds.append(dict(name=name, m=m, fr=fr, lights=lights, lamps=rint(256 * fr.lights_on), lut=lut, alpha=alpha, F=F,
+                          cast=fr.shore_cast()))
         log("%s %s: sun %.1f deg, light x256 front/top/east/west %s, lamps %d"
             % (name, hhmm, fr.sun_alt, lights, conds[-1]["lamps"]))
     gday, gm = day_for("clear"), minute(CONDITIONS[0][1])
@@ -372,13 +375,22 @@ def build(out, rid="r1", log=print):
     for k in conds:
         has_veil = bool(k["alpha"].max() > 0)
         s_alpha = shadow_alpha(crops[k["name"]], k["lut"], vig, k["alpha"], k["F"], fall)
+        # the cast shadow at this minute, as the renderer draws it (shore.ShoreMixin.shore_cast): its direction in
+        # the kit's whole numbers, and the one alpha over the crop that fits the light it takes; none is 0, 0, 0
+        cdx, cdy, ck = k["cast"] or (0, 0, 0.0)
+        c_alpha = shadow_alpha(crops[k["name"]], k["lut"], vig, k["alpha"], k["F"], fall, ck) if ck > 0 else 0
+        if c_alpha == 0:
+            cdx = cdy = 0
         cond_json.append({
             "name": k["name"], "light": k["lights"][0], "top": k["lights"][1], "east": k["lights"][2],
             "west": k["lights"][3], "lamps": k["lamps"], "lut": [list(map(int, t)) for t in k["lut"]],
             "veil": {"rgb": [rint(v) for v in k["F"]] if has_veil else [0, 0, 0],
                      "alpha": [rint(256 * a) for a in k["alpha"]] if has_veil else [0] * CROP["h"]},
-            "shadow": {"rgb": [0, 0, 0], "alpha": s_alpha}})
+            "shadow": {"rgb": [0, 0, 0], "alpha": s_alpha},
+            "cast": {"dx": cdx, "dy": cdy, "alpha": c_alpha}})
         log("%s: shadow alpha %d/256%s" % (k["name"], s_alpha, ", fog veil %s" % cond_json[-1]["veil"]["rgb"] if has_veil else ""))
+        log("%s: cast shadow dx %d dy %d (x256 px per px of height), alpha %d/256 (the renderer takes %.3f of the light)"
+            % (k["name"], cdx, cdy, c_alpha, ck))
     surfaces = {"shore_surfaces": 1, "reference": rid, "frame": {"w": fr.W, "h": fr.H}, "crop": CROP,
                 "region": REGION, "dry": {"x0": REGION["x0"], "top": top, "bottom": bot}, "deck": deck,
                 "max_h": {"y0": REGION["y0"], "h": heights(MAX_H)}, "min_h": {"y0": REGION["y0"], "h": heights(MIN_H)}}
@@ -386,7 +398,7 @@ def build(out, rid="r1", log=print):
                "entries": [{"name": n, "rgb": list(c)} for n, c in PALETTE],
                "glow": [{"name": n, "rgb": list(c)} for n, c in GLOW],
                "plaque": {k: list(v) for k, v in PLAQUE.items()}}
-    conditions = {"shore_conditions": 1, "reference": rid, "cell": CELL, "vignette": vig_cells, "conditions": cond_json}
+    conditions = {"shore_conditions": 2, "reference": rid, "cell": CELL, "vignette": vig_cells, "conditions": cond_json}
     blobs = {"surfaces.json": canonical(surfaces), "palette.json": canonical(palette),
              "conditions.json": canonical(conditions),
              "keepout.png": write_png(CROP["w"], CROP["h"], (keep.astype(np.uint8) * 255).tobytes(), 0)}

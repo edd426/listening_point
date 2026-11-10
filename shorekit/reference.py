@@ -7,6 +7,7 @@ import hashlib
 import os
 import re
 
+from . import CAST_MAX_DX, CAST_MAX_DY
 from .errors import ShoreError
 from .manifest import REF_RE
 from .png import REF_H, REF_W, read_reference_png
@@ -71,7 +72,14 @@ def point_in_polygon(x, y, poly):
 
 
 class Condition:
-    __slots__ = ("name", "light", "lights", "lamps", "lut", "veil_rgb", "veil_alpha", "shadow_rgb", "shadow_alpha")
+    __slots__ = ("name", "light", "lights", "lamps", "lut", "veil_rgb", "veil_alpha", "shadow_rgb", "shadow_alpha",
+                 "cast_dx", "cast_dy", "cast_alpha")
+
+
+def _signed(v, lim, what):
+    if not is_int(v) or not -lim <= v <= lim:
+        _fail(what, "must be an integer from -%d to %d" % (lim, lim))
+    return v
 
 
 class Reference:
@@ -222,8 +230,13 @@ class Reference:
     def _conditions(self, c):
         what = "conditions.json"
         _keys(c, ("shore_conditions", "reference", "cell", "vignette", "conditions"), what)
-        if not _is_one(c["shore_conditions"]) or not is_str(c["reference"]) or not REF_RE.fullmatch(c["reference"]):
-            _fail(what, "shore_conditions must be 1 and reference like r1")
+        ver = c["shore_conditions"]
+        if not is_int(ver) or ver not in (1, 2) or not is_str(c["reference"]) or not REF_RE.fullmatch(c["reference"]):
+            _fail(what, "shore_conditions must be 1 or 2 and reference like r1")
+        # 2 (kit 1.3.0): every condition also says which way its cast shadows fall and how dark they are;
+        # a set written as 1 has none, and is drawn exactly as kit 1.2.0 drew it
+        self.conditions_version = ver
+        fields = ("name", "light", "top", "east", "west", "lamps", "lut", "veil", "shadow") + (("cast",) if ver == 2 else ())
         if not is_int(c["cell"]) or c["cell"] != CELL:
             _fail(what, "cell must be %d" % CELL)
         vig = c["vignette"]
@@ -237,7 +250,7 @@ class Reference:
         self.conditions = []
         seen = set()
         for k in conds:
-            _keys(k, ("name", "light", "top", "east", "west", "lamps", "lut", "veil", "shadow"), what + " condition")
+            _keys(k, fields, what + " condition")
             if not is_str(k["name"]) or not COND_RE.fullmatch(k["name"]) or k["name"] in seen:
                 _fail(what, "condition names must be unique and match [a-z]{1,16}")
             seen.add(k["name"])
@@ -259,6 +272,12 @@ class Reference:
             _keys(k["shadow"], ("rgb", "alpha"), w + ".shadow")
             q.shadow_rgb = _rgb(k["shadow"]["rgb"], w + ".shadow.rgb")
             q.shadow_alpha = _int(k["shadow"]["alpha"], 0, 256, w + ".shadow.alpha")
+            q.cast_dx = q.cast_dy = q.cast_alpha = 0
+            if ver == 2:
+                _keys(k["cast"], ("dx", "dy", "alpha"), w + ".cast")
+                q.cast_dx = _signed(k["cast"]["dx"], CAST_MAX_DX, w + ".cast.dx")
+                q.cast_dy = _signed(k["cast"]["dy"], CAST_MAX_DY, w + ".cast.dy")
+                q.cast_alpha = _int(k["cast"]["alpha"], 0, 256, w + ".cast.alpha")
             self.conditions.append(q)
 
     # ------------------------------------------------------------------- crops --

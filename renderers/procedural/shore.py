@@ -6,6 +6,11 @@ pixels of the 2880x1800 frame. This module replays the kit's record from a local
 pixels the kit placed and draws them in front of the scenery, so the wallpaper shows exactly what
 the kit agreed to: the same pixels, the same order, the same contact shadows.
 
+Each object also throws a cast shadow that follows the sun through the day, and a bright moon at night
+(kit 1.3.0): the scene's own shadow projection (land.shadow_masks), handed to the kit as whole numbers,
+and the kit says which pixels are in shadow (shorekit.compose.cast_shown). So an upright thing on the
+shore is a sundial, and the Mac and the kit's preview draw the same shadow pixels.
+
 Objects are drawn in the front layer, so the fog veils them, and creatures and rare events are
 drawn after them. Things that rest on the ground (the heron, a thing washed up) are hidden by any
 object standing nearer than they do (`shore_allow`); everything airborne passes in front.
@@ -38,6 +43,18 @@ GLOW_CORE = np.array([255, 214, 150], np.float32)
 GLOW_HALO = np.array([255, 176, 96], np.float32)
 # The contact shadow takes this much of the light from the ground under an object's foot.
 SHADOW = 0.45
+# The cast shadow takes this much of the ground's light under a full sun (as the animals' do, fauna.life_shadow),
+# scaled by how much sun gets through; under a full moon high in a clear sky it takes CAST_MOON, less under less.
+# Direct light weaker than the first of CAST_FROM throws no shadow at all, and it is whole from the second: the
+# sun's first degrees, cloud, and fog (the reference fog leaves 0.35 of the sun). The moon's light is counted as a
+# share of MOON_FULL, core's moon_str for a full moon high in a clear, dark sky: only a bright moon throws one.
+# And a shadow never takes more than the direct light puts on the beach (shore_direct): under a low sun, when most
+# of the light there is the sky's, it is fainter than CAST.
+CAST = 0.34
+CAST_MOON = 0.30
+CAST_FROM = (0.35, 0.6)
+CAST_MOON_FROM = (0.55, 0.8)
+MOON_FULL = 0.30
 # The listener's window: two panes in the side of the boat's deckhouse, in boat units (see PropsMixin.boat)
 PANES = ((-0.155, -0.098), (-0.072, -0.015))
 PANE_Y = (-0.116, -0.080)
@@ -58,6 +75,15 @@ def kit():
     return shorekit
 
 
+def cast_vector(alt, az):
+    """Which way a shadow falls from a light `alt` degrees up at azimuth `az`, as the kit takes it: (dx, dy), x256
+    px of shadow per px of height, to the right and down the frame. It is the scene's own projection for the
+    tower, the tree and the bench (land.shadow_masks), no longer than three times the height, rounded half up."""
+    cot = min(1 / math.tan(math.radians(alt)), 3.0)
+    q = lambda v: int(math.floor(256 * v + 0.5))
+    return q(math.sin(math.radians(az)) * cot), q(-math.cos(math.radians(az)) * cot * KF)
+
+
 def utc_stamp(t):
     """An aware datetime as the kit writes times: YYYY-MM-DDTHH:MM:SSZ."""
     return t.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -76,6 +102,7 @@ class ShoreDay:
     def __init__(self, frame, reference, digest):
         self.frame = frame
         self.reference, self.digest = reference, digest
+        self.ref = None         # the kit's reference set, for the cast shadows (the kit lays them out each minute)
         self.sets = []
         self.index = np.full(1441, -1, np.int32)
         self.live, self.misfits = [], []
@@ -133,16 +160,17 @@ def history(adds, gone):
 
 
 def reference_dir(path):
-    """The reference set a shore cache is judged against: the one kit.lock names, else the only one."""
+    """The reference set a shore cache is judged against: the one kit.lock names, else the newest there (ids
+    only go up: r3 follows r2), so the set an earlier version built may stay beside the one in use."""
     sk = kit()
     lock = sk.cli.read_lock(path)
     base = os.path.join(path, "reference")
     if lock is not None:
         return os.path.join(base, lock["reference"])
-    subs = sorted(d for d in os.listdir(base) if sk.manifest.REF_RE.fullmatch(d)) if os.path.isdir(base) else []
-    if len(subs) != 1:
-        raise ValueError("cannot tell which reference set to use in %s" % base)
-    return os.path.join(base, subs[0])
+    subs = [d for d in os.listdir(base) if sk.manifest.REF_RE.fullmatch(d)] if os.path.isdir(base) else []
+    if not subs:
+        raise ValueError("no reference set in %s" % base)
+    return os.path.join(base, max(subs, key=lambda d: int(d[1:])))
 
 
 def replay(path):
@@ -183,7 +211,8 @@ def on_show(adds, gone, when):
 def draw_set(ref, objs):
     """The kit's draw plan for these objects as arrays: the solid pixels on show (x, y, albedo, face,
     whether it glows, and the ground y of the object they belong to), the contact-shadow pixels on show,
-    and, per object whose glow shows, where its lit area is."""
+    and, per object whose glow shows, where its lit area is. `objs` are the kit's own placed objects, which
+    it lays the cast shadows out from, minute by minute."""
     sk = kit()
     sx, sy, rgb, gy, face, glow = [], [], [], [], [], []
     lamps = []          # per object whose glow shows: (x, y) of the lit area's middle, its pixels, ground y, on the pier
@@ -206,7 +235,7 @@ def draw_set(ref, objs):
                           o["ground_y"], surface.get(o["id"]) == "pier"))
         shadow.update((x, y) for x, y, shown in o["shadow"] if shown)
     hx = sorted(shadow)
-    return dict(ids=tuple(o.id for o in objs),
+    return dict(ids=tuple(o.id for o in objs), objs=tuple(objs),
                 sx=np.array(sx, np.int32), sy=np.array(sy, np.int32), gy=np.array(gy, np.int32),
                 rgb=np.array(rgb, np.uint8).reshape(-1, 3), face=np.array(face, np.int8),
                 glow=np.array(glow, bool), lamps=lamps,
@@ -225,6 +254,7 @@ def load_shore(path, day):
         warn("not drawing the shore: %s" % (e.line() if hasattr(e, "line") else e))
         return None
     sd = ShoreDay((ref.frame_w, ref.frame_h), ref.id, ref.digest)
+    sd.ref = ref
     sd.live = [a.id for a in shore.live]
     sd.misfits = list(shore.misfits)
     sd.history = history(adds, gone)
@@ -270,8 +300,48 @@ class ShoreMixin:
         sd = getattr(self.day, "shore", None)
         return None if sd is None else sd.at(self.m)
 
+    def shore_direct(self):
+        """The share of the light on the beach (a TOP face) that comes straight from the sun and the moon: what a
+        shadow there could take at most."""
+        n = normalize(FACES[1])
+        full, sky = float(self.light(n).mean()), float(self.light(n, shade=1.0).mean())
+        return max(0.0, 1 - sky / full) if full > 0 else 0.0
+
+    def shore_cast(self):
+        """Which way the objects' cast shadows fall this minute, and how much of the ground's light they take:
+        (dx, dy, strength), or None when nothing casts one. The light is the one the scene's own shadows use
+        (land.shadow_masks): the sun while it is up, else the moon in the dark. The strength follows the light that
+        gets through (as fauna.life_shadow's follows the sun), with none at all in weak light (CAST_FROM): under
+        cloud, in fog, at the sun's first degrees, or under any moon but a bright one. It is never more than the
+        direct light's share of the light on the beach."""
+        if self.sun_alt > 1:
+            alt, az, lit = self.sun_alt, self.sun_az, self.sun_str
+            k = CAST * lit * sm(*CAST_FROM, lit)
+        elif self.moon_alt > 4 and self.sun_alt < -6:
+            alt, az, lit = self.moon_alt, self.moon_az, min(1.0, self.moon_str / MOON_FULL)
+            k = CAST_MOON * lit * sm(*CAST_MOON_FROM, lit)
+        else:
+            return None
+        k = min(k, self.shore_direct())
+        if k < 1 / 256:
+            return None
+        return cast_vector(alt, az) + (float(k),)
+
+    def shore_cast_pixels(self, st):
+        """The ground in the objects' cast shadows this minute, as the kit lays it out for this light: (x, y) in
+        frame pixels of the reference frame and the strength, or None. A reference set written before cast shadows
+        (shore_conditions 1) has none in the kit's preview, so none are drawn here either: they come with the set."""
+        cast = self.shore_cast()
+        ref = getattr(self.day.shore, "ref", None)
+        if cast is None or ref is None or ref.conditions_version < 2 or not st.get("objs"):
+            return None
+        idx = np.asarray(kit().compose.cast_shown(ref, st["objs"], cast[0], cast[1]), np.int64)
+        if not idx.size:
+            return None
+        return (idx % ref.cw + ref.cx).astype(np.int32), (idx // ref.cw + ref.cy).astype(np.int32), cast[2]
+
     def shore(self):
-        """Draw the objects on show into the front layer: lit, with their contact shadows."""
+        """Draw the objects on show into the front layer: lit, with their cast and contact shadows."""
         st = self.shore_now()
         if st is None:
             return
@@ -281,29 +351,41 @@ class ShoreMixin:
         sx, sy, gy = st["sx"], st["sy"], st["gy"]
         alb = st["rgb"].astype(np.float32)
         # sun or moon shadows of the tower, the tree, the bench and the lamp, where each object stands
-        shade = None
+        shade = sh = None
         if self.sun_alt > 1 or (self.moon_alt > 4 and self.sun_alt < -6):
             sh, _ = self.shadow_masks()
             shade = sh[np.clip((gy * k).astype(np.int32), 0, self.H - 1), np.clip((sx * k).astype(np.int32), 0, self.W - 1)]
         col = self.lit(alb, np.asarray(FACES, np.float32)[st["face"]], (sx + 0.5) * k, (sy + 0.5) * k, shade=shade)
         if self.lights_on > 0 and st["glow"].any():
             col[st["glow"]] += alb[st["glow"]] * (EMIT * self.lights_on)
+        # the cast shadows: where the kit says, and only as dark as the light the scenery's own shadows leave there
+        cast = self.shore_cast_pixels(st)
+        if cast is not None:
+            tx, ty, tk = cast
+            tk = tk * (1 - sh[np.clip((ty * k).astype(np.int32), 0, self.H - 1), np.clip((tx * k).astype(np.int32), 0, self.W - 1)])
         if native:
             c, a = self.c, self.a
             hx, hy = st["hx"], st["hy"]
+            if cast is not None:
+                c[ty, tx] = c[ty, tx] * (1 - tk)[:, None]
+                a[ty, tx] = a[ty, tx] * (1 - tk) + tk
             c[hy, hx] = c[hy, hx] * (1 - SHADOW)
             a[hy, hx] = a[hy, hx] * (1 - SHADOW) + SHADOW
             c[sy, sx] = col
             a[sy, sx] = 1.0
             return
         # another frame size (a preview): lay the native pixels out on a patch and resample it
-        xs = np.concatenate([sx, st["hx"]])
-        ys = np.concatenate([sy, st["hy"]])
+        xs = np.concatenate([sx, st["hx"]] + ([tx] if cast is not None else []))
+        ys = np.concatenate([sy, st["hy"]] + ([ty] if cast is not None else []))
         x0, y0 = int(xs.min()), int(ys.min())
         w, h = int(xs.max()) - x0 + 1, int(ys.max()) - y0 + 1
         pc = np.zeros((h, w, 3), np.float32)
         pa = np.zeros((h, w), np.float32)
-        pa[st["hy"] - y0, st["hx"] - x0] = SHADOW
+        if cast is None:
+            pa[st["hy"] - y0, st["hx"] - x0] = SHADOW
+        else:
+            pa[ty - y0, tx - x0] = tk
+            pa[st["hy"] - y0, st["hx"] - x0] = pa[st["hy"] - y0, st["hx"] - x0] * (1 - SHADOW) + SHADOW
         pc[sy - y0, sx - x0] = col
         pa[sy - y0, sx - x0] = 1.0
         X0, Y0 = int(math.floor(x0 * k)), int(math.floor(y0 * k))

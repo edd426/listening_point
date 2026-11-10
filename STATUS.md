@@ -1,6 +1,7 @@
 # Status
 
-_Last updated 2026-11-01 (evening). v3 progress and handoff: `docs/V3-PLAN.md`._
+_Last updated 2026-11-10 (the shore's cast shadows, branch `shore/cast`: see "Cast shadows" under The shore).
+v3 progress and handoff: `docs/V3-PLAN.md`._
 
 ## Current state
 
@@ -77,7 +78,7 @@ together on `shore/sync` (2026-11-01), not installed:
   one `sea` event that never says why; the carrier keeps the reasons privately and can hand them to
   `replay --reasons`, which then holds each storm and veto to its exact rule.
 - **Sync (`tools/shore_sync.py`, `docs/LISTENER.md` "The shore on this Mac").** `nightly.py` drains the
-  outbox, takes the render lock, builds this Mac's own reference set once (`shore/reference/r1`), syncs at
+  outbox, takes the render lock, builds this Mac's own reference set once (`shore/reference/r3`, `REFERENCE`), syncs at
   most hourly (ETag, so mostly a 304), deletes the frames the shore or the lamp has changed (from an
   object's `lands`, or the moment the sea took one; for the lamp, the dark minutes from the moment it was
   lit) and renders with `--shore` and `--lamp`. Sync refuses a ledger that drops or changes a known event,
@@ -86,6 +87,58 @@ together on `shore/sync` (2026-11-01), not installed:
   shore-related runs until the controls' key is in the Keychain. `install.sh` copies `shorekit/`.
 - **Tests.** `/usr/bin/python3 -m unittest tests.test_shore_sync` (mock API on 127.0.0.1; also the
   re-render records); `tests/test_shore_render.py` also checks what `nightly.py` renders again.
+
+### Cast shadows (kit 1.3.0, reference r3; branch `shore/cast`, 2026-11-10; not merged, not installed)
+
+Every object standing on the shingle or the pier throws a shadow that follows the sun, and a bright
+moon. Until now the kit's only shadow was a footing, the same in all four lights; with this an
+upright thing on the shore is a sundial.
+
+- **The rule** is the kit's and is whole numbers (`shorekit/SCHEMA.md` 4.6, `geometry.cast_pixels`): a
+  light is `dx`, `dy` (x256 px of shadow per px of height, right and down), each solid pixel shades the
+  ground its own height sweeps over, and the shadow is kept where a contact shadow could fall. It is
+  **drawn and never judged**: no rule, footprint, plan, `PLAN sha256`, PASS line or ledger entry
+  knows of it. `compose.cast_shown` is the one set of pixels both the preview and the Mac darken.
+- **The light** is the scene's own projection for the tower, tree and bench (`land.shadow_masks`),
+  rounded to the kit's integers (`shore.cast_vector`), so the shadow's pixels on the Mac are the kit's
+  by construction. How dark (`shore.shore_cast`): 0.34 of the ground's light under a full sun, as the
+  animals' shadows (`CAST`), 0.30 under a full moon (`CAST_MOON`); none in weak direct light (cloud,
+  fog, the sun's first degrees, any moon but a bright one: `CAST_FROM`, `CAST_MOON_FROM`); never
+  more than the direct light's share of the light on the beach (a low sun); and less where the
+  tower's or the tree's own shadow already lies.
+- **Reference r3** (`tools/shore_sync.py` `REFERENCE`): the builder writes `conditions.json` as
+  `shore_conditions` 2, each condition with its `cast` (`dx`, `dy`, `alpha`) from its own frame. r3's
+  four crops, `keepout.png`, `surfaces.json` and `palette.json` are r2's (the crops byte for byte);
+  only `conditions.json` differs. The kit still loads a set written as 1 and then draws no cast
+  shadow, and so does the renderer: the shadows arrive with the reference set that carries them.
+- **The renderer picks the newest reference set** in a cache without `kit.lock`
+  (`shore.reference_dir`), so r3 may be built beside r2. Before, two sets in the cache meant no shore
+  was drawn.
+- **Tests.** `python3 -m unittest discover -s shorekit/tests` (87; `test_cast.py` holds the rule to a
+  second implementation written from the schema, to the schema's worked example, and to its
+  exclusions); `tests/test_shore_cast.py` (in `unittest discover -s tests`): the Mac's layer covers
+  exactly the kit's pixels, the shadow turns with the sun, the strengths; `tests/test_shore_render.py`
+  (a script, a few minutes): at the four reference minutes the frame matches the kit's preview on the
+  cast shadow too, and nothing outside changes. That file's fixtures dated from before look C and it
+  failed 5 of 7 since kit 1.2.0; they are bigger and painted now, its baseline is `main`, and it passes.
+- **Installing it** (not done; each step is the owner's):
+  1. Merge, then `tools/install.sh`. The render job builds `shore/reference/r3/` on its next run
+     (about a minute) and sync replays the ledger against it; what is on the shore now replays with
+     no misfit (checked against a copy with the kit's `replay`).
+  2. Publish that r3 and the 1.3.0 `shorekit.pyz` with its `kit.lock` to the shore repository, and set
+     the carrier's reference id and digest, as for r2 (`docs/v3/phase1.md`, Install). From then a
+     manifest must name `r3` (`E_REFERENCE`); nothing already on the shore changes.
+  3. Frames already rendered keep the look they were rendered with: the day's `shore.json` record
+     does not know about renderer changes. Delete a day's frames to have them rendered again.
+- **Known issues.**
+  - A flat picture has no depth. When the sun or the moon stands due east or west, the shadow of the
+    whole silhouette falls into a line one to five pixels thick along the ground (08:50 on 21 June, for
+    one; the equinox's golden hour, one of the four reference lights, is nearly this). A thin post
+    should look like that; a stack of logs should not. Giving each row a depth on the ground
+    would mend it and is a change to the rule.
+  - The shadow's edge is hard, to the pixel, where the scenery's own shadows are soft.
+  - On the shingle's busy texture a 0.34 shadow is quiet; on the grass it reads well.
+  - A thing built onto another casts none, and no cast shadow falls on another object.
 
 ## Decisions
 
@@ -191,8 +244,9 @@ the owner controls and the shore sync: `/usr/bin/python3 -m unittest tests.test_
 - Still recognisably computer-made: flat-shaded polygons, noise textures.
 - The cat, the heron and the owl are still small and simple; the sheep, fox, hares and crows were redrawn
   in v3 (`docs/v3/phase3-animals.md`, Known issues).
-- `tests/test_shore_render.py` fails 5 of 7 on `main` (found 2026-11-01): its synthetic cairn finds no spot
-  that passes against reference r2.
+- `tests/test_shore_render.py` failed 5 of 7 on `main` from 2026-11-01 (its synthetic cairn found no spot that
+  passed against reference r2); mended on `shore/cast` (2026-11-10).
+- The shore's cast shadows: see "Cast shadows" above, Known issues.
 - Mid-level clouds near the horizon streak toward the vanishing point (the plane projection).
 - Weather can jump where separately rendered spans of a day meet (battery renders, a forecast
   refreshed mid-day).
