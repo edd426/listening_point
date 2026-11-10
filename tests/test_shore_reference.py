@@ -194,6 +194,7 @@ def test_reference_build_is_deterministic_and_leaves_the_tree_clean():
             assert filecmp.cmp(os.path.join(a, n), os.path.join(b, n), shallow=False), n
         assert load_reference(a).digest == load_reference(b).digest
         assert git_status() == before, "building a reference set changed the working tree"
+        assert load_reference(a).conditions_version == 2, "the builder writes each condition's cast shadow (kit 1.3.0)"
         # and it refuses to write one into the repository (outside the ignored out/)
         p = subprocess.run([PY, TOOL, os.path.join(ROOT, "reference-test")], capture_output=True, text=True)
         assert p.returncode != 0 and "refusing" in p.stderr and not os.path.exists(os.path.join(ROOT, "reference-test"))
@@ -228,6 +229,24 @@ def check_set(path):
         for t in c.lut:
             assert list(t) == sorted(t), "a tone curve must not fall"
         assert 0 < c.shadow_alpha < 256 and c.shadow_rgb == (0, 0, 0)
+    if ref.conditions_version == 2:
+        check_cast(ref)
+
+
+def check_cast(ref):
+    """Kit 1.3.0: each condition's cast shadow is the renderer's own at that minute (shore.ShoreMixin.shore_cast)."""
+    cast = {c.name: (c.cast_dx, c.cast_dy, c.cast_alpha) for c in ref.conditions}
+    # noon: the sun is in the south, ahead of the viewer, so shadows come toward the viewer (down the frame)
+    assert abs(cast["noon"][0]) < 40 and 40 < cast["noon"][1] <= 256 and cast["noon"][2] > 60, cast
+    # golden hour: the sun is low in the west (the right), so shadows are long and fall to the left
+    assert cast["golden"][0] < -600 and 0 < cast["golden"][2] <= cast["noon"][2], cast
+    # the moonlit night: a shadow, fainter than the day's; fog: none at all
+    assert 0 < cast["night"][2] < cast["noon"][2], cast
+    assert cast["fog"] == (0, 0, 0), cast
+    for name, hhmm, kind in sr.CONDITIONS:
+        got = lp.Frame(Day(sr.DATE, weather=kind, reference=True), minute(hhmm), sr.SCALE).shore_cast()
+        assert (got[:2] if got else (0, 0)) == cast[name][:2], (name, got, cast[name])
+        assert (got is None) == (cast[name][2] == 0), (name, got, cast[name])
 
 
 def test_existing_set():
