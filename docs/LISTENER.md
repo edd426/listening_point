@@ -160,7 +160,7 @@ renderer draws from that copy, never from the network.
 | Path (under `~/Library/Application Support/The Listening Point/`) | What |
 |---|---|
 | `shore/ledger.json`, `shore/objects/<id>.json` | the last good shore, in the kit's layout (`--shore`) |
-| `shore/reference/r1/` | this Mac's own reference set: `nightly.py` builds it once with `tools/shore_reference.py` (about a minute) |
+| `shore/reference/r3/` | this Mac's own reference set (`tools/shore_sync.py` `REFERENCE`): `nightly.py` builds it once with `tools/shore_reference.py` (about a minute). An earlier set may stay beside it; the renderer uses the newest |
 | `shore/sync.json` | the last try and the last success (also as `*_unix`, read by the helper), the ETags, the ledger held, any trouble |
 
 `tools/shore_sync.py status` prints `sync.json`. Exit status: 0 done, unchanged or not due; 1 a problem

@@ -52,7 +52,7 @@ tracemalloc peak +0.02% (the delegate's measures). How often each thing shows ac
 **Known broken, not from v3:** `tests/test_shore_render.py` (run as a script; `unittest discover` does not
 collect it) fails 5 of 7 on `main` with `no spot passes for 2027-03-18-cairn`: its synthetic cairn finds no
 spot that passes against r2. Checked on `main` `9d21022`, before the animals merge. It belongs to the
-shore work.
+shore work. (Mended on branch `shore/cast`, 2026-11-10, with the shore's cast shadows: `STATUS.md`.)
 
 **Evan's verdict (2026-11-03):** he looked through every phase 3 look test and approved phase 3 ("I like the
 after"). His one note: the lower field wall ended in open grass, so the sheep could walk round it toward the
