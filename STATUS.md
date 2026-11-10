@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-11-10 (the shore's cast shadows, branch `shore/cast`: see "Cast shadows" under The shore).
+_Last updated 2026-11-10 (the shore's cast shadows, merged and installed: see "Cast shadows" under The shore).
 v3 progress and handoff: `docs/V3-PLAN.md`._
 
 ## Current state
@@ -88,7 +88,7 @@ together on `shore/sync` (2026-11-01), not installed:
 - **Tests.** `/usr/bin/python3 -m unittest tests.test_shore_sync` (mock API on 127.0.0.1; also the
   re-render records); `tests/test_shore_render.py` also checks what `nightly.py` renders again.
 
-### Cast shadows (kit 1.3.0, reference r3; branch `shore/cast`, 2026-11-10; not merged, not installed)
+### Cast shadows (kit 1.3.0, reference r3; merged, installed and published 2026-11-10)
 
 Every object standing on the shingle or the pier throws a shadow that follows the sun, and a bright
 moon. Until now the kit's only shadow was a footing, the same in all four lights; with this an
@@ -121,7 +121,16 @@ upright thing on the shore is a sundial.
   (a script, a few minutes): at the four reference minutes the frame matches the kit's preview on the
   cast shadow too, and nothing outside changes. That file's fixtures dated from before look C and it
   failed 5 of 7 since kit 1.2.0; they are bigger and painted now, its baseline is `main`, and it passes.
-- **Installing it** (not done; each step is the owner's):
+- **Done 2026-11-10** (Evan's go): merged as `5654f69` (CI green, same bytes everywhere, pyz sha256
+  `bf63d3fd…032c`); `tools/install.sh` run; the Mac built r3 (digest `f237badc…093c`, the same as a
+  scratch build); r3 published to the shore repository and pinned in the carrier with kit 1.3.0; an
+  owner run carried both to the worlds; `sync.json` names r3 after clearing `etag` and
+  `shore_sync.py --force`. Today's and tomorrow's old-look frames were moved to
+  `~/Pictures/Wallpapers/The Listening Point/pre-cast/` so they render again; delete that folder
+  once the new look has been seen. The install's last step failed once (`Bootstrap failed: 5`, both
+  launchd jobs left unloaded); bootstrapping again a few seconds later worked, and `install.sh` now
+  retries.
+- **Installing it** (the steps, as they were done):
   1. Merge, then `tools/install.sh`. The render job builds `shore/reference/r3/` on its next run
      (about a minute) and sync replays the ledger against it; what is on the shore now replays with
      no misfit (checked against a copy with the kit's `replay`).

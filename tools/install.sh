@@ -82,9 +82,15 @@ if [ "${1:-}" != "--keep-wallpaper" ]; then
   ./venv/bin/python tools/set_wallpaper.py "$ROOT/The Listening Point.heic" --backup-dir "$ROOT/backups"
   rm -f "$ROOT/The Listening Point.jpg"
 fi
+# bootout returns before the job is gone, and a bootstrap that races it fails with
+# "Bootstrap failed: 5: Input/output error" (2026-11-10: it left both jobs unloaded). So try again.
 for job in $LIVE $RENDER; do
   launchctl bootout "gui/$(id -u)/$job" 2>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$AGENTS/$job.plist"
+  for try in 1 2 3 4 5 6; do
+    if launchctl bootstrap "gui/$(id -u)" "$AGENTS/$job.plist" 2>/dev/null; then break; fi
+    if [ "$try" = 6 ]; then launchctl bootstrap "gui/$(id -u)" "$AGENTS/$job.plist"; fi
+    sleep 2
+  done
 done
 ./venv/bin/python tools/clean_wallpaper_cache.py
 echo "installed. Frames render in the background whenever the Mac is awake; log: ~/Library/Logs/listening-point.log"
