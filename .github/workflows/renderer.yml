@@ -1,0 +1,63 @@
+name: renderer
+
+# The renderer's own tests and a sweep: small frames of random dates with made-up weather, then today
+# and tomorrow with the live forecast. A date the renderer crashes on should fail here before the
+# render job on the Mac meets it (intent/renderer-ci/). The sweep also runs every night, with a new
+# seed. All on macOS with /usr/bin/python3, the Command Line Tools' Python 3.9 that the Mac renders
+# with (setup-python has no arm64 build of 3.9): the renderer draws the tower's clock and lintel in
+# the system's Georgia, so it does not run on Linux (the first run, 2026-11-15: "cannot open resource").
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    if: github.event_name != 'schedule'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: A venv with the pinned versions
+        run: |
+          /usr/bin/python3 -c "import sys; print(sys.version); assert sys.version_info[:2] == (3, 9), sys.version"
+          /usr/bin/python3 -m venv venv
+          ./venv/bin/pip install -q --upgrade pip
+          ./venv/bin/pip install -q -r requirements.txt
+          ./venv/bin/pip freeze
+      - name: Unit tests
+        run: ./venv/bin/python -m unittest discover -s tests
+      - name: Astronomy and weather (scripts)
+        run: |
+          ./venv/bin/python tests/test_astro.py
+          ./venv/bin/python tests/test_weather.py
+      - name: The shore's reference set and its drawing (scripts; they render full-size frames)
+        run: |
+          ./venv/bin/python tests/test_shore_reference.py
+          ./venv/bin/python tests/test_shore_render.py
+
+  sweep:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: A venv with the pinned versions
+        run: |
+          /usr/bin/python3 -m venv venv
+          ./venv/bin/pip install -q --upgrade pip
+          ./venv/bin/pip install -q -r requirements.txt
+      - name: Random dates, made-up weather
+        run: ./venv/bin/python tests/sweep.py --dates 10
+      - name: Today and tomorrow, the live forecast
+        if: always()
+        run: ./venv/bin/python tests/sweep.py --live
