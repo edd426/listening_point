@@ -23,7 +23,9 @@ import argparse
 import datetime as dt
 import functools
 import os
+import sys
 import time
+import traceback
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
@@ -232,16 +234,34 @@ def frame_image(m):
     return Frame(W_["day"], m, W_["scale"]).render(fg)
 
 
+SKIP_MAX = 10       # this many frames failing in a row is not one bad minute: the run stops
+
+
 def render_chunk(minutes):
+    """Draw and save these minutes: (paths written, minutes skipped). A frame that cannot be drawn is
+    skipped, with its traceback printed, so one bad minute does not cost the rest of the day (2026-11-04:
+    the contrails crashed at 09:27 and the render job stuck there, retry after retry). SKIP_MAX in a row
+    (a keyframe that cannot be drawn, a broken install) raise instead. Saving is not guarded: a full disk
+    should stop the run."""
     out = W_["out"]
-    done = []
+    done, failed, row = [], [], 0
     for m in minutes:
         path = os.path.join(out, f"{m // 60:02d}{m % 60:02d}.jpg")
         tmp = path + ".tmp.jpg"
-        frame_image(m).save(tmp, quality=W_["quality"])
+        try:
+            im = frame_image(m)
+        except Exception:
+            row += 1
+            failed.append(m)
+            print(f"frame {m // 60:02d}{m % 60:02d} failed and is skipped:\n{traceback.format_exc()}", flush=True)
+            if row >= SKIP_MAX:
+                raise
+            continue
+        row = 0
+        im.save(tmp, quality=W_["quality"])
         os.replace(tmp, path)
         done.append(path)
-    return done
+    return done, failed
 
 
 def parse_minutes(a):
@@ -310,13 +330,14 @@ def main():
     # scattered minutes each get their own near-scenery; runs of minutes share keyframes
     step = 1440 if (a.times or a.hours or a.every > 1 or len(minutes) == 1) else a.step
     runs = chunks(minutes, a.step, a.jobs * 3) if step != 1440 else [[m] for m in minutes]
-    paths = []
+    paths, failed = [], []
     with ProcessPoolExecutor(a.jobs, initializer=init_worker, initargs=(day, a.scale, a.step if step != 1440 else 1, a.out, a.quality)) as ex:
-        for done in ex.map(render_chunk, runs):
+        for done, bad in ex.map(render_chunk, runs):
             paths += done
-            print(f"{len(paths)}/{len(minutes)} {done[-1]}", flush=True)
+            failed += bad
+            print(f"{len(paths)}/{len(minutes)} {done[-1] if done else '(none of this run)'}", flush=True)
     print(f"rendered {len(paths)} frames in {time.time() - t0:.0f} s", flush=True)
-    if a.sheet:   # a contact sheet of small thumbnails
+    if a.sheet and paths:   # a contact sheet of small thumbnails
         pick = paths if len(paths) <= 24 else paths[::max(1, len(paths) // 24)][:24]
         w, h = 480, 300
         ims = [Image.open(p).resize((w, h), Image.LANCZOS) for p in pick]
@@ -326,6 +347,10 @@ def main():
         for i, im in enumerate(ims):
             sheet.paste(im, ((i % cols) * w, (i // cols) * h))
         sheet.save(os.path.join(a.out, "sheet.jpg"), quality=88)
+    if failed:
+        print(f"{len(failed)} frames failed and were skipped: " + " ".join(f"{m // 60:02d}{m % 60:02d}" for m in sorted(failed)),
+              flush=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
