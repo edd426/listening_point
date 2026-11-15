@@ -14,7 +14,8 @@ Risk: he prefers the old sky. Then the branch is dropped and nothing installed c
 
 ## Results (2026-11-15, commit b49267a plus this note)
 
-- `./venv/bin/python -m unittest discover -s tests`: 158 OK (with `tests.test_clouds`, 9).
+- `./venv/bin/python -m unittest discover -s tests`: 158 OK, and `tests.test_clouds` (written after that
+  run): 9 OK.
 - `tests/test_shore_reference.py`: 4/4. A scratch build of r3 has the installed digest
   (`f237badc…093c`).
 - Determinism: the look test's 8 frames rendered twice, 0 differ.
