@@ -5,11 +5,11 @@ sun, moon, planets and stars stand where they actually are over Budapest at that
 rain, fog and snow follow the morning's forecast; the tree leafs, turns and goes bare with the
 seasons; and the tower clock tells the time to the minute.
 
-![The Listening Point at 17:00](docs/hero-17h.jpg)
+![The Listening Point at 14:00](docs/hero-14h.jpg)
 
-![A day, on the hour: 6 October 2026, with its forecast](docs/contact-sheet.jpg)
+![A day, on the hour: 18 November 2026, with its forecast](docs/contact-sheet.jpg)
 
-![The same evening at 21:08, as the helper showed it](docs/hero-21h.jpg)
+![The same evening at 19:00](docs/hero-19h.jpg)
 
 ## The scene
 

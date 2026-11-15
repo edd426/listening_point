@@ -32,6 +32,8 @@ state and decisions stay in `STATUS.md`; the v3 history stays in `docs/V3-PLAN.m
 - **On the 2026-11-15 review** (Claude's list of improvements): "Please do 1-3 and 6." That is: stop
   rendering tomorrow twice; fix the mid-level cloud projection; catch renderer crashes before the
   nightly job does; housekeeping. He did not pick the time-lapse (4) or the painterly pass (5).
+- **On the cloud look test and a failed frame** (2026-11-15): "Go ahead. And yes, let's skip the frame
+  instead." The clouds are laid out as for an ordinary view; a frame that cannot be drawn is skipped.
 
 ## What must not change
 

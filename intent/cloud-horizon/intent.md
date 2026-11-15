@@ -1,8 +1,8 @@
 # Intent: no whirl in the clouds
 
 Author: Evan (accepted Claude's proposal, 2026-11-15: "Please do 1-3 and 6"; this is item 2),
-written up by Claude. Status: built on branch `v3/cloud-horizon`, 2026-11-15; **waiting for Evan's
-verdict on the look test** (`out/look/cloud-horizon/`). Not installed.
+written up by Claude. Status: Evan's go on the look test, 2026-11-15 ("Go ahead"); merged and installed
+19:42.
 
 ## Problem
 
@@ -39,5 +39,4 @@ verdict on the look test** (`out/look/cloud-horizon/`). Not installed.
 
 ## Open questions
 
-- **Evan: go, or not?** The pairs are in `out/look/cloud-horizon/pair-*.jpg` (top before, bottom
-  after).
+- None. Evan said go on the pairs in `out/look/cloud-horizon/pair-*.jpg` (top before, bottom after).

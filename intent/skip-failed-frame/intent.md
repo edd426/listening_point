@@ -1,7 +1,7 @@
 # Intent: a frame that fails is skipped
 
 Author: Evan (2026-11-15, on Claude's offer: "yes, let's skip the frame instead"), written up by
-Claude. Status: built 2026-11-15.
+Claude. Status: merged and installed 2026-11-15.
 
 ## Problem
 

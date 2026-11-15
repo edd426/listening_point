@@ -21,5 +21,7 @@ Risk: he prefers the old sky. Then the branch is dropped and nothing installed c
 - Determinism: the look test's 8 frames rendered twice, 0 differ.
 - Cost: 20 minutes of a cloudy noon (2026-11-13 12:20 to 12:39, full size, one process): 53.8 s of
   CPU on `main`, 56.1 s here: 1.04 times. The cubic sampling is the cost.
-- Look test: `out/look/cloud-horizon/` (8 pairs, a README). Shown to Evan 2026-11-15; no verdict yet.
+- Look test: `out/look/cloud-horizon/` (8 pairs, a README). Shown to Evan 2026-11-15; he said go.
+- Merged and installed 19:42; on merged `main`: 172 tests OK, `test_shore_reference.py` 4/4,
+  `test_shore_render.py` 7/7.
 - `STATUS.md` is updated on `main`, not on this branch, so the merge stays clean.

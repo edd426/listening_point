@@ -3,30 +3,30 @@
 _Last updated 2026-11-15 (the render job renders tomorrow once; renderer CI; housekeeping; a cloud change
 waiting for Evan's look: see "2026-11-15" below). What Evan wants: `intent.md`. v3 history: `docs/V3-PLAN.md`._
 
-## 2026-11-15: four changes Evan asked for ("Please do 1-3 and 6")
+## 2026-11-15: five changes Evan asked for
 
-Each has its intent, spec and plan under `intent/<change>/`.
+"Please do 1-3 and 6", then, on the cloud look test and the offer to skip a failed frame: "Go ahead. And yes,
+let's skip the frame instead." Each has its intent, spec and plan under `intent/<change>/`. All are merged
+and installed.
 
 | Change | State |
 |---|---|
-| `tomorrow-once`: the render job renders tomorrow once, from 18:00 | merged, installed 18:40 (tomorrow, 11-16, was already rendered at 03:32 with that morning's forecast and was left as it is) |
-| `housekeeping`: disk guard, docs, branches, `pre-cast/` | merged and installed, but for the README pictures and the v3 release (below) |
-| `renderer-ci`: the renderer's tests and a sweep of random dates in CI; pinned versions | merged; green on GitHub (158 tests, the four script tests, sweep 20 of 20, live 2 of 2). The sweep also runs nightly at 03:17 UTC; a failure emails Evan |
-| `cloud-horizon`: no whirl in the clouds | **branch `v3/cloud-horizon`, not installed: waits for Evan's verdict** on `out/look/cloud-horizon/pair-*.jpg` |
+| `tomorrow-once`: the render job renders tomorrow once, from 18:00 | installed 18:40 |
+| `housekeeping`: disk guard, docs, branches, `pre-cast/`, the README pictures, the v3 release | done (see "The v3 release" below) |
+| `renderer-ci`: the renderer's tests and a sweep of random dates in CI; pinned versions | green on GitHub. The sweep also runs nightly at 03:17 UTC; a failure emails Evan |
+| `cloud-horizon`: no whirl in the clouds | Evan's go; installed 19:42. Today's frames from 19:47 and all of tomorrow's were deleted and rendered again in the new look |
+| `skip-failed-frame`: a frame that cannot be drawn is skipped, not fatal | installed 19:42 |
 
-**Open, in order:**
-1. Evan looks at `out/look/cloud-horizon/` (its `README.md` says what to look at) and says go or no.
-2. On go: merge `v3/cloud-horizon`, `tools/install.sh`, delete today's and tomorrow's frames so they
-   render again in the new look.
-3. Then the README's three pictures (render them without a shore: the real shore never goes in git)
-   and a v3 release with its hourly HEIC. They wait so that they show the sky he chooses. On no: make
-   them from `main`.
-4. Check the log a day or two after 2026-11-15: one `(tomorrow)` render a day, after 18:00, and no
-   `(evening forecast)` line.
+**The v3 release** (tag `v3.0`): the hourly HEIC of 2026-11-18 with the forecast fetched 2026-11-15 18:42 UTC,
+rendered without a shore; the README's three pictures are from the same 24 frames (14:00, 19:00, the sheet).
+The day was chosen because no hidden event falls on it (`day.mysteries` all unset). To make it again: the
+frozen forecast is in `out/look/release/cache/` (gitignored), then
+`listening_point.py OUT --date 2026-11-18 --hours 0-23 --scale 0.75 --quality 90 --weather offline --cache out/look/release/cache --sheet`
+and `make_h24`.
 
-**Not done, offered:** a frame that crashes still stops the rest of its span (the job retries the
-span every 15 minutes and fails at the same minute until the forecast changes). Skipping the one
-frame and carrying on would be a small change to `render_chunk` in `listening_point.py`.
+**To check on a later day:**
+- The log shows one `(tomorrow)` render a day, after 18:00, and no `(evening forecast)` line.
+- The nightly sweep's runs on GitHub (`gh run list --workflow renderer`).
 
 ## Current state
 
@@ -286,11 +286,14 @@ tower's clock and lintel, so it does not run on Linux. `requirements.txt` pins e
 - Still recognisably computer-made: flat-shaded polygons, noise textures.
 - The cat, the heron and the owl are still small and simple; the sheep, fox, hares and crows were redrawn
   in v3 (`docs/v3/phase3-animals.md`, Known issues).
-- A frame that crashes stops the rest of its span (see "Not done, offered" at the top).
+- A frame that cannot be drawn is skipped and tried again every 15 minutes (about 20 s a try, and its
+  traceback in the log each time). Ten in a row still stop the span (`listening_point.SKIP_MAX`).
 - The shore's cast shadows: see "Cast shadows" above, Known issues.
-- The cloud layers whirl: their rows fan out of a point on the horizon and bend round the frame (flat
-  planes on a 220-degree panorama; worst with full cirrus or a mid-level sheet). Mended on
-  `v3/cloud-horizon`, which waits for Evan's look (`intent/cloud-horizon/`).
+- The cloud layers are laid out as for an ordinary view, not where flat layers would fall on the
+  220-degree panorama (`sky.cloud_plane`, since 2026-11-15: the true layout whirled). So a cloud's shadow
+  on the sea can lie up to about 20 degrees of azimuth from the cloud; cirrus streaks are held at least 60
+  degrees off the view's axis, so they are not always along the wind; mid-level sheets are level rows.
+  A wind within 6 degrees of north or south still fans the cirrus out of a point in the frame.
 - Weather can jump where separately rendered spans of a day meet (battery renders, a forecast
   refreshed mid-day).
 - The sea render and the front layer still peak at ~250 MB per frame; strip them like the hill if
