@@ -13,7 +13,7 @@
   with one worker.
 - Frames go straight into DAYS/YYYY-MM-DD as they are made, so the helper can use them at once;
   an interrupted render resumes where it stopped.
-- Keeps yesterday, today and tomorrow; deletes older days.
+- Keeps yesterday, today and tomorrow; deletes older days. Renders nothing while under 3 GB is free.
 - Packs today's on-the-hour frames into the hourly system wallpaper (lock screen, Mission Control,
   Space switches): daily when the helper can clear the wallpaper agent's cache, else monthly. The
   file is replaced in place and WallpaperAgent restarted so it rereads it.
@@ -42,6 +42,7 @@ LOG = os.path.expanduser("~/Library/Logs/listening-point.log")
 CACHE = os.path.expanduser("~/Library/Caches/listening-point")
 HEIC = "The Listening Point.heic"
 TOMORROW_FROM = 18      # the local hour from which tomorrow is rendered
+FREE_MIN = 3e9          # bytes free on the frames' volume below which nothing is rendered (a day is about 0.9 GB)
 PACKER = os.path.join(HERE, "..", "..", "make_h24")
 sys.path.insert(0, PROC)
 sys.path.insert(1, HERE)
@@ -86,11 +87,28 @@ def missing(folder, minutes):
     return [m for m in minutes if not os.path.exists(os.path.join(folder, f"{m // 60:02d}{m % 60:02d}.jpg"))]
 
 
+_told = []
+
+
+def room(days):
+    """False, and a line in the log once per run, while the disk is nearly full: a render that fills the
+    disk dies half-way (2026-11-03, 'No space left on device') and takes other work down with it."""
+    free = shutil.disk_usage(days).free
+    if free >= FREE_MIN:
+        return True
+    if not _told:
+        _told.append(True)
+        log(f"only {free / 1e9:.1f} GB free on the disk; nothing is rendered below {FREE_MIN / 1e9:.0f} GB")
+    return False
+
+
 def render(days, d, minutes, jobs, why):
     folder = os.path.join(days, d.isoformat())
     todo = missing(folder, minutes)
     if not todo:
         return True
+    if not room(days):
+        return False
     os.makedirs(folder, exist_ok=True)
     t0 = time.time()
     log(f"rendering {len(todo)} frames of {d} ({why})")
@@ -350,6 +368,7 @@ def main(argv=None, clock=dt.datetime.now):
     if a.date:
         render(days, dt.date.fromisoformat(a.date), range(1440), a.jobs, "asked for")
         return
+    prune(days, {today - dt.timedelta(days=1), today, tomorrow})    # before rendering: their space first
     src, pct = power()
     m_now = now.hour * 60 + now.minute
     if src == "ac" or a.force:
@@ -365,7 +384,6 @@ def main(argv=None, clock=dt.datetime.now):
         if missing(ahead, range(max(0, m_now - 2), min(1440, m_now + 60))):
             render(days, today, range(max(0, m_now - 2), min(1440, m_now + 180)), 1, f"next three hours, on battery at {pct}%")
         refresh_hourly(days, a.root, today)
-    prune(days, {today - dt.timedelta(days=1), today, tomorrow})
 
 
 if __name__ == "__main__":

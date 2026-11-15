@@ -90,6 +90,17 @@ class Plan(unittest.TestCase):
         self.assertEqual(self.run_at([at(9)], argv=["--date", "2026-12-21"]),
                          [(dt.date(2026, 12, 21), 0, 1439, "asked for")])
 
+    def test_old_days_go_before_anything_is_rendered(self):
+        order = []
+        with mock.patch.multiple(nightly, render=lambda *a: order.append("render") or True,
+                                 prune=lambda *a: order.append("prune"), power=lambda: ("ac", 100),
+                                 shore_on=lambda: False, drain_listener=mock.DEFAULT, refresh_shore=mock.DEFAULT,
+                                 refresh_hourly=mock.DEFAULT, note_weather=mock.DEFAULT, log=mock.DEFAULT):
+            root = tempfile.mkdtemp(prefix="nightly-")
+            self.addCleanup(shutil.rmtree, root, True)
+            nightly.main(["--root", root], clock=lambda: at(19))
+        self.assertEqual(order, ["prune", "render", "render"])
+
     def test_due(self):
         self.assertEqual(nightly.TOMORROW_FROM, 18)
         self.assertFalse(nightly.tomorrow_due(at(17, 59), DAY))
@@ -101,6 +112,31 @@ class Plan(unittest.TestCase):
             src = f.read()
         self.assertNotIn("refresh_tomorrow", src)
         self.assertNotIn('"evening"', src)
+
+
+class Disk(unittest.TestCase):
+    def test_nothing_is_rendered_on_a_nearly_full_disk(self):
+        root = tempfile.mkdtemp(prefix="nightly-")
+        self.addCleanup(shutil.rmtree, root, True)
+        usage = mock.Mock(free=nightly.FREE_MIN - 1)
+        lines, ran = [], []
+        with mock.patch.object(nightly.shutil, "disk_usage", return_value=usage), \
+                mock.patch.object(nightly, "log", lines.append), mock.patch.object(nightly, "_told", []), \
+                mock.patch.object(nightly.subprocess, "run", lambda *a, **k: ran.append(a)):
+            self.assertFalse(nightly.render(root, DAY, range(10), 1, "test"))
+            self.assertFalse(nightly.render(root, NEXT, range(10), 1, "test"))
+        self.assertEqual(ran, [])
+        self.assertEqual(len(lines), 1, "said once per run")
+        self.assertIn("3.0 GB free", lines[0])
+        self.assertFalse(os.path.exists(os.path.join(root, DAY.isoformat())))
+
+    def test_frames_already_there_need_no_room(self):
+        root = tempfile.mkdtemp(prefix="nightly-")
+        self.addCleanup(shutil.rmtree, root, True)
+        os.makedirs(os.path.join(root, DAY.isoformat()))
+        open(os.path.join(root, DAY.isoformat(), "0000.jpg"), "w").close()
+        with mock.patch.object(nightly.shutil, "disk_usage", return_value=mock.Mock(free=0)):
+            self.assertTrue(nightly.render(root, DAY, range(1), 1, "test"))
 
 
 if __name__ == "__main__":
