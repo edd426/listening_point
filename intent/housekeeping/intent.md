@@ -1,8 +1,7 @@
 # Intent: housekeeping after v3
 
 Author: Evan (accepted Claude's proposal, 2026-11-15: "Please do 1-3 and 6"; this is item 6),
-written up by Claude. Status: done 2026-11-15 but for the README pictures and the v3 release
-(Open questions).
+written up by Claude. Status: done 2026-11-15, the README pictures and the v3.0 release included.
 
 ## Problem
 

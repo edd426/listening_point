@@ -31,8 +31,8 @@ and `make_h24`.
 ## Current state
 
 - **v3 is installed** (all five phases, 2026-11-04, `docs/V3-PLAN.md`), with the shore, the owner
-  controls and the shore's cast shadows (2026-11-10). **The latest release is still v2.0** (tag `v2.0`,
-  2026-10-06; its hourly HEIC shows the v2 look). The renderer lives in `renderers/procedural/` (about
+  controls and the shore's cast shadows (2026-11-10). **Released as v3.0** on 2026-11-15 (tag `v3.0`; the
+  GitHub release carries the hourly HEIC of 2026-11-18). The renderer lives in `renderers/procedural/` (about
   14,500 lines, split by subject).
 - Installed pieces (`tools/install.sh`):
   - `~/Library/Application Support/The Listening Point/`: a copy of the renderer and tools, its own venv, and the
