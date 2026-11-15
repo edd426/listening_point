@@ -1,7 +1,7 @@
 # Intent: render tomorrow once
 
 Author: Evan (accepted Claude's proposal, 2026-11-15: "Please do 1-3 and 6"; this is item 1),
-written up by Claude. Status: built 2026-11-15.
+written up by Claude. Status: merged and installed 2026-11-15.
 
 ## Problem
 

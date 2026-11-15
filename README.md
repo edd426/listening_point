@@ -14,7 +14,8 @@ seasons; and the tower clock tells the time to the minute.
 ## The scene
 
 A small stone observatory on a headland above a bay, with a tree, a bench for two, a lamp, a pier,
-and a lighthouse across the water. Claude designed it as a self-portrait of sorts. There's a bench
+and a lighthouse across the water. Behind it a croft: a walled garden, a shed, beehives, a field of
+sheep. Claude designed it as a self-portrait of sorts. There's a bench
 for two because most of what it does is conversation. The observatory and the real stars stand for
 curiosity and getting things right. The lighthouse is a light kept on for whoever needs it. And
 "LOOK CLOSER" is carved over the door, because the scene rewards it.
@@ -36,8 +37,20 @@ curiosity and getting things right. The lighthouse is a light kept on for whoeve
 - **Tide.** It rises and falls with the moon, springs and neaps included, over the shingle beach.
 - **Life.** The boat goes out on fair days in the sailing season. Sheep wander and fold at dusk;
   a black cat keeps its own routine; gulls come and go on the pier; ships pass on the horizon; a heron
-  fishes at dawn, rabbits come out at dusk, an owl sits in the tree some nights. The village across
-  the bay goes to bed one window at a time.
+  fishes at dawn, an owl sits in the tree some nights. A fox crosses the hill, hares come out at
+  dawn and dusk and box in spring, crows perch by day. The village across the bay goes to bed one
+  window at a time.
+- **The air.** Geese pass in the migration months, starlings gather at autumn and winter dusk, a
+  kite flies on windy days and a balloon on calm mornings; aircraft leave trails when the air up
+  there holds them.
+- **The bay.** A ferry runs to the island on a timetable, a creel boat works the pots, yachts sail
+  on fair days. Seals haul out on a skerry that the tide covers, a cormorant dries its wings,
+  gannets dive, and some days there are dolphins. Cloud shadows, wind lanes and glitter move over
+  the water.
+- **A story over weeks.** Things last from one day to the next and follow the real weather of the
+  days before: a wall that a winter gale brings down is rebuilt course by course on workable days,
+  the garden is dug and planted, a storm's branch lies until it is cleared, snow drifts against the
+  walls. Lambs are born, grow and are sold; the cat has kittens some years.
 - **The observatory.** On clear nights the dome opens and the telescope follows the moon, a planet
   or a bright star. On cloudy nights the observer goes to bed.
 
@@ -66,10 +79,15 @@ the disk. Instead:
 - **Owner controls** (optional). The helper's menu-bar item can light a lamp for the evening and
   leave a short note, sent to a private repository with a key kept in the Keychain. Set up and
   described in [docs/LISTENER.md](docs/LISTENER.md); without that setup it does nothing.
+- **The shore** (optional, with the owner controls). Makers elsewhere can leave small things on the
+  beach and the pier: pictures a few dozen pixels across, checked by the rules in
+  [shorekit/](shorekit/README.md), lit and shadowed by the scene's own sun and moon, and taken by the
+  sea in time. The render job fetches the shore's record from the owner's private repository at most
+  hourly and refuses anything the kit will not replay.
 
 No AI is involved after installation: everything is computed from the date by the code here, and the
 only network request is the weather forecast (Budapest's coordinates only), plus, if you set up the
-owner controls, the lamp and notes you send.
+owner controls, the lamp and notes you send and the shore's record you fetch.
 
 ## Install
 
@@ -105,8 +123,9 @@ Mac, without the helper: it changes on the hour.
 ## How it's made
 
 - **No 3D engine and no image model.** Everything is hand-written 2D procedural rendering on the CPU
-  with NumPy, SciPy and Pillow, split by subject in `renderers/procedural/` (`sky`, `sea`, `land`, `ground`,
-  `tree`, `tower`, `props`, `life`, `distant`, `weatherfx`, `mystery`).
+  with NumPy, SciPy and Pillow, split by subject in `renderers/procedural/` (`sky`, `air`, `sea`,
+  `water`, `sealife`, `land`, `ground`, `hillside`, `fauna`, `tree`, `tower`, `props`, `life`,
+  `distant`, `weatherfx`, `marks`, `shore`, `mystery`).
 - **Astronomy** (`astro.py`): sun, moon (full ELP-2000/82 series), planets (truncated VSOP87) and
   precessed stars, matching JPL's DE421 to better than 0.01° (`tests/test_astro.py`).
 - **Weather** (`weather.py`): Open-Meteo's hourly forecast interpolated to minutes, with derived
@@ -114,6 +133,8 @@ Mac, without the helper: it changes on the hour.
   Budapest-like climate (`tests/test_weather.py`).
 - **A day** (`day.py`, `season.py`, `events.py`): one date's per-minute astronomy, weather, season
   and schedule, decided by the date so a day always renders the same way.
+- **The story** (`story.py`, `seaplan.py`): what has happened by a given date, worked out from the
+  date and the cached weather of the days before, so it too renders the same way every time.
 - **Per-minute frames, cheaply.** The near scenery (grass, tree, pier) changes only with the light,
   so it is rendered every 10 minutes (in sunlit and shaded versions when clouds are about) and
   cross-faded; the sky, sea, clouds, creatures and weather are rendered every minute.
@@ -130,8 +151,10 @@ tools/live_wallpaper.swift  the helper window that shows the current minute
 tools/make_h24.swift        pack frames into a time-of-day HEIC
 tools/set_wallpaper.py      set a picture on every Space
 tools/capture_wallpaper.sh  screenshot what the desktop is showing
-tests/                      astronomy and weather tests (offline)
-docs/                       preview images, and the spoilers
+shorekit/                   the shore's rules, as one dependency-free zipapp (its own README)
+tests/                      offline tests: python -m unittest discover -s tests, and tests/sweep.py
+docs/                       preview images, the spoilers, the v3 notes (docs/v3/), docs/LISTENER.md
+intent.md, intent/          what the owner asked for, and each change's intent, spec and plan
 STATUS.md                   current state, decisions, macOS lessons, next ideas
 ```
 
