@@ -44,6 +44,41 @@ CLOUD_LAYERS = [("high", (256, 2048, 2.5, 3.5, 61), 110.0, 9.0, 3.5, 0.45, 1.3),
                 ("low", (512, 2048, 3.2, 1.3, 11), 24.0, 1.2, 1.5, 0.97, 0.9)]
 
 
+LENS_TOP = 45.0      # degrees: the altitude the clouds' flat lens sees at the top edge of the frame (cloud_plane)
+STREAK_MIN = 60.0    # degrees: cirrus streaks lie no nearer than this to the view's axis (streak_bearing) ...
+STREAK_SWING = 6.0   # ... except when the wind is within this of the axis, where they swing through it
+
+
+def cloud_plane(alt, az, aspect):
+    """Where the directions (alt, az, degrees) meet a cloud layer: east and south of the camera, in units
+    of the layer's height.
+
+    Not where a plane over the real horizon would put them. The frame is a 220-degree panorama, and on
+    it a true plane's parallel rows bend into a whirl about the zenith while its cloudlets stretch
+    sideways (twice their height at best). The picture reads as an ordinary view, so the clouds are laid
+    out for one: the plane as a flat (rectilinear) lens sees it, looking south along the horizon and
+    reaching LENS_TOP at the frame's top edge. Rows stay straight; cloudlets are round at the top of the
+    frame and flatten toward the horizon. The sun's dimming and the shadows on the sea look through the
+    same lens (sun_visibility, water.sea_shadow), so the cloud drawn over the sun is the one that dims
+    it. aspect: half the frame's width over the height of its sky, in pixels."""
+    t = math.tan(math.radians(LENS_TOP))
+    y = t * np.maximum(alt, 0.8) / ALT_TOP
+    x = t * aspect * (az % 360.0 - 180.0) / (AZ_SPAN / 2)
+    return -x / y, 1.0 / y
+
+
+def streak_bearing(wind_dir):
+    """The compass bearing the cirrus streaks lie along: the wind's, held at least STREAK_MIN degrees off
+    the view's axis (south), so that their vanishing point stays outside the frame and they cross the
+    picture instead of fanning out from a point in it. A wind within STREAK_SWING degrees of the axis
+    swings them through it, so the bearing never jumps."""
+    phi = (wind_dir + 90.0) % 180.0 - 90.0      # the wind's axis from the view's, -90 to 90
+    a = abs(phi)
+    if a < STREAK_MIN:
+        a = STREAK_MIN * math.sin(math.pi / 2 * min(1.0, a / STREAK_SWING))
+    return 180.0 + math.copysign(a, phi)
+
+
 DIP = (3.0, 1.9, 1.1)       # degrees below our horizon at which each layer (high, mid, low) still sees the sun
 OVERHEAD = 14.0             # degrees: above this the heaps' share of the low cover is drawn as the low noise layer
 ROSE = np.array([238, 118, 140], np.float32)   # sunset light on cloud away from the sun
@@ -295,7 +330,7 @@ class SkyMixin:
                 continue
             dens, n0, rows, cols, tex = got
             name, op = CLOUD_LAYERS[i][0], CLOUD_LAYERS[i][5]
-            n1 = sample(tex, rows + ld[1] * 5, cols + ld[0] * 5)
+            n1 = sample_smooth(tex, rows + ld[1] * 5, cols + ld[0] * 5)
             lit = np.clip(0.62 + (n0 - n1) * (1.4 if name != "low" else 1.8), 0, 1)
             cover = self.layer_cover(i)
             if name == "mid":
@@ -387,26 +422,23 @@ class SkyMixin:
         return self._heaps
 
     def _layer_field(self, i, alt, az, shift=None):
-        """Layer i's noise toward the given directions, drifting with the wind, and its patchiness
-        (an offset to the threshold): (n0, offset, rows, cols, texture). shift (km east, km north) moves
+        """Layer i's noise toward the given directions (through the clouds' lens, cloud_plane), drifting with
+        the wind, and its patchiness (an offset to the threshold): (n0, offset, rows, cols, texture). shift (km east, km north) moves
         the point the directions are seen from, as for a cloud's shadow on the sea (water.py)."""
         name, tx, K, hk, wf, op, soft = CLOUD_LAYERS[i]
-        a = np.radians(np.maximum(alt, 0.8))
-        zr = np.radians(az)
-        u, ca = np.sin(a), np.cos(a)
-        Xp, Zp = ca * np.sin(zr) / u, -ca * np.cos(zr) / u
+        Xp, Zp = cloud_plane(alt, az, self.W / 2 / (VH * self.H))
         if shift is not None:
             Xp, Zp = Xp + shift[0] / hk, Zp - shift[1] / hk
         de, dn = self.day.drift_e[self.m], self.day.drift_n[self.m]
         Xp = Xp - de * wf / hk
         Zp = Zp + dn * wf / hk
-        if name == "high":   # cirrus streaks lie along the wind
-            th = math.radians(self.wx.wind_dir_deg)
+        if name == "high":   # cirrus streaks lie along the wind, more or less (the texture's long axis is east-west)
+            th = math.radians(90.0 - streak_bearing(self.wx.wind_dir_deg))
             Xp, Zp = Xp * math.cos(th) - Zp * math.sin(th), Xp * math.sin(th) + Zp * math.cos(th)
         tex = fnoise(*tx)
         rows, cols = Zp * K, Xp * K + 300 * i
         off = 0.45 * sample(fnoise(256, 512, 3.0, 1.5, 6 + i), rows * 0.1, cols * 0.1)
-        return sample(tex, rows, cols), off, rows, cols, tex
+        return sample_smooth(tex, rows, cols), off, rows, cols, tex
 
     def layer_threshold(self, i, cover, key=None):
         """The noise level above which layer i is cloud, set so that the cloud you can see takes about
