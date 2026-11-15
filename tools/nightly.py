@@ -7,12 +7,12 @@
   the shore (`shore_sync.py`), and renders again the frames the shore or the lamp has changed since they
   were made: from an object's landing (or the moment the sea took one) on, and the dark minutes from the
   moment the lamp was lit. Every frame is rendered with the synced cache (--shore) and the lamp (--lamp).
-- On power: the rest of today (from the current minute on), then all of tomorrow.
+- On power: the rest of today (from the current minute on) and, from 18:00, all of tomorrow, once, with
+  that evening's forecast.
 - On battery with at least half a charge: when less than an hour is ready, the next three hours,
   with one worker.
 - Frames go straight into DAYS/YYYY-MM-DD as they are made, so the helper can use them at once;
   an interrupted render resumes where it stopped.
-- After 18:00 on power, tomorrow is re-rendered if the evening forecast has changed meaningfully.
 - Keeps yesterday, today and tomorrow; deletes older days.
 - Packs today's on-the-hour frames into the hourly system wallpaper (lock screen, Mission Control,
   Space switches): daily when the helper can clear the wallpaper agent's cache, else monthly. The
@@ -41,6 +41,7 @@ ROOT = os.path.expanduser("~/Pictures/Wallpapers/The Listening Point")
 LOG = os.path.expanduser("~/Library/Logs/listening-point.log")
 CACHE = os.path.expanduser("~/Library/Caches/listening-point")
 HEIC = "The Listening Point.heic"
+TOMORROW_FROM = 18      # the local hour from which tomorrow is rendered
 PACKER = os.path.join(HERE, "..", "..", "make_h24")
 sys.path.insert(0, PROC)
 sys.path.insert(1, HERE)
@@ -121,37 +122,22 @@ def weather_digest(d):
     return w.source, w.fetched_at, a.round(2).tolist()
 
 
-def refresh_tomorrow(days, d, jobs):
-    """After 18:00, re-render tomorrow if the evening forecast differs from the one it was made with."""
-    folder = os.path.join(days, d.isoformat())
-    meta = os.path.join(folder, "weather.json")
-    try:
-        src, fetched, now = weather_digest(d)
-    except Exception as e:
-        log(f"forecast check failed: {e}")
-        return
-    old = json.load(open(meta)) if os.path.exists(meta) else None
-    if old and old.get("evening"):
-        return
-    changed = old is None or np.abs(np.array(old["digest"]) - np.array(now)).max() > 0.3
-    if changed and old is not None:
-        for n in os.listdir(folder):
-            if n.endswith(".jpg"):
-                os.remove(os.path.join(folder, n))
-        log(f"the forecast for {d} changed; rendering it again")
-    json.dump({"digest": now, "source": src, "fetched_at": fetched, "evening": True}, open(meta, "w"))
-    if changed:
-        render(days, d, range(1440), jobs, "evening forecast")
+def tomorrow_due(t, today):
+    """Tomorrow is rendered once, from TOMORROW_FROM on, so with a forecast fetched that evening. It used
+    to be rendered as soon as today was done and again after 18:00 when the forecast had changed, which
+    it always had: two renders of every day, about 2.5 hours thrown away daily. t is the clock now, today
+    the date this run started on: a run that has crossed midnight leaves the new day to the next run."""
+    return t.date() == today and t.hour >= TOMORROW_FROM
 
 
 def note_weather(days, d):
+    """Keep a record of the forecast a day's frames were made with (nothing reads it back)."""
     meta = os.path.join(days, d.isoformat(), "weather.json")
     if not os.path.exists(meta):
         try:
             src, fetched, digest = weather_digest(d)
             os.makedirs(os.path.dirname(meta), exist_ok=True)
-            json.dump({"digest": digest, "source": src, "fetched_at": fetched, "evening": dt.datetime.now().hour >= 18},
-                      open(meta, "w"))
+            json.dump({"digest": digest, "source": src, "fetched_at": fetched}, open(meta, "w"))
         except Exception as e:
             log(f"could not note the forecast: {e}")
 
@@ -331,14 +317,14 @@ def refresh_shore(days, d):
         log(f"{d}: the shore or the lamp changed; {gone} frames from {m // 60:02d}:{m % 60:02d} will be rendered again")
 
 
-def main():
+def main(argv=None, clock=dt.datetime.now):
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=ROOT)
     ap.add_argument("--force", action="store_true", help="render the whole plan even on battery")
     ap.add_argument("--date", default=None, help="render just this whole date")
     ap.add_argument("--jobs", type=int, default=2)
     ap.add_argument("--hourly-only", action="store_true", help="just rebuild the hourly system wallpaper")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     days = os.path.join(a.root, "days")
     os.makedirs(days, exist_ok=True)
     drain_listener()    # first, and on every run, even one that finds another render under way
@@ -351,7 +337,7 @@ def main():
         os.nice(10)
     except OSError:
         pass
-    now = dt.datetime.now()
+    now = clock()
     today, tomorrow = now.date(), now.date() + dt.timedelta(days=1)
     if a.hourly_only:
         refresh_hourly(days, a.root, today, force=True)
@@ -369,11 +355,10 @@ def main():
     if src == "ac" or a.force:
         render(days, today, range(max(0, m_now - 2), 1440), a.jobs, "the rest of today")
         note_weather(days, today)
-        if now.hour >= 18:
-            refresh_tomorrow(days, tomorrow, a.jobs)
         refresh_hourly(days, a.root, today)
-        render(days, tomorrow, range(1440), a.jobs, "tomorrow")
-        note_weather(days, tomorrow)
+        if tomorrow_due(clock(), today):    # the clock again: the rest of today can take a while
+            render(days, tomorrow, range(1440), a.jobs, "tomorrow")
+            note_weather(days, tomorrow)
     elif pct >= 50:
         # on battery, work in batches: when less than an hour is ready, make the next three
         ahead = os.path.join(days, today.isoformat())

@@ -532,7 +532,7 @@ class ConfigTest(ListenerTestCase):
             src = f.read()
         self.assertIn('"listener.py"', src)
         self.assertRegex(src, r'"drain"')
-        main = src[src.index("def main():"):]
+        main = src[src.index("def main("):]
         self.assertIn("drain_listener()", main)
 
 

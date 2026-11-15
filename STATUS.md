@@ -27,8 +27,8 @@ v3 progress and handoff: `docs/V3-PLAN.md`._
 - Verified 2026-10-06 05:24 after a night on battery: the render job kept three hours ahead, the
   helper showed the right minute (16 MB, no CPU, no log errors), and the system wallpaper showed
   today's 05:00 frame. Disk: about 1 GB a day of frames (3 days kept), 135 MB in Application Support.
-- Cost on this M1 (8 GB): a minute frame takes about 2 s of CPU and a 10-minute keyframe about 4 s;
-  a full day is about 40 minutes with 2 workers. Each worker peaks around 1.2 GB, so
+- Cost on this M1 (8 GB), since v3: a full day takes about 2.5 hours (8,655 to 9,385 s for an
+  undisturbed day, 2026-11-12 to 11-15, from the log; v2.0 took about 40 minutes). Each worker peaks around 1.2 GB, so
   `nightly.py` drops to 1 worker when `kern.memorystatus_level` is under 45%. Three workers pushed
   this Mac into heavy swap; don't go back to 3.
 
@@ -161,8 +161,11 @@ upright thing on the shore is a sundial.
   stale bitmaps in the agent's cache, which only an FDA-granted process can delete; so the helper
   tries hourly and the job rebuilds daily only when that works, else monthly.
 - **Laptop that sleeps a lot (Evan's note):** the job renders whenever the Mac is awake, not just at
-  night. On power: the rest of today from the current minute, then all of tomorrow; after 18:00
-  tomorrow is re-rendered if the evening forecast changed meaningfully. On battery with at least 50%:
+  night. On power: the rest of today from the current minute and, from 18:00, all of tomorrow, once,
+  with that evening's forecast (`intent/tomorrow-once/`; until 2026-11-15 tomorrow was rendered as
+  soon as today was done and again every evening, because the forecast-change test always fired). If
+  the Mac misses an evening, the helper's fallback and "the rest of today" cover the morning. On
+  battery with at least 50%:
   when less than an hour is ready, the next three hours with one worker (small batches cost
   ~9 s a frame in keyframes and start-up, against ~2 s in bulk).
 - **The installed copy runs from Application Support** because launchd jobs may be denied

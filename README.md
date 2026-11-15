@@ -51,8 +51,9 @@ as an uncompressed bitmap of about 20 MB and never deletes them, so 1,440 frames
 the disk. Instead:
 
 - **Frames.** A background job renders frames whenever the Mac is awake, at low priority. On power
-  it renders the rest of today and all of tomorrow (1,440 frames, about 1 GB, about 40 minutes with
-  two processes); on battery, the next three hours at a time. It keeps yesterday, today and tomorrow.
+  it renders the rest of today and, from 18:00, all of tomorrow with that evening's forecast (1,440
+  frames, about 1 GB, about two and a half hours on an 8 GB M1); on battery, the next three hours at
+  a time. It keeps yesterday, today and tomorrow.
 - **The live window.** A small helper (`tools/live_wallpaper.swift`) shows the frame for the current
   minute in a window just above the desktop picture and below the desktop icons, on every Space and
   display, cross-fading on the minute. It uses about 20-40 MB and no measurable CPU. After sleep it
