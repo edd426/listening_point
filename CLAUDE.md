@@ -19,4 +19,11 @@
   Before heavy renders, check `uptime` and swap. Render with `--jobs 1` under `nice`, and pause (`kill -STOP` the
   render job) if a game session asks.
 - The v3 plan and its current handoff: `docs/V3-PLAN.md`.
+- Changes follow the AI-native SDLC chain: `intent.md` (Evan's wants, dated), then per change
+  `intent/<change>/intent.md`, `spec.md`, `plan.md`, then the diff with tests. Evan does not read specs;
+  bring him decisions as plain questions. A change of look still needs his go on a look test
+  (`out/look/<topic>/`) before it is installed.
+- Tests: `./venv/bin/python -m unittest discover -s tests` (about 3 minutes), the script tests
+  (`tests/test_astro.py`, `test_weather.py`, `test_shore_reference.py`, `test_shore_render.py`) and
+  `tests/sweep.py`. CI (`.github/workflows/renderer.yml`) runs them all on push; check it after pushing.
 

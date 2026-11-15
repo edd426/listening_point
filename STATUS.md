@@ -1,13 +1,39 @@
 # Status
 
-_Last updated 2026-11-10 (the shore's cast shadows, merged and installed: see "Cast shadows" under The shore).
-v3 progress and handoff: `docs/V3-PLAN.md`._
+_Last updated 2026-11-15 (the render job renders tomorrow once; renderer CI; housekeeping; a cloud change
+waiting for Evan's look: see "2026-11-15" below). What Evan wants: `intent.md`. v3 history: `docs/V3-PLAN.md`._
+
+## 2026-11-15: four changes Evan asked for ("Please do 1-3 and 6")
+
+Each has its intent, spec and plan under `intent/<change>/`.
+
+| Change | State |
+|---|---|
+| `tomorrow-once`: the render job renders tomorrow once, from 18:00 | merged, installed 18:40 (tomorrow, 11-16, was already rendered at 03:32 with that morning's forecast and was left as it is) |
+| `housekeeping`: disk guard, docs, branches, `pre-cast/` | merged and installed, but for the README pictures and the v3 release (below) |
+| `renderer-ci`: the renderer's tests and a sweep of random dates in CI; pinned versions | merged; green on GitHub (158 tests, the four script tests, sweep 20 of 20, live 2 of 2). The sweep also runs nightly at 03:17 UTC; a failure emails Evan |
+| `cloud-horizon`: no whirl in the clouds | **branch `v3/cloud-horizon`, not installed: waits for Evan's verdict** on `out/look/cloud-horizon/pair-*.jpg` |
+
+**Open, in order:**
+1. Evan looks at `out/look/cloud-horizon/` (its `README.md` says what to look at) and says go or no.
+2. On go: merge `v3/cloud-horizon`, `tools/install.sh`, delete today's and tomorrow's frames so they
+   render again in the new look.
+3. Then the README's three pictures (render them without a shore: the real shore never goes in git)
+   and a v3 release with its hourly HEIC. They wait so that they show the sky he chooses. On no: make
+   them from `main`.
+4. Check the log a day or two after 2026-11-15: one `(tomorrow)` render a day, after 18:00, and no
+   `(evening forecast)` line.
+
+**Not done, offered:** a frame that crashes still stops the rest of its span (the job retries the
+span every 15 minutes and fails at the same minute until the forecast changes). Skipping the one
+frame and carrying on would be a small change to `render_chunk` in `listening_point.py`.
 
 ## Current state
 
-- **v2.0 (per-minute, real sky, weather, seasons) is installed and released** (tag `v2.0`; the
-  GitHub release carries the hourly HEIC). The renderer lives in `renderers/procedural/` (about
-  5,200 lines, split by subject).
+- **v3 is installed** (all five phases, 2026-11-04, `docs/V3-PLAN.md`), with the shore, the owner
+  controls and the shore's cast shadows (2026-11-10). **The latest release is still v2.0** (tag `v2.0`,
+  2026-10-06; its hourly HEIC shows the v2 look). The renderer lives in `renderers/procedural/` (about
+  14,500 lines, split by subject).
 - Installed pieces (`tools/install.sh`):
   - `~/Library/Application Support/The Listening Point/`: a copy of the renderer and tools, its own venv, and the
     `live_wallpaper` helper binary.
@@ -18,12 +44,11 @@ v3 progress and handoff: `docs/V3-PLAN.md`._
   - System wallpaper: `~/Pictures/Wallpapers/The Listening Point/The Listening Point.heic`, today's
     24 on-the-hour frames, rebuilt daily if the helper has Full Disk Access (`.cache-clean` says
     `ok`), else monthly. Full Disk Access was granted to the helper on 2026-10-06, so it's daily.
-- **Owner controls (branch `shore/controls`, 2026-10-31; not installed yet).** A menu-bar item on
-  the helper (Light the lamp, Leave a note…) backed by `tools/listener.py`, with an outbox that
-  `nightly.py` drains first on every run. Spec and setup: `docs/LISTENER.md`. Before it does
-  anything the owner must make the fine-grained key, store it in the Keychain and write the
-  untracked `listener.json` (steps in that doc), then run `tools/install.sh`. The renderer reads
-  `listener/lamp.json` (`--lamp`, below).
+- **Owner controls (installed and set up).** A menu-bar item on the helper (Light the lamp, Leave a
+  note…) backed by `tools/listener.py`, with an outbox that `nightly.py` drains first on every run.
+  Spec and setup: `docs/LISTENER.md` (the fine-grained key in the Keychain, the untracked
+  `listener.json`). The renderer reads `listener/lamp.json` (`--lamp`, below). On 2026-11-15 the log
+  shows the hourly shore sync and a lamp lit at 17:39 (381 frames rendered again).
 - Verified 2026-10-06 05:24 after a night on battery: the render job kept three hours ahead, the
   helper showed the right minute (16 MB, no CPU, no log errors), and the system wallpaper showed
   today's 05:00 frame. Disk: about 1 GB a day of frames (3 days kept), 135 MB in Application Support.
@@ -32,7 +57,7 @@ v3 progress and handoff: `docs/V3-PLAN.md`._
   `nightly.py` drops to 1 worker when `kern.memorystatus_level` is under 45%. Three workers pushed
   this Mac into heavy swap; don't go back to 3.
 
-## The shore (branch work, not installed)
+## The shore (installed; live since 2026-11-01)
 
 **The look is variant C (Evan, 2026-11-01), kit 1.2.0.**
 - Variant A's objects were specks at desktop size, and its label plaque read as a UI chip.
@@ -52,8 +77,8 @@ What C does:
 See `shorekit/SCHEMA.md` section 10.
 
 Small objects that makers far away leave on the beach and the pier, judged by `shorekit/` (see
-`shorekit/README.md` and `SCHEMA.md`), plus a lamp the owner can light. Built on branches, wired
-together on `shore/sync` (2026-11-01), not installed:
+`shorekit/README.md` and `SCHEMA.md`), plus a lamp the owner can light. All of it is merged and
+installed (the branches were deleted on 2026-11-15):
 
 - **Reference frames.** `tools/shore_reference.py OUT_DIR` renders four fixed minutes of 2027-03-21
   (noon 11:50, golden 17:20, night 22:30 under a full moon, fog 10:00) with `--reference` (no
@@ -205,9 +230,14 @@ them. `fauna` (v3 phase 3 part 2,
 `docs/v3/phase3-animals.md`) draws the sheep, fox, hares and crows, and hides any animal standing behind the
 walls, the gate, the shed, the hives, the rocks or the gorse (masks recorded while the hill is drawn). `day.py` builds one date's per-minute astronomy, weather,
 season (`season.py`), schedule (`events.py`) and mysteries. `astro.py` and `weather.py` are
-self-contained. Tests (offline): `./venv/bin/python tests/test_astro.py` and `tests/test_weather.py`;
-the owner controls and the shore sync: `/usr/bin/python3 -m unittest tests.test_listener tests.test_shore_sync`
-(mock API on 127.0.0.1).
+self-contained. Tests (offline): `./venv/bin/python -m unittest discover -s tests` (about 3 minutes; the
+render job's plan is `tests.test_nightly`), the scripts `tests/test_astro.py`, `tests/test_weather.py`,
+`tests/test_shore_reference.py` and `tests/test_shore_render.py`, and `tests/sweep.py` (small frames of random
+dates; `--live` for today and tomorrow with the forecast). The owner controls and the shore sync also run on the
+system Python: `/usr/bin/python3 -m unittest tests.test_listener tests.test_shore_sync` (mock API on 127.0.0.1).
+CI runs all of it on every push, and the sweep every night (`.github/workflows/renderer.yml`,
+`intent/renderer-ci/`), on macOS runners only: the renderer loads the system's Georgia (`core.FONT`) for the
+tower's clock and lintel, so it does not run on Linux. `requirements.txt` pins exact versions (numpy 2.0.2, scipy 1.13.1, Pillow 11.3.0).
 
 - `astro.py` matches Skyfield/DE421 to 0.01 deg or better (sun, topocentric moon, VSOP87-truncated
   planets, precessed stars) and sun events to 1 s; it assumes UT1 = UTC and a fixed delta-T. The
@@ -256,16 +286,20 @@ the owner controls and the shore sync: `/usr/bin/python3 -m unittest tests.test_
 - Still recognisably computer-made: flat-shaded polygons, noise textures.
 - The cat, the heron and the owl are still small and simple; the sheep, fox, hares and crows were redrawn
   in v3 (`docs/v3/phase3-animals.md`, Known issues).
-- `tests/test_shore_render.py` failed 5 of 7 on `main` from 2026-11-01 (its synthetic cairn found no spot that
-  passed against reference r2); mended on `shore/cast` (2026-11-10).
+- A frame that crashes stops the rest of its span (see "Not done, offered" at the top).
 - The shore's cast shadows: see "Cast shadows" above, Known issues.
-- Mid-level clouds near the horizon streak toward the vanishing point (the plane projection).
+- The cloud layers whirl: their rows fan out of a point on the horizon and bend round the frame (flat
+  planes on a 220-degree panorama; worst with full cirrus or a mid-level sheet). Mended on
+  `v3/cloud-horizon`, which waits for Evan's look (`intent/cloud-horizon/`).
 - Weather can jump where separately rendered spans of a day meet (battery renders, a forecast
   refreshed mid-day).
 - The sea render and the front layer still peak at ~250 MB per frame; strip them like the hill if
   memory gets tight.
 
 ## Ideas for next time
+
+- **A time-lapse of yesterday** from the menu-bar item (the frames are on disk; Evan said of phase 5
+  that he could not always notice the differences). Offered 2026-11-15; he did not pick it.
 
 - **Painterly pass:** a post-process over the frames (Kuwahara or brush strokes, paper texture).
 - **Blender renderer:** rebuild the scene in 3D, reusing `astro.py`, `weather.py` and `day.py`.
