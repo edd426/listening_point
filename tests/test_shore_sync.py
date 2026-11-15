@@ -485,7 +485,7 @@ class WiringTest(unittest.TestCase):
 
     def test_nightly_drains_then_syncs_then_renders_with_the_shore_and_the_lamp(self):
         src = self.read("tools", "nightly.py")
-        main = src[src.index("def main():"):]
+        main = src[src.index("def main("):]
         order = [main.index(s) for s in ("drain_listener()", "fcntl.flock", "ensure_reference()", "sync_shore()",
                                          "refresh_shore(days, d)", "render(days, dt.date.fromisoformat(a.date)",
                                          'render(days, today, range(max(0, m_now - 2), 1440)')]

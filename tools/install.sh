@@ -68,7 +68,8 @@ cat > "$ROOT/README.md" <<TXT
 A frame for every minute of the real day: the sky over Budapest, the forecast weather, the season.
 
 - days/YYYY-MM-DD/HHMM.jpg: the frames, rendered in the background whenever the Mac is awake
-  (all of tomorrow when on power; the next few hours when on battery). Old days are deleted.
+  (on power the rest of today and, from 18:00, all of tomorrow; the next few hours when on battery).
+  Old days are deleted.
 - The Listening Point.heic: today's on-the-hour frames, the system wallpaper (lock screen, Mission
   Control, Space switches). Rebuilt daily if the helper has Full Disk Access, else monthly.
 - The live wallpaper helper shows the current minute's frame above the desktop picture.
