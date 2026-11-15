@@ -102,6 +102,13 @@ def sample(tex, r, c):
                                prefilter=False)
 
 
+def sample_smooth(tex, r, c):
+    """As sample, through a cubic B-spline: no texel facets where a texture is drawn much enlarged (the
+    cloud layers, at up to ten pixels a texel)."""
+    return ndi.map_coordinates(tex, np.stack([r, c]).astype(np.float32), order=3, mode="grid-wrap",
+                               prefilter=False)
+
+
 @functools.lru_cache(None)
 def hill_edge():
     """The silhouette of the foreground hill against the sea: (x, y) as fractions of the frame."""
