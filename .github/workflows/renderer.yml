@@ -1,9 +1,11 @@
 name: renderer
 
-# The renderer's own tests, on the interpreter the Mac runs (the Command Line Tools' Python 3.9) and
-# on Linux, and a sweep: small frames of random dates with made-up weather, then today and tomorrow
-# with the live forecast. A date the renderer crashes on should fail here before the render job on
-# the Mac meets it (intent/renderer-ci/). The sweep also runs every night, with a new seed.
+# The renderer's own tests and a sweep: small frames of random dates with made-up weather, then today
+# and tomorrow with the live forecast. A date the renderer crashes on should fail here before the
+# render job on the Mac meets it (intent/renderer-ci/). The sweep also runs every night, with a new
+# seed. All on macOS with /usr/bin/python3, the Command Line Tools' Python 3.9 that the Mac renders
+# with (setup-python has no arm64 build of 3.9): the renderer draws the tower's clock and lintel in
+# the system's Georgia, so it does not run on Linux (the first run, 2026-11-15: "cannot open resource").
 
 on:
   push:
@@ -18,29 +20,16 @@ permissions:
 jobs:
   tests:
     if: github.event_name != 'schedule'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # setup-python has no arm64 build of 3.9 for macOS; the runner's own /usr/bin/python3 is the
-          # Command Line Tools' 3.9, the interpreter the Mac renders with.
-          - {os: macos-latest, python: "3.9", system: true}
-          - {os: ubuntu-latest, python: "3.12"}
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
-        if: ${{ !matrix.system }}
-        with:
-          python-version: ${{ matrix.python }}
       - name: A venv with the pinned versions
         run: |
-          if [ "${{ matrix.system }}" = "true" ]; then PY=/usr/bin/python3; else PY=python; fi
-          "$PY" -c "import sys; v = '%d.%d' % sys.version_info[:2]; print(sys.version); assert v == '${{ matrix.python }}', v"
-          "$PY" -m venv venv
+          /usr/bin/python3 -c "import sys; print(sys.version); assert sys.version_info[:2] == (3, 9), sys.version"
+          /usr/bin/python3 -m venv venv
           ./venv/bin/pip install -q --upgrade pip
           ./venv/bin/pip install -q -r requirements.txt
           ./venv/bin/pip freeze
@@ -56,18 +45,15 @@ jobs:
           ./venv/bin/python tests/test_shore_render.py
 
   sweep:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
-        with:
-          python-version: "3.12"
       - name: A venv with the pinned versions
         run: |
-          python -m venv venv
+          /usr/bin/python3 -m venv venv
           ./venv/bin/pip install -q --upgrade pip
           ./venv/bin/pip install -q -r requirements.txt
       - name: Random dates, made-up weather

@@ -8,14 +8,18 @@
   minutes. This lowers the odds of a surprise; it does not remove them.
 - **CI is not the Mac.** A crash that needs this Mac's shore cache or its memory pressure will not
   show.
-- **Cross-machine pixels.** The tests that compare bytes compare two runs on one machine, so they
-  hold anywhere; nothing here claims a frame has the same bytes on Linux and on the Mac.
+- **macOS only.** The renderer loads the system's Georgia for the tower's clock and lintel, so it
+  does not run on Linux (found by the first CI run). CI therefore runs on GitHub's macOS runners,
+  which can queue for longer. Bundling a font to run on Linux would change the tower's pixels and is
+  not worth it for a macOS wallpaper.
+- **Cross-machine pixels.** The tests that compare bytes compare two runs on one machine; nothing
+  here claims a runner's frame has the same bytes as the Mac's.
 
 ## Requirements
 
 1. `renderer.yml`, on push, pull request and by hand: `python -m unittest discover -s tests`, then
    the script tests (`test_astro.py`, `test_weather.py`, `test_shore_reference.py`,
-   `test_shore_render.py`), on macOS with `/usr/bin/python3` (3.9, the Mac's) and on Ubuntu with 3.12.
+   `test_shore_render.py`), on macOS with `/usr/bin/python3` (3.9, the Mac's).
 2. `tests/sweep.py`: N random dates (seeded; the seed defaults to the date and is printed), made-up
    weather, per date four scattered minutes and a run of six across a keyframe, at a fifth of full
    size, one renderer process a command. `--live`: today and tomorrow on the hour with the live
@@ -28,6 +32,6 @@
 
 ## Proof
 
-- The workflow's first run on GitHub is green on both systems (`gh run watch`).
+- The workflow's run on GitHub is green (`gh run watch`).
 - `tests/sweep.py --dates 3` passes locally; with a crash planted in the renderer it fails, prints
   the traceback and the command, and that command fails the same way.

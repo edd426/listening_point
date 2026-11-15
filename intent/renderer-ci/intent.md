@@ -16,7 +16,7 @@ written up by Claude. Status: built 2026-11-15.
 
 ## Proposed outcome
 
-- Every push runs the renderer's tests on the interpreter the Mac uses and on Linux.
+- Every push runs the renderer's tests on macOS, on the interpreter the Mac uses.
 - Every push and every night, small frames of random dates are rendered, and today and tomorrow with
   the live forecast; a crash fails the run and prints the command that repeats it.
 - The installed versions are the pinned versions.
